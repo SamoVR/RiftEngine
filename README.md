@@ -1,2 +1,0 @@
-# RiftEngine
-RIFT Engine

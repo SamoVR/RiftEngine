@@ -1,9 +1,0 @@
-{
-  "version": 2,
-  "objects": [
-    {"mesh":"cube","name":"test","position":[0.0,0.9,0.0],"texture":"assets/images/icon.png","textureOwned":true},
-    {"mesh":"sphere","name":"Sphere","position":[-1.9,0.0,0.0],"texture":"assets/textures/texture_08.png","textureOwned":true},
-    {"mesh":"sphere","name":"shw","position":[0.0,0.0,0.0],"texture":"assets/images/Mona_Lisa.png","textureOwned":true},
-    {"mesh":"sphere","name":"Sphere","position":[1.8,0.0,0.0]}
-  ]
-}
