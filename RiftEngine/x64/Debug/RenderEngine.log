@@ -1,0 +1,27 @@
+﻿  Engine.cpp
+C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\shared\minwindef.h(130,9): warning C4005: 'APIENTRY': macro redefinition
+  (compiling source file 'Engine.cpp')
+      C:\Users\Samuel\source\repos\SamoVR\SamosCircus2\RenderEngine\RenderEngine\libraries\glfw\include\GLFW\glfw3.h(123,11):
+      see previous definition of 'APIENTRY'
+  
+  GameRuntime.cpp
+C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\shared\minwindef.h(130,9): warning C4005: 'APIENTRY': macro redefinition
+  (compiling source file 'GameRuntime.cpp')
+      C:\Users\Samuel\source\repos\SamoVR\SamosCircus2\RenderEngine\RenderEngine\libraries\glfw\include\GLFW\glfw3.h(123,11):
+      see previous definition of 'APIENTRY'
+  
+  Interface.cpp
+C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\shared\minwindef.h(130,9): warning C4005: 'APIENTRY': macro redefinition
+  (compiling source file 'Interface.cpp')
+      C:\Users\Samuel\source\repos\SamoVR\SamosCircus2\RenderEngine\RenderEngine\libraries\glfw\include\GLFW\glfw3.h(123,11):
+      see previous definition of 'APIENTRY'
+  
+  InterfaceGame.cpp
+C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\shared\minwindef.h(130,9): warning C4005: 'APIENTRY': macro redefinition
+  (compiling source file 'InterfaceGame.cpp')
+      C:\Users\Samuel\source\repos\SamoVR\SamosCircus2\RenderEngine\RenderEngine\libraries\glfw\include\GLFW\glfw3.h(123,11):
+      see previous definition of 'APIENTRY'
+  
+  main.cpp
+  Generating Code...
+  RenderEngine.vcxproj -> C:\Users\Samuel\source\repos\SamoVR\SamosCircus2\RenderEngine\x64\Debug\RenderEngine.exe

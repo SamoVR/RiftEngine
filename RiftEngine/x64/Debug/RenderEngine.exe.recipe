@@ -1,0 +1,54 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project>
+  <ProjectOutputs>
+    <ProjectOutput>
+      <FullPath>C:\Users\Samuel\source\repos\SamoVR\SamosCircus2\RenderEngine\x64\Debug\RenderEngine.exe</FullPath>
+    </ProjectOutput>
+  </ProjectOutputs>
+  <ContentFiles>
+    <ContentFile>
+      <FullPath>C:\Users\Samuel\source\repos\SamoVR\SamosCircus2\RenderEngine\RenderEngine\assets\fonts\Cousine-Regular.ttf</FullPath>
+    </ContentFile>
+    <ContentFile>
+      <FullPath>C:\Users\Samuel\source\repos\SamoVR\SamosCircus2\RenderEngine\RenderEngine\assets\fonts\DroidSans.ttf</FullPath>
+    </ContentFile>
+    <ContentFile>
+      <FullPath>C:\Users\Samuel\source\repos\SamoVR\SamosCircus2\RenderEngine\RenderEngine\assets\fonts\Karla-Regular.ttf</FullPath>
+    </ContentFile>
+    <ContentFile>
+      <FullPath>C:\Users\Samuel\source\repos\SamoVR\SamosCircus2\RenderEngine\RenderEngine\assets\fonts\ProggyClean.ttf</FullPath>
+    </ContentFile>
+    <ContentFile>
+      <FullPath>C:\Users\Samuel\source\repos\SamoVR\SamosCircus2\RenderEngine\RenderEngine\assets\fonts\ProggyTiny.ttf</FullPath>
+    </ContentFile>
+    <ContentFile>
+      <FullPath>C:\Users\Samuel\source\repos\SamoVR\SamosCircus2\RenderEngine\RenderEngine\assets\fonts\ProggyVector-Regular.ttf</FullPath>
+    </ContentFile>
+    <ContentFile>
+      <FullPath>C:\Users\Samuel\source\repos\SamoVR\SamosCircus2\RenderEngine\RenderEngine\assets\fonts\Roboto-Medium.ttf</FullPath>
+    </ContentFile>
+    <ContentFile>
+      <FullPath>C:\Users\Samuel\source\repos\SamoVR\SamosCircus2\RenderEngine\RenderEngine\glew32.lib</FullPath>
+    </ContentFile>
+    <ContentFile>
+      <FullPath>C:\Users\Samuel\source\repos\SamoVR\SamosCircus2\RenderEngine\RenderEngine\glfw3.lib</FullPath>
+    </ContentFile>
+    <ContentFile>
+      <FullPath>C:\Users\Samuel\source\repos\SamoVR\SamosCircus2\RenderEngine\RenderEngine\assets\images\icon.png</FullPath>
+    </ContentFile>
+    <ContentFile>
+      <FullPath>C:\Users\Samuel\source\repos\SamoVR\SamosCircus2\RenderEngine\RenderEngine\assets\images\Mona_Lisa.png</FullPath>
+    </ContentFile>
+    <ContentFile>
+      <FullPath>C:\Users\Samuel\source\repos\SamoVR\SamosCircus2\RenderEngine\RenderEngine\assets\textures\texture_01.png</FullPath>
+    </ContentFile>
+    <ContentFile>
+      <FullPath>C:\Users\Samuel\source\repos\SamoVR\SamosCircus2\RenderEngine\RenderEngine\assets\textures\texture_08.png</FullPath>
+    </ContentFile>
+    <ContentFile>
+      <FullPath>C:\Users\Samuel\source\repos\SamoVR\SamosCircus2\RenderEngine\RenderEngine\glew32.dll</FullPath>
+    </ContentFile>
+  </ContentFiles>
+  <SatelliteDlls />
+  <NonRecipeFileRefs />
+</Project>
