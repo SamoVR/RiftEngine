@@ -1,0 +1,8 @@
+{
+  "version": 2,
+  "objects": [
+    {"mesh":"cube","name":"Starting Cube","position":[-0.06112,0.0,0.0]},
+    {"mesh":"cube","name":"Cube","parent":"Starting Cube","position":[-0.31713,0.21513,0.53218],"scale":[0.14,0.14,0.14],"texture":"assets/textures/texture_08.png","textureOwned":true},
+    {"mesh":"cube","name":"Cube (Copy)","parent":"Starting Cube","position":[0.1795,0.21513,0.53218],"scale":[0.14,0.14,0.14],"texture":"assets/textures/texture_08.png","textureOwned":true}
+  ]
+}
