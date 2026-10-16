@@ -4,5 +4,5 @@
 
 
 script.Parent.Touched:Connect(function(other)
-	print("Hello from " .. script.Name)
+	print("fred is gay")
 end)

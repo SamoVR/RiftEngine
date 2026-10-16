@@ -520,3 +520,39 @@
 [22:28:30] [INFO ] [Scene] Saved 16 object(s) to C:\Users\Samuel\source\repos\SamoVR\RiftEngine\RiftEngine\assets\scenes\demo_obby\scene.json
 [22:28:30] [INFO ] [Interface] Saved C:\Users\Samuel\source\repos\SamoVR\RiftEngine\RiftEngine\assets\scenes\demo_obby\scene.json
 ----- Session end -----
+
+----- Session start -----
+[22:31:35] [INFO ] [Discord] Connected to Discord, Rich Presence active.
+[22:31:44] [INFO ] [Scene] Loaded 16 object(s) from C:\Users\Samuel\source\repos\SamoVR\RiftEngine\RiftEngine\assets\scenes\demo_obby\scene.json
+[22:31:44] [INFO ] [Interface] Loaded C:\Users\Samuel\source\repos\SamoVR\RiftEngine\RiftEngine\assets\scenes\demo_obby\scene.json
+----- Session end -----
+
+----- Session start -----
+[00:28:03] [INFO ] [Discord] Connected to Discord, Rich Presence active.
+[00:28:08] [INFO ] [Scene] Loaded 16 object(s) from C:\Users\Samuel\source\repos\SamoVR\RiftEngine\RiftEngine\assets\scenes\demo_obby\scene.json
+[00:28:08] [INFO ] [Interface] Loaded C:\Users\Samuel\source\repos\SamoVR\RiftEngine\RiftEngine\assets\scenes\demo_obby\scene.json
+[00:28:10] [INFO ] [Game] Play mode started
+
+----- Session start -----
+[00:28:50] [INFO ] [Discord] Connected to Discord, Rich Presence active.
+[00:28:53] [INFO ] [Scene] Loaded 16 object(s) from C:\Users\Samuel\source\repos\SamoVR\RiftEngine\RiftEngine\assets\scenes\demo_obby\scene.json
+[00:28:53] [INFO ] [Interface] Loaded C:\Users\Samuel\source\repos\SamoVR\RiftEngine\RiftEngine\assets\scenes\demo_obby\scene.json
+----- Session end -----
+
+----- Session start -----
+[00:29:30] [INFO ] [Discord] Connected to Discord, Rich Presence active.
+
+----- Session start -----
+[00:50:43] [INFO ] [Discord] Connected to Discord, Rich Presence active.
+[00:50:51] [INFO ] [Scene] Loaded 16 object(s) from C:\Users\Samuel\source\repos\SamoVR\RiftEngine\RiftEngine\assets\scenes\demo_obby\scene.json
+[00:50:51] [INFO ] [Interface] Loaded C:\Users\Samuel\source\repos\SamoVR\RiftEngine\RiftEngine\assets\scenes\demo_obby\scene.json
+[00:51:15] [INFO ] [Interface] Saved scripts/Script.lua
+[00:51:17] [INFO ] [Game] Play mode started
+
+----- Session start -----
+[00:51:22] [INFO ] [Discord] Connected to Discord, Rich Presence active.
+[00:51:24] [INFO ] [Scene] Loaded 16 object(s) from C:\Users\Samuel\source\repos\SamoVR\RiftEngine\RiftEngine\assets\scenes\demo_obby\scene.json
+[00:51:24] [INFO ] [Interface] Loaded C:\Users\Samuel\source\repos\SamoVR\RiftEngine\RiftEngine\assets\scenes\demo_obby\scene.json
+[00:51:25] [INFO ] [Game] Play mode started
+[00:51:37] [INFO ] [Game] Play mode stopped, scene restored
+[00:51:37] [INFO ] [Interface] Stopped - scene restored to its state before Play
