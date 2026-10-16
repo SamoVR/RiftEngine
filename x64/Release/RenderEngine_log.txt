@@ -1,4 +1,0 @@
-
------ Session start -----
-[08:59:14] [INFO ] [Discord] Connected to Discord, Rich Presence active.
------ Session end -----

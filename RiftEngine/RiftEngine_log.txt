@@ -452,3 +452,54 @@
 [12:01:33] [INFO ] [Game] Play mode stopped, scene restored
 [12:01:33] [INFO ] [Interface] Stopped - scene restored to its state before Play
 ----- Session end -----
+
+----- Session start -----
+[13:26:40] [INFO ] [Game] Play mode started (0 script(s))
+[13:27:19] [INFO ] [Game] Play mode stopped, scene restored
+[13:27:19] [INFO ] [Interface] Stopped - scene restored to its state before Play
+[13:27:26] [INFO ] [Scene] Loaded 9 object(s) from C:\Users\Samuel\Desktop\RiftEngine\RiftEngine\assets\scenes\demo_obby.json
+[13:27:26] [INFO ] [Interface] Loaded C:\Users\Samuel\Desktop\RiftEngine\RiftEngine\assets\scenes\demo_obby.json
+[13:27:28] [INFO ] [Game] Play mode started (5 script(s))
+[13:27:38] [INFO ] [Game] Play mode stopped, scene restored
+[13:27:38] [INFO ] [Interface] Stopped - scene restored to its state before Play
+[13:27:45] [INFO ] [Game] Play mode started (5 script(s))
+[13:28:00] [INFO ] [Game] Play mode stopped, scene restored
+[13:28:00] [INFO ] [Interface] Stopped - scene restored to its state before Play
+[13:28:06] [INFO ] [Game] Play mode started (5 script(s))
+[13:28:17] [INFO ] [Game] Play mode stopped, scene restored
+[13:28:17] [INFO ] [Interface] Stopped - scene restored to its state before Play
+
+----- Session start -----
+[10:36:12] [INFO ] [Scene] Loaded 9 object(s) from C:\Users\Samuel\Desktop\RiftEngine\RiftEngine\assets\scenes\demo_obby.json
+[10:36:12] [INFO ] [Interface] Loaded C:\Users\Samuel\Desktop\RiftEngine\RiftEngine\assets\scenes\demo_obby.json
+[10:36:14] [INFO ] [Game] Play mode started (5 script(s))
+[10:36:30] [INFO ] [Game] Play mode stopped, scene restored
+[10:36:30] [INFO ] [Interface] Stopped - scene restored to its state before Play
+[10:36:59] [INFO ] [Game] Play mode started (5 script(s))
+[10:37:15] [INFO ] [Game] Play mode stopped, scene restored
+[10:37:15] [INFO ] [Interface] Stopped - scene restored to its state before Play
+----- Session end -----
+
+----- Session start -----
+[13:59:13] [INFO ] [Discord] Connected to Discord, Rich Presence active.
+[13:59:18] [INFO ] [Scene] Loaded 9 object(s) from C:\Users\Samuel\Desktop\RiftEngine\RiftEngine\assets\scenes\demo_obby.json
+[13:59:18] [INFO ] [Interface] Loaded C:\Users\Samuel\Desktop\RiftEngine\RiftEngine\assets\scenes\demo_obby.json
+[13:59:26] [INFO ] [Game] Play mode started (5 script(s))
+[14:00:21] [INFO ] [Game] Play mode stopped, scene restored
+[14:00:21] [INFO ] [Interface] Stopped - scene restored to its state before Play
+
+----- Session start -----
+[14:01:37] [INFO ] [Discord] Connected to Discord, Rich Presence active.
+----- Session end -----
+
+----- Session start -----
+[14:49:15] [INFO ] [Discord] Connected to Discord, Rich Presence active.
+----- Session end -----
+
+----- Session start -----
+[14:51:03] [INFO ] [Discord] Connected to Discord, Rich Presence active.
+----- Session end -----
+
+----- Session start -----
+[14:51:12] [INFO ] [Discord] Connected to Discord, Rich Presence active.
+----- Session end -----
