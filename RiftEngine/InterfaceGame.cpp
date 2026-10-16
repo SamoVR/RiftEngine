@@ -20,71 +20,122 @@ void Interface::togglePlay() {
 }
 
 namespace {
-    // Scripts used by Insert > Scripted templates. They double as examples
-    // of RiftScript for people writing their first script.
+    // Scripts used by Insert > Scripted templates. They double as examples of
+    // the Lua API for people writing their first script.
     const char* kKillBrickScript =
-        "-- Sends the player back to the spawn point\n"
-        "on touch\n"
-        "    if other == \"Player\" then\n"
-        "        message \"Ouch! Back to spawn.\", 2\n"
-        "        respawn\n"
+        "-- Sends the player back to the spawn point when touched.\n"
+        "local brick = script.Parent\n"
+        "local player = Players.LocalPlayer\n"
+        "\n"
+        "brick.Touched:Connect(function(other)\n"
+        "    if other == player.Character then\n"
+        "        game:Message(\"Ouch! Back to spawn.\", 2)\n"
+        "        player:LoadCharacter()\n"
         "    end\n"
-        "end\n";
+        "end)\n";
     const char* kSpinnerScript =
-        "var speed = 90  -- degrees per second\n"
+        "-- Spins the part around the Y axis.\n"
+        "local part = script.Parent\n"
+        "local speed = 90 -- degrees per second\n"
         "\n"
-        "on update\n"
-        "    rotate 0, speed * dt, 0\n"
-        "end\n";
+        "RunService.Heartbeat:Connect(function(dt)\n"
+        "    part.Rotation = part.Rotation + Vector3.new(0, speed * dt, 0)\n"
+        "end)\n";
     const char* kCoinScript =
-        "var startY = 0\n"
+        "-- A spinning, bobbing coin that disappears when collected.\n"
+        "local coin = script.Parent\n"
+        "local startY = coin.Position.Y\n"
+        "local collected = false\n"
         "\n"
-        "on start\n"
-        "    startY = self.y\n"
-        "end\n"
+        "RunService.Heartbeat:Connect(function(dt)\n"
+        "    if collected then return end\n"
+        "    coin.Rotation = coin.Rotation + Vector3.new(0, 120 * dt, 0)\n"
+        "    coin.Position = Vector3.new(coin.Position.X, startY + math.sin(time() * math.pi) * 0.25, coin.Position.Z)\n"
+        "end)\n"
         "\n"
-        "on update\n"
-        "    rotate 0, 120 * dt, 0\n"
-        "    setpos self.x, startY + sin(time * 180) * 0.25, self.z\n"
-        "end\n"
-        "\n"
-        "on touch\n"
-        "    if other == \"Player\" then\n"
-        "        print \"Coin collected!\"\n"
-        "        hide\n"
+        "coin.Touched:Connect(function(other)\n"
+        "    if other == Players.LocalPlayer.Character and not collected then\n"
+        "        collected = true\n"
+        "        print(\"Coin collected!\")\n"
+        "        coin:Destroy()\n"
         "    end\n"
-        "end\n";
+        "end)\n";
     const char* kJumpPadScript =
-        "var power = 28\n"
+        "-- Launches the player upwards.\n"
+        "local power = 28\n"
         "\n"
-        "on touch\n"
-        "    if other == \"Player\" then\n"
-        "        launch 0, power, 0\n"
+        "script.Parent.Touched:Connect(function(other)\n"
+        "    if other == Players.LocalPlayer.Character then\n"
+        "        other.Velocity = Vector3.new(0, power, 0)\n"
         "    end\n"
-        "end\n";
+        "end)\n";
     const char* kFinishScript =
-        "on touch\n"
-        "    if other == \"Player\" then\n"
-        "        win \"Finished in \" .. round(time) .. \" s!\"\n"
+        "-- Ends the run when the player reaches this part.\n"
+        "script.Parent.Touched:Connect(function(other)\n"
+        "    if other == Players.LocalPlayer.Character then\n"
+        "        game:Win(\"Finished in \" .. math.floor(time() + 0.5) .. \" s!\")\n"
         "    end\n"
-        "end\n";
+        "end)\n";
     const char* kEmptyScript =
-        "-- RiftScript: runs while the game is playing (Game > Play / F5)\n"
+        "-- Lua script. It runs while the game is playing (Game > Play / F5).\n"
+        "-- script.Parent is the part this script is attached to (or workspace).\n"
         "\n"
-        "on start\n"
-        "    print \"Hello from \" .. self.name\n"
-        "end\n"
+        "print(\"Hello from \" .. script.Name)\n"
         "\n"
-        "on update\n"
+        "RunService.Heartbeat:Connect(function(dt)\n"
         "    -- runs every frame, dt = seconds since the last frame\n"
-        "end\n"
-        "\n"
-        "on touch\n"
-        "    -- other = name of what touched this part (\"Player\" for the player)\n"
-        "end\n";
+        "end)\n";
+
+    const char* kLuaReference =
+        "Globals    workspace  game  script  Players  RunService  UserInputService\n"
+        "Instance   Name  ClassName  Parent  Position  Rotation  Size  Color\n"
+        "           Anchored  CanCollide  Visible  Bounciness  Velocity  WorldPosition\n"
+        "           :GetChildren()  :GetDescendants()  :FindFirstChild(name, recursive)\n"
+        "           :IsA(class)  :Clone()  :Destroy()  :GetFullName()  :IsDescendantOf(x)\n"
+        "Events     .Touched(other)  .ChildAdded(child)  .Destroying()\n"
+        "           :Connect(fn)  :Once(fn)  :Wait()   (Connect returns a connection: :Disconnect())\n"
+        "Create     Instance.new(\"Part\" | \"Sphere\" | \"Wedge\")  then set .Parent = workspace\n"
+        "Values     Vector3.new(x,y,z)  Color3.new / fromRGB / fromHSV  (+ - * / == :Dot :Cross :Lerp .Magnitude .Unit)\n"
+        "Time       task.wait(s)  task.spawn(f, ...)  task.delay(s, f, ...)  time()  RunService.Heartbeat:Connect(function(dt) end)\n"
+        "Input      UserInputService:IsKeyDown(Enum.KeyCode.E)  .InputBegan / .InputEnded (input, processed)\n"
+        "Player     Players.LocalPlayer.Character (the player's part)   :LoadCharacter() respawns\n"
+        "Game       game:Message(text, seconds)  game:Win(text)  game:Lose(text)   workspace.Gravity\n"
+        "Modules    require(\"name\") loads scripts/name.lua   (dots = folders: \"lib.util\")\n"
+        "Notes      Lua 5.4. No io / os.execute / load. A script that never yields is stopped after ~1 s.";
+}
+
+std::unique_ptr<Object> Interface::makeScriptObject(Object* parent, const std::string& name, const std::string& source) {
+    const std::string path = scriptStore.uniquePath(name);
+    scriptStore.create(path, source); // lives in the store (dirty) until the scene is saved
+    auto script = std::make_unique<Object>(name, std::vector<Vertex>());
+    script->kind = Object::Kind::Script;
+    script->scriptPath = path;
+    if (parent) script->setParent(parent);
+    return script;
+}
+
+void Interface::addScriptTo(Object* part) {
+    if (!part || part->kind != Object::Kind::Part || isPlaying()) return;
+    auto script = makeScriptObject(part, "Script", kEmptyScript);
+    Object* raw = script.get();
+    history.execute(std::make_unique<AddObjectCommand>(scene, std::move(script), "Add Script to " + part->name));
+    openScriptEditor(raw);
+    showStatus("Added a script to " + part->name);
 }
 
 void Interface::insertTemplate(const std::string& kind) {
+    if (kind == "Script") {
+        // Attached to the selected part, or scene-level if nothing (or several things) is selected.
+        Object* parent = (selectedObjects.size() == 1 && primaryObject && primaryObject->kind == Object::Kind::Part) ? primaryObject : nullptr;
+        auto script = makeScriptObject(parent, "Script", kEmptyScript);
+        Object* raw = script.get();
+        history.execute(std::make_unique<AddObjectCommand>(scene, std::move(script), "Insert Script"));
+        selectObject(raw, false);
+        openScriptEditor(raw);
+        showStatus(parent ? "Inserted a script attached to " + parent->name : "Inserted a scene-level script");
+        return;
+    }
+
     std::vector<Vertex> mesh = createCubeVertices();
     if (kind == "Sphere" || kind == "Coin") mesh = createSphereVertices();
     else if (kind == "Wedge") mesh = createTriangle3DVertices();
@@ -94,6 +145,7 @@ void Interface::insertTemplate(const std::string& kind) {
     auto object = std::make_unique<Object>(makeUniqueName(kind), mesh, plain ? texture : nullptr);
     object->position = camera->target;
 
+    const char* scriptSource = nullptr;
     auto& g = object->game;
     if (kind == "Baseplate") {
         object->position = glm::vec3(0.0f, -0.5f, 0.0f);
@@ -105,20 +157,20 @@ void Interface::insertTemplate(const std::string& kind) {
     } else if (kind == "KillBrick") {
         object->scale = glm::vec3(4.0f, 0.4f, 4.0f);
         object->color = glm::vec3(0.90f, 0.15f, 0.15f);
-        g.script = kKillBrickScript;
+        scriptSource = kKillBrickScript;
     } else if (kind == "Spinner") {
         object->scale = glm::vec3(8.0f, 0.5f, 0.8f);
         object->color = glm::vec3(0.95f, 0.55f, 0.10f);
-        g.script = kSpinnerScript;
+        scriptSource = kSpinnerScript;
     } else if (kind == "Coin") {
         object->scale = glm::vec3(0.7f);
         object->color = glm::vec3(1.0f, 0.85f, 0.10f);
         g.canCollide = false;
-        g.script = kCoinScript;
+        scriptSource = kCoinScript;
     } else if (kind == "JumpPad") {
         object->scale = glm::vec3(2.0f, 0.3f, 2.0f);
         object->color = glm::vec3(0.20f, 0.85f, 0.95f);
-        g.script = kJumpPadScript;
+        scriptSource = kJumpPadScript;
     } else if (kind == "FallingBlock") {
         object->position += glm::vec3(0.0f, 5.0f, 0.0f);
         object->color = glm::vec3(0.60f, 0.35f, 0.90f);
@@ -127,7 +179,7 @@ void Interface::insertTemplate(const std::string& kind) {
     } else if (kind == "Finish") {
         object->scale = glm::vec3(4.0f, 0.3f, 4.0f);
         object->color = glm::vec3(1.0f, 0.80f, 0.20f);
-        g.script = kFinishScript;
+        scriptSource = kFinishScript;
     }
 
     // Like Roblox Studio: a new part lands ON whatever is under the camera
@@ -136,6 +188,7 @@ void Interface::insertTemplate(const std::string& kind) {
         GameRuntime::Box box = GameRuntime::worldBox(*object);
         float floorY = -1e30f;
         for (Object* other : scene.getObjects()) {
+            if (other->kind != Object::Kind::Part) continue;
             const GameRuntime::Box ob = GameRuntime::worldBox(*other);
             const bool underneath = box.lo.x < ob.hi.x && box.hi.x > ob.lo.x && box.lo.z < ob.hi.z && box.hi.z > ob.lo.z;
             if (underneath) floorY = std::max(floorY, ob.hi.y);
@@ -145,7 +198,16 @@ void Interface::insertTemplate(const std::string& kind) {
     }
 
     Object* raw = object.get();
-    history.execute(std::make_unique<AddObjectCommand>(scene, std::move(object), "Insert " + kind));
+    if (scriptSource) {
+        // One undo step adds the part and the Lua script attached to it.
+        auto script = makeScriptObject(raw, raw->name + "Script", scriptSource);
+        std::vector<std::unique_ptr<Command>> commands;
+        commands.push_back(std::make_unique<AddObjectCommand>(scene, std::move(object), "Insert " + kind));
+        commands.push_back(std::make_unique<AddObjectCommand>(scene, std::move(script), "Add script"));
+        history.execute(std::make_unique<CompositeCommand>("Insert " + kind, std::move(commands)));
+    } else {
+        history.execute(std::make_unique<AddObjectCommand>(scene, std::move(object), "Insert " + kind));
+    }
     selectObject(raw, false);
     showStatus("Inserted " + raw->name);
 }
@@ -162,61 +224,104 @@ void Interface::gamePropertiesUI(Object* object) {
     ImGui::Checkbox("Visible", &g.visible);
     if (!g.anchored) ImGui::SliderFloat("Bounciness", &g.bounciness, 0.0f, 1.0f, "%.2f");
 
-    const bool hasScript = g.script.find_first_not_of(" \t\r\n") != std::string::npos;
-    if (hasScript) {
-        const long lines = static_cast<long>(std::count(g.script.begin(), g.script.end(), '\n')) + 1;
-        ImGui::Text(ICON_FA_CODE " Script (%ld lines)", lines);
+    ImGui::Spacing();
+    pushHeading("Scripts");
+    int attached = 0;
+    for (Object* child : object->children) {
+        if (child->kind != Object::Kind::Script) continue;
+        ImGui::PushID(child);
+        ImGui::Text(ICON_FA_CODE " %s", child->name.c_str());
         ImGui::SameLine();
-        if (ImGui::SmallButton("Edit")) {
-            scriptTarget = object;
-            showScriptEditor = true;
-            scriptCheckResult = GameRuntime::checkSyntax(g.script);
-        }
-        ImGui::SameLine();
-        if (ImGui::SmallButton("Remove")) g.script.clear();
-    } else if (ImGui::Button(ICON_FA_CODE " Add Script")) {
-        g.script = kEmptyScript;
-        scriptTarget = object;
-        showScriptEditor = true;
-        scriptCheckResult.clear();
+        if (ImGui::SmallButton("Edit")) openScriptEditor(child);
+        ImGui::PopID();
+        ++attached;
     }
+    if (attached == 0) ImGui::TextDisabled("No scripts attached.");
+    if (ImGui::Button(ICON_FA_CODE " Add Script")) addScriptTo(object);
+}
+
+void Interface::scriptPropertiesUI(Object* script) {
+    pushHeading("Script");
+    if (script->scriptPath.empty()) ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.40f, 1.0f), "No source file");
+    else ImGui::TextDisabled("%s", script->scriptPath.c_str());
+    ImGui::TextDisabled(script->parent ? "Runs attached to the parent part (script.Parent)" : "Scene-level script (script.Parent is workspace)");
+
+    ImGui::Checkbox("Enabled", &script->scriptEnabled);
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("A disabled script does not run when the game starts.");
+    ImGui::SameLine();
+    if (ImGui::Button(ICON_FA_CODE " Edit")) openScriptEditor(script);
+
+    if (!script->scriptPath.empty() && !scriptStore.has(script->scriptPath)) {
+        ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.40f, 1.0f), "File not found next to the scene.");
+    }
+}
+
+void Interface::openScriptEditor(Object* script) {
+    if (!script || script->kind != Object::Kind::Script) return;
+    scriptTarget = script;
+    showScriptEditor = true;
+    if (script->scriptPath.empty()) {
+        script->scriptPath = scriptStore.uniquePath(script->name);
+    }
+    if (!scriptStore.has(script->scriptPath) && !scriptStore.load(script->scriptPath)) {
+        scriptStore.create(script->scriptPath, kEmptyScript); // missing file: start a fresh one
+    }
+    const ScriptStore::Entry* entry = scriptStore.find(script->scriptPath);
+    scriptCheckResult = entry ? GameRuntime::checkSyntax(entry->text, script->scriptPath) : std::string();
+    ImGui::SetWindowFocus("Script Editor");
 }
 
 void Interface::scriptEditorUI() {
     if (!showScriptEditor) return;
-    ImGui::SetNextWindowSize(ImVec2(620.0f, 520.0f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(660.0f, 540.0f), ImGuiCond_FirstUseEver);
     if (!ImGui::Begin("Script Editor", &showScriptEditor)) { ImGui::End(); return; }
 
-    if (!scriptTarget) {
+    if (!scriptTarget || scriptTarget->kind != Object::Kind::Script) {
         ImGui::TextDisabled("No script open.");
-        ImGui::TextDisabled("Select an object and use Properties > Game > Add Script / Edit.");
+        ImGui::TextDisabled("Double-click a script in the Explorer, or use Insert > Script (Lua).");
         ImGui::End();
         return;
     }
 
+    const std::string path = scriptTarget->scriptPath;
     pushHeading(scriptTarget->name.c_str());
     ImGui::SameLine();
     if (scriptCheckResult.empty()) ImGui::TextColored(ImVec4(0.4f, 0.9f, 0.5f, 1.0f), ICON_FA_CHECK " no syntax errors");
     else ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.40f, 1.0f), ICON_FA_EXCLAMATION_TRIANGLE " %s", scriptCheckResult.c_str());
+    ImGui::TextDisabled("%s", path.c_str());
 
-    const bool locked = isPlaying();
-    if (locked) {
-        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), "Stop the game to edit scripts (changes would be lost on Stop).");
-        ImGui::BeginDisabled();
+    std::string* text = scriptStore.editableText(path);
+    if (!text) {
+        ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.40f, 1.0f), "This script's file is missing.");
+        if (ImGui::Button("Create file")) { scriptStore.create(path, kEmptyScript); scriptCheckResult.clear(); }
+        ImGui::End();
+        return;
     }
 
-    if (ImGui::CollapsingHeader("Language reference")) {
+    const ScriptStore::Entry* entry = scriptStore.find(path);
+    const bool dirty = entry && entry->dirty;
+    ImGui::SameLine();
+    if (dirty) ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), "(unsaved)");
+    if (ImGui::SmallButton(ICON_FA_SAVE " Save file")) {
+        if (scriptStore.root().empty()) showStatus("Save the scene first (File > Save): it needs a folder for its scripts", true);
+        else if (scriptStore.save(path)) showStatus("Saved " + path);
+        else showStatus("Could not save " + path + " (see RenderEngine_log.txt)", true);
+    }
+    ImGui::SameLine();
+    ImGui::TextDisabled("File > Save also saves every script.");
+    if (isPlaying()) ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), "The game is running: edits apply the next time you press Play.");
+
+    if (ImGui::CollapsingHeader("Lua API reference")) {
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.75f, 0.82f, 0.95f, 1.0f));
-        ImGui::TextUnformatted(rs::languageReference());
+        ImGui::TextUnformatted(kLuaReference);
         ImGui::PopStyleColor();
     }
 
     const ImVec2 size(-FLT_MIN, std::max(120.0f, ImGui::GetContentRegionAvail().y));
-    if (ImGui::InputTextMultiline("##source", &scriptTarget->game.script, size, ImGuiInputTextFlags_AllowTabInput)) {
-        scriptCheckResult = GameRuntime::checkSyntax(scriptTarget->game.script); // live: compiling is cheap
+    if (ImGui::InputTextMultiline("##source", text, size, ImGuiInputTextFlags_AllowTabInput)) {
+        scriptStore.touch(path);
+        scriptCheckResult = GameRuntime::checkSyntax(*text, path); // live: compiling is cheap
     }
-
-    if (locked) ImGui::EndDisabled();
     ImGui::End();
 }
 

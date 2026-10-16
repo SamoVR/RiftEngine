@@ -1,5 +1,7 @@
 #include "Interface.h"
 #include <algorithm>
+#include <filesystem>
+#include <functional>
 #include <cstdio>
 #include <cstring>
 
@@ -156,6 +158,19 @@ void Interface::update(float deltaTime) {
     if (statusTimer > 0.0f) statusTimer -= deltaTime;
     refreshDirtyState(deltaTime);
 
+    // Hot reload: pick up scripts edited in an external editor (VS Code, ...).
+    scriptPollTimer += deltaTime;
+    if (scriptPollTimer >= 1.0f) {
+        scriptPollTimer = 0.0f;
+        std::vector<std::string> conflicts;
+        const std::vector<std::string> reloaded = scriptStore.pollExternalChanges(&conflicts);
+        if (!reloaded.empty()) {
+            showStatus("Reloaded from disk: " + reloaded.front() + (reloaded.size() > 1 ? " (+" + std::to_string(reloaded.size() - 1) + " more)" : ""));
+            if (scriptTarget && scriptStore.find(scriptTarget->scriptPath)) scriptCheckResult = GameRuntime::checkSyntax(scriptStore.find(scriptTarget->scriptPath)->text, scriptTarget->scriptPath);
+        }
+        if (!conflicts.empty()) showStatus(conflicts.front() + " changed on disk and in the editor; your unsaved edit was kept", true);
+    }
+
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
@@ -208,6 +223,7 @@ void Interface::update(float deltaTime) {
 
     updateFileBrowsers();
     unsavedPopup();
+    overwritePopup();
     aboutPopups();
 
     renderText();
@@ -244,7 +260,7 @@ void Interface::markClean() {
 }
 
 bool Interface::hasUnsavedChanges() const {
-    return scene.toJsonString() != savedSnapshot;
+    return scriptStore.anyDirty() || scene.toJsonString() != savedSnapshot;
 }
 
 void Interface::refreshDirtyState(float deltaTime) {
@@ -291,8 +307,15 @@ void Interface::resetSceneState() {
 }
 
 bool Interface::doSave(const std::string& path) {
+    // A scene is a folder: <folder>/scene.json plus <folder>/scripts/*.lua.
+    // Scripts go first so scene.json never points at a file that was not written.
+    const std::string folder = std::filesystem::path(path).parent_path().string();
+    if (!scriptStore.saveAll(folder.empty() ? "." : folder)) {
+        showStatus("Could not write the script files (see RenderEngine_log.txt)", true);
+        return false;
+    }
     if (!scene.saveToFile(path)) {
-        showStatus("Could not save to " + path + " (see RiftEngine_log.txt)", true);
+        showStatus("Could not save to " + path + " (see RenderEngine_log.txt)", true);
         return false;
     }
     currentScenePath = path;
@@ -304,22 +327,36 @@ bool Interface::doSave(const std::string& path) {
 }
 
 bool Interface::doLoad(const std::string& path) {
+    if (isPlaying()) { showStatus("Stop the game first", true); return false; } // the runtime holds Object* into the scene
     // loadFromFile leaves the current scene untouched on failure, so selection,
     // animation and undo history are only reset once it has succeeded.
     if (!scene.loadFromFile(path, defaultTexture.get())) {
-        showStatus("Could not load " + path + " (see RiftEngine_log.txt)", true);
+        showStatus("Could not load " + path + " (see RenderEngine_log.txt)", true);
         return false;
     }
     resetSceneState();
+    scriptStore.reset(std::filesystem::path(path).parent_path().string());
+    const int missingScripts = loadScriptsForScene();
     currentScenePath = path;
     settings.lastScenePath = path;
     settingsDirty = true;
     markClean();
-    showStatus("Loaded " + path);
+    if (missingScripts > 0) showStatus("Loaded " + path + ", but " + std::to_string(missingScripts) + " script file(s) are missing (see RenderEngine_log.txt)", true);
+    else showStatus("Loaded " + path);
     return true;
 }
 
+int Interface::loadScriptsForScene() {
+    int missing = 0;
+    for (Object* o : scene.getObjects()) {
+        if (o->kind != Object::Kind::Script || o->scriptPath.empty()) continue;
+        if (!scriptStore.load(o->scriptPath)) ++missing;
+    }
+    return missing;
+}
+
 void Interface::guardUnsaved(PendingAction action) {
+    if (isPlaying() && action != PendingAction::Exit) { showStatus("Stop the game first", true); return; }
     if (!hasUnsavedChanges()) { runPending(action); return; }
     pendingAction = action;
     openUnsavedPopup = true;
@@ -330,6 +367,8 @@ void Interface::runPending(PendingAction action) {
     case PendingAction::NewScene:
         scene.clear();
         resetSceneState();
+        scriptStore.reset(std::string());
+        scriptTarget = nullptr;
         currentScenePath.clear();
         markClean();
         showStatus("New scene");
@@ -337,7 +376,7 @@ void Interface::runPending(PendingAction action) {
     case PendingAction::OpenScene: {
         IGFD::FileDialogConfig config;
         config.path = "assets/scenes";
-        ImGuiFileDialog::Instance()->OpenDialog("LoadSceneDialog", "Open Scene", ".json", config);
+        ImGuiFileDialog::Instance()->OpenDialog("LoadSceneDialog", "Open Scene (choose a scene.json)", ".json", config);
         break;
     }
     case PendingAction::Exit:
@@ -353,18 +392,22 @@ void Interface::newScene()          { guardUnsaved(PendingAction::NewScene); }
 void Interface::openLoadDialog()    { guardUnsaved(PendingAction::OpenScene); }
 
 void Interface::openSaveDialog() {
+    if (isPlaying()) { showStatus("Stop the game first", true); return; } // would save the simulated state
     IGFD::FileDialogConfig config;
     config.path = "assets/scenes";
-    config.flags = ImGuiFileDialogFlags_ConfirmOverwrite;
-    ImGuiFileDialog::Instance()->OpenDialog("SaveSceneDialog", "Save Scene As", ".json", config);
+    // The name typed here becomes a folder: "Level1" -> Level1/scene.json + Level1/scripts/.
+    // (Overwriting an existing scene folder is confirmed separately.)
+    ImGuiFileDialog::Instance()->OpenDialog("SaveSceneDialog", "Save Scene As (creates a folder named after the file)", ".json", config);
 }
 
 void Interface::saveScene() {
+    if (isPlaying()) { showStatus("Stop the game first", true); return; }
     if (currentScenePath.empty()) openSaveDialog();
     else doSave(currentScenePath);
 }
 
 bool Interface::requestClose() {
+    if (isPlaying()) togglePlay(); // restore the scene, otherwise the simulated state counts as an edit
     if (exitConfirmed || !hasUnsavedChanges()) return true;
     pendingAction = PendingAction::Exit;
     openUnsavedPopup = true;
@@ -389,9 +432,19 @@ void Interface::updateFileBrowsers() {
 
     if (ImGuiFileDialog::Instance()->Display("SaveSceneDialog")) {
         if (ImGuiFileDialog::Instance()->IsOk()) {
-            std::string filePath = ImGuiFileDialog::Instance()->GetFilePathName();
-            if (filePath.size() < 5 || filePath.compare(filePath.size() - 5, 5, ".json") != 0) filePath += ".json";
-            if (doSave(filePath) && pendingAction != PendingAction::None) {
+            const std::filesystem::path chosen(ImGuiFileDialog::Instance()->GetFilePathName());
+            std::string stem = chosen.stem().string();
+            if (stem.empty()) stem = "Scene";
+            const std::filesystem::path scenePath = (stem == "scene")
+                ? chosen.parent_path() / "scene.json"
+                : chosen.parent_path() / stem / "scene.json";
+            std::error_code existsError;
+            if (std::filesystem::exists(scenePath, existsError) && scenePath != std::filesystem::path(currentScenePath)) {
+                pendingOverwritePath = scenePath.string();
+                overwriteThenAction = pendingAction;
+                pendingAction = PendingAction::None;
+                openOverwritePopup = true;
+            } else if (doSave(scenePath.string()) && pendingAction != PendingAction::None) {
                 const PendingAction action = pendingAction; // "Save" from the unsaved-changes prompt
                 pendingAction = PendingAction::None;
                 runPending(action);
@@ -407,6 +460,32 @@ void Interface::updateFileBrowsers() {
             doLoad(ImGuiFileDialog::Instance()->GetFilePathName());
         }
         ImGuiFileDialog::Instance()->Close();
+    }
+}
+
+void Interface::overwritePopup() {
+    if (openOverwritePopup) {
+        ImGui::OpenPopup("Replace scene?");
+        openOverwritePopup = false;
+    }
+    ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    if (ImGui::BeginPopupModal("Replace scene?", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::TextWrapped("A scene already exists at:");
+        ImGui::TextDisabled("%s", pendingOverwritePath.c_str());
+        ImGui::Spacing();
+        if (ImGui::Button("Replace", ImVec2(110, 0))) {
+            ImGui::CloseCurrentPopup();
+            const std::string target = pendingOverwritePath;
+            const PendingAction action = overwriteThenAction;
+            overwriteThenAction = PendingAction::None;
+            if (doSave(target) && action != PendingAction::None) runPending(action);
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(110, 0))) {
+            overwriteThenAction = PendingAction::None;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
     }
 }
 
@@ -435,7 +514,7 @@ void Interface::unsavedPopup() {
             const PendingAction action = pendingAction;
             pendingAction = PendingAction::None;
             if (action == PendingAction::NewScene) {
-                scene.clear(); resetSceneState(); currentScenePath.clear(); markClean(); showStatus("New scene");
+                runPending(PendingAction::NewScene);
             } else {
                 // Open / Exit: skip the dirty check we just answered.
                 if (action == PendingAction::Exit) { exitConfirmed = true; glfwSetWindowShouldClose(window, GLFW_TRUE); }
@@ -504,19 +583,30 @@ void Interface::pruneSelection() {
 }
 
 void Interface::focusSelection() {
-    if (!primaryObject) return;
-    camera->focusOn(glm::vec3(primaryObject->getGlobalTransform()[3]));
+    Object* target = primaryObject;
+    if (target && target->kind == Object::Kind::Script) target = target->parent; // a script has no place in the world
+    if (!target) return;
+    camera->focusOn(glm::vec3(target->getGlobalTransform()[3]));
 }
 
 // ============================================================================
 //  Undoable actions
 // ============================================================================
 
-std::string Interface::makeUniqueName(const std::string& base) const {
-    if (!scene.findByName(base)) return base;
+std::string Interface::makeUniqueName(const std::string& base, const Object* ignore) const {
+    // Names are how scenes save parent links and how scripts find objects, so
+    // they must be unique. `ignore` is the object being renamed (its own old
+    // name does not count as a clash).
+    auto taken = [&](const std::string& name) {
+        for (Object* o : scene.getObjects()) {
+            if (o != ignore && o->name == name) return true;
+        }
+        return false;
+    };
+    if (!taken(base)) return base;
     for (int n = 2; ; ++n) {
         const std::string candidate = base + " (" + std::to_string(n) + ")";
-        if (!scene.findByName(candidate)) return candidate;
+        if (!taken(candidate)) return candidate;
     }
 }
 
@@ -530,28 +620,50 @@ void Interface::addPrimitive(const std::string& baseName, const std::vector<Vert
 }
 
 void Interface::duplicateObject() {
-    if (selectedObjects.empty()) return;
+    if (isPlaying() || selectedObjects.empty()) return;
 
     std::unordered_set<std::string> used;
     for (Object* o : scene.getObjects()) used.insert(o->name);
 
+    // Duplicates the selected objects together with everything under them
+    // (a Coin keeps the Script attached to it). Scripts share the .lua file of
+    // the original: it is the same program on another part, like a prefab.
     std::vector<std::unique_ptr<Command>> commands;
     std::vector<Object*> created;
-    for (Object* original : scene.getObjects()) { // scene order, so the copies keep it
-        if (!selectedObjects.count(original)) continue;
-
+    std::function<Object*(Object*, Object*, bool)> copyNode = [&](Object* original, Object* copyParent, bool isRoot) -> Object* {
         auto copy = std::make_unique<Object>(*original); // own GPU buffers; unparented, no children
-        std::string name = original->name + " (Copy)";
-        for (int n = 2; used.count(name); ++n) name = original->name + " (Copy " + std::to_string(n) + ")";
-        used.insert(name);
+        std::string name = original->name;
+        if (isRoot) {
+            name = original->name + " (Copy)";
+            for (int n = 2; used.count(name); ++n) name = original->name + " (Copy " + std::to_string(n) + ")";
+            used.insert(name);
+        }
         copy->setName(name);
 
-        // The copy is not parented, so bake the original's world transform
-        // into its local one or it would jump if the original had a parent.
-        TransformUtil::decompose(original->getGlobalTransform(), copy->position, copy->rotation, copy->scale);
+        if (isRoot && original->kind == Object::Kind::Part) {
+            // The copy is not parented, so bake the original's world transform
+            // into its local one or it would jump if the original had a parent.
+            TransformUtil::decompose(original->getGlobalTransform(), copy->position, copy->rotation, copy->scale);
+        } else if (isRoot && original->parent) {
+            copy->setParent(original->parent); // a duplicated Script stays attached to the same part
+        }
+        if (copyParent) copy->setParent(copyParent);
 
-        created.push_back(copy.get());
+        Object* raw = copy.get();
         commands.push_back(std::make_unique<AddObjectCommand>(scene, std::move(copy), "Add " + name));
+        const std::vector<Object*> kids = original->children;
+        for (Object* child : kids) copyNode(child, raw, false);
+        return raw;
+    };
+
+    for (Object* original : scene.getObjects()) { // scene order, so the copies keep it
+        if (!selectedObjects.count(original)) continue;
+        bool ancestorSelected = false; // its copy comes with the ancestor's copy
+        for (const Object* p = original->parent; p; p = p->parent) {
+            if (selectedObjects.count(const_cast<Object*>(p))) { ancestorSelected = true; break; }
+        }
+        if (ancestorSelected) continue;
+        created.push_back(copyNode(original, nullptr, true));
     }
     if (commands.empty()) return;
 
@@ -585,6 +697,7 @@ void Interface::deleteObjects(const std::vector<Object*>& objects) {
 }
 
 void Interface::deleteSelected() {
+    if (isPlaying()) return;
     std::vector<Object*> targets;
     for (Object* o : scene.getObjects()) {
         if (selectedObjects.count(o)) targets.push_back(o);
@@ -593,6 +706,7 @@ void Interface::deleteSelected() {
 }
 
 void Interface::undo() {
+    if (isPlaying()) return; // history commands re-insert/extract objects the runtime may reference
     if (!history.canUndo()) { showStatus("Nothing to undo"); return; }
     const std::string what = history.peekUndoDescription();
     history.undo();
@@ -600,6 +714,7 @@ void Interface::undo() {
 }
 
 void Interface::redo() {
+    if (isPlaying()) return;
     if (!history.canRedo()) { showStatus("Nothing to redo"); return; }
     const std::string what = history.peekRedoDescription();
     history.redo();
@@ -680,7 +795,7 @@ void Interface::renderGizmo() {
     ImGuizmo::BeginFrame();
     ImGuizmo::SetRect(0, 0, io.DisplaySize.x, io.DisplaySize.y);
 
-    if (!primaryObject || selectedObjects.empty()) {
+    if (!primaryObject || selectedObjects.empty() || primaryObject->kind != Object::Kind::Part) {
         gizmoWasUsing = false;
         gizmoStartStates.clear();
         return;
@@ -712,6 +827,7 @@ void Interface::renderGizmo() {
     // Selected objects that have no selected ancestor; their descendants follow through the hierarchy.
     std::vector<Object*> roots;
     for (Object* o : selectedObjects) {
+        if (o->kind != Object::Kind::Part) continue; // scripts have no transform to move
         bool ancestorSelected = false;
         for (const Object* p = o->parent; p; p = p->parent) {
             if (selectedObjects.count(const_cast<Object*>(p))) { ancestorSelected = true; break; }
@@ -794,12 +910,14 @@ namespace {
 void Interface::mainMenuBarUI() {
     if (!ImGui::BeginMainMenuBar()) return;
 
+    const bool playMode = isPlaying(); // scene-changing menu items are locked while the game runs
+
     if (ImGui::BeginMenu("File")) {
-        if (ImGui::MenuItem("New", shortcutFor(keybindManager, "New Scene").c_str())) newScene();
-        if (ImGui::MenuItem("Open...", shortcutFor(keybindManager, "Open Scene").c_str())) openLoadDialog();
+        if (ImGui::MenuItem("New", shortcutFor(keybindManager, "New Scene").c_str(), false, !playMode)) newScene();
+        if (ImGui::MenuItem("Open...", shortcutFor(keybindManager, "Open Scene").c_str(), false, !playMode)) openLoadDialog();
         ImGui::Separator();
-        if (ImGui::MenuItem("Save", shortcutFor(keybindManager, "Save").c_str())) saveScene();
-        if (ImGui::MenuItem("Save As...", shortcutFor(keybindManager, "Save As").c_str())) openSaveDialog();
+        if (ImGui::MenuItem("Save", shortcutFor(keybindManager, "Save").c_str(), false, !playMode)) saveScene();
+        if (ImGui::MenuItem("Save As...", shortcutFor(keybindManager, "Save As").c_str(), false, !playMode)) openSaveDialog();
         ImGui::Separator();
         if (ImGui::MenuItem("Exit")) {
             if (requestClose()) glfwSetWindowShouldClose(window, GLFW_TRUE);
@@ -807,7 +925,7 @@ void Interface::mainMenuBarUI() {
         ImGui::EndMenu();
     }
 
-    if (ImGui::BeginMenu("Edit")) {
+    if (ImGui::BeginMenu("Edit", !playMode)) {
         const std::string undoLabel = history.canUndo() ? "Undo " + history.peekUndoDescription() : "Undo";
         const std::string redoLabel = history.canRedo() ? "Redo " + history.peekRedoDescription() : "Redo";
         if (ImGui::MenuItem(undoLabel.c_str(), shortcutFor(keybindManager, "Undo").c_str(), false, history.canUndo())) undo();
@@ -821,7 +939,6 @@ void Interface::mainMenuBarUI() {
         ImGui::EndMenu();
     }
 
-    const bool playMode = isPlaying();
     if (ImGui::BeginMenu("Insert", !playMode)) {
         if (ImGui::MenuItem("Part (Cube)"))  insertTemplate("Part");
         if (ImGui::MenuItem("Sphere"))       insertTemplate("Sphere");
@@ -829,6 +946,8 @@ void Interface::mainMenuBarUI() {
         ImGui::Separator();
         if (ImGui::MenuItem("Baseplate"))    insertTemplate("Baseplate");
         if (ImGui::MenuItem("Spawn Point"))  insertTemplate("SpawnPoint");
+        ImGui::Separator();
+        if (ImGui::MenuItem("Script (Lua)")) insertTemplate("Script");
         ImGui::Separator();
         ImGui::TextDisabled("Scripted templates");
         if (ImGui::MenuItem("Kill Brick"))   insertTemplate("KillBrick");
@@ -1028,15 +1147,20 @@ void Interface::renderObjectNode(Object* object) {
     if (object->children.empty()) flags |= ImGuiTreeNodeFlags_Leaf;
     if (selectedObjects.count(object)) flags |= ImGuiTreeNodeFlags_Selected;
 
-    const bool open = ImGui::TreeNodeEx(object->name.c_str(), flags);
+    const bool isScript = object->kind == Object::Kind::Script;
+    const std::string label = (isScript ? std::string(ICON_FA_CODE " ") : std::string()) + object->name;
+    const bool open = ImGui::TreeNodeEx(label.c_str(), flags);
     const ImGuiIO& io = ImGui::GetIO();
 
     if (ImGui::IsItemClicked(0) && !ImGui::IsItemToggledOpen()) {
         selectObject(object, io.KeyCtrl || io.KeyShift); // same modifiers as viewport picking
     }
+    if (isScript && ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0)) openScriptEditor(object);
     if (ImGui::IsItemClicked(1) && !selectedObjects.count(object)) selectObject(object, false);
 
     if (ImGui::BeginPopupContextItem("object_context")) {
+        if (isScript && ImGui::MenuItem("Edit Script")) openScriptEditor(object);
+        if (!isScript && ImGui::MenuItem("Add Script")) addScriptTo(object);
         if (ImGui::MenuItem("Focus")) { selectObject(object, false); focusSelection(); }
         if (ImGui::MenuItem("Duplicate")) duplicateObject();
         if (ImGui::MenuItem("Unparent", nullptr, false, object->parent != nullptr)) reparent(object, nullptr);
@@ -1121,6 +1245,9 @@ void Interface::displayObjectProperties(Object* object) {
         char nameBuf[128];
         std::snprintf(nameBuf, sizeof(nameBuf), "%s", object->name.c_str());
         if (ImGui::InputText("Name", nameBuf, sizeof(nameBuf))) object->setName(nameBuf);
+        // Typing may pass through duplicates; the committed name must be unique.
+        // Done before trackEdit so the undo step records the corrected name.
+        if (ImGui::IsItemDeactivatedAfterEdit()) object->setName(makeUniqueName(object->name.empty() ? "Object" : object->name, object));
         trackEdit(object, "Rename");
 
         // This line used to pass the parent Object* to a %s format (undefined behaviour).
@@ -1128,6 +1255,18 @@ void Interface::displayObjectProperties(Object* object) {
         if (object->parent) {
             ImGui::SameLine();
             if (ImGui::SmallButton("Unparent")) reparent(object, nullptr);
+        }
+
+        if (object->kind == Object::Kind::Script) {
+            ImGui::Separator();
+            scriptPropertiesUI(object);
+            ImGui::Separator();
+            if (ImGui::Button("Duplicate")) duplicateObject();
+            ImGui::SameLine();
+            if (ImGui::Button("Delete")) panelDeleteRequest = object;
+            ImGui::PopID();
+            if (!single) ImGui::Spacing();
+            return;
         }
 
         ImGui::Separator();

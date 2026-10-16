@@ -2,7 +2,7 @@
 <Project>
   <ProjectOutputs>
     <ProjectOutput>
-      <FullPath>C:\Users\Samuel\Desktop\RiftEngine\x64\Release\RiftEngine.exe</FullPath>
+      <FullPath>C:\Users\Samuel\source\repos\SamoVR\RiftEngine\x64\Release\RiftEngine.exe</FullPath>
     </ProjectOutput>
   </ProjectOutputs>
   <ContentFiles />

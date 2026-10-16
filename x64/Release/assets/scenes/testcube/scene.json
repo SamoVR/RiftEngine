@@ -1,0 +1,8 @@
+{
+  "format": 3,
+  "objects": [
+    {"id":"2fae3a14c7e2d2ad","name":"Starting Cube","class":"Part","mesh":"cube","position":[-0.06112,0.0,0.0]},
+    {"id":"b16dfc8e8af4f7af","name":"Cube","class":"Part","mesh":"cube","position":[-0.31713,0.21513,0.53218],"scale":[0.14,0.14,0.14],"texture":"assets/textures/texture_08.png","textureOwned":true,"parent":"2fae3a14c7e2d2ad"},
+    {"id":"d7c107c07d962a5f","name":"Cube (Copy)","class":"Part","mesh":"cube","position":[0.1795,0.21513,0.53218],"scale":[0.14,0.14,0.14],"texture":"assets/textures/texture_08.png","textureOwned":true,"parent":"2fae3a14c7e2d2ad"}
+  ]
+}

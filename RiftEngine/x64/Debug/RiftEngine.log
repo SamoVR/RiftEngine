@@ -1,25 +1,30 @@
-﻿C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Microsoft\VC\v180\Microsoft.CppBuild.targets(551,5): warning MSB8028: The intermediate directory (x64\Debug\) contains files shared from another project (RenderEngine.vcxproj).  This can lead to incorrect clean and rebuild behavior.
-  AnimationSequencer.cpp
+﻿  AnimationSequencer.cpp
   RichPresence.cpp
   GameRuntime.cpp
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\shared\minwindef.h(130,9): warning C4005: 'APIENTRY': macro redefinition
   (compiling source file 'GameRuntime.cpp')
-      C:\Users\Samuel\Desktop\RiftEngine\RiftEngine\libraries\glfw\include\GLFW\glfw3.h(123,11):
+      C:\Users\Samuel\source\repos\SamoVR\RiftEngine\RiftEngine\libraries\glfw\include\GLFW\glfw3.h(123,11):
       see previous definition of 'APIENTRY'
   
   InterfaceGame.cpp
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\shared\minwindef.h(130,9): warning C4005: 'APIENTRY': macro redefinition
   (compiling source file 'InterfaceGame.cpp')
-      C:\Users\Samuel\Desktop\RiftEngine\RiftEngine\libraries\glfw\include\GLFW\glfw3.h(123,11):
+      C:\Users\Samuel\source\repos\SamoVR\RiftEngine\RiftEngine\libraries\glfw\include\GLFW\glfw3.h(123,11):
       see previous definition of 'APIENTRY'
   
-  RiftScript.cpp
+  LuaRuntime.cpp
+C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\shared\minwindef.h(130,9): warning C4005: 'APIENTRY': macro redefinition
+  (compiling source file 'LuaRuntime.cpp')
+      C:\Users\Samuel\source\repos\SamoVR\RiftEngine\RiftEngine\libraries\glfw\include\GLFW\glfw3.h(123,11):
+      see previous definition of 'APIENTRY'
+  
+  ScriptStore.cpp
   imgui_stdlib.cpp
   Camera.cpp
   Engine.cpp
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\shared\minwindef.h(130,9): warning C4005: 'APIENTRY': macro redefinition
   (compiling source file 'Engine.cpp')
-      C:\Users\Samuel\Desktop\RiftEngine\RiftEngine\libraries\glfw\include\GLFW\glfw3.h(123,11):
+      C:\Users\Samuel\source\repos\SamoVR\RiftEngine\RiftEngine\libraries\glfw\include\GLFW\glfw3.h(123,11):
       see previous definition of 'APIENTRY'
   
   Geometry.cpp
@@ -33,14 +38,14 @@ C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\shared\minwindef.h(1
   imgui_impl_glfw.cpp
   imgui_impl_opengl3.cpp
   imgui_tables.cpp
-  imgui_widgets.cpp
   Generating Code...
   Compiling...
+  imgui_widgets.cpp
   InputManager.cpp
   Interface.cpp
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\shared\minwindef.h(130,9): warning C4005: 'APIENTRY': macro redefinition
   (compiling source file 'Interface.cpp')
-      C:\Users\Samuel\Desktop\RiftEngine\RiftEngine\libraries\glfw\include\GLFW\glfw3.h(123,11):
+      C:\Users\Samuel\source\repos\SamoVR\RiftEngine\RiftEngine\libraries\glfw\include\GLFW\glfw3.h(123,11):
       see previous definition of 'APIENTRY'
   
   KeybindManager.cpp
@@ -62,19 +67,54 @@ C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\shared\minwindef.h(1
   Object.cpp
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\shared\minwindef.h(130,9): warning C4005: 'APIENTRY': macro redefinition
   (compiling source file 'Object.cpp')
-      C:\Users\Samuel\Desktop\RiftEngine\RiftEngine\libraries\glfw\include\GLFW\glfw3.h(123,11):
-      see previous definition of 'APIENTRY'
-  
-  Scene.cpp
-C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\shared\minwindef.h(130,9): warning C4005: 'APIENTRY': macro redefinition
-  (compiling source file 'Scene.cpp')
-      C:\Users\Samuel\Desktop\RiftEngine\RiftEngine\libraries\glfw\include\GLFW\glfw3.h(123,11):
+      C:\Users\Samuel\source\repos\SamoVR\RiftEngine\RiftEngine\libraries\glfw\include\GLFW\glfw3.h(123,11):
       see previous definition of 'APIENTRY'
   
   Generating Code...
   Compiling...
+  Scene.cpp
+C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\shared\minwindef.h(130,9): warning C4005: 'APIENTRY': macro redefinition
+  (compiling source file 'Scene.cpp')
+      C:\Users\Samuel\source\repos\SamoVR\RiftEngine\RiftEngine\libraries\glfw\include\GLFW\glfw3.h(123,11):
+      see previous definition of 'APIENTRY'
+  
   Shader.cpp
   Texture.cpp
   Generating Code...
+  lapi.c
+  lauxlib.c
+  lbaselib.c
+  lcode.c
+  lcorolib.c
+  lctype.c
+  ldblib.c
+  ldebug.c
+  ldo.c
+  ldump.c
+  lfunc.c
+  lgc.c
+  linit.c
+  liolib.c
+  llex.c
+  lmathlib.c
+  lmem.c
+  loadlib.c
+  lobject.c
+  lopcodes.c
+  Generating Code...
+  Compiling...
+  loslib.c
+  lparser.c
+  lstate.c
+  lstring.c
+  lstrlib.c
+  ltable.c
+  ltablib.c
+  ltm.c
+  lundump.c
+  lutf8lib.c
+  lvm.c
+  lzio.c
+  Generating Code...
 LINK : warning LNK4098: defaultlib 'MSVCRT' conflicts with use of other libs; use /NODEFAULTLIB:library
-  RiftEngine.vcxproj -> C:\Users\Samuel\Desktop\RiftEngine\x64\Debug\RiftEngine.exe
+  RiftEngine.vcxproj -> C:\Users\Samuel\source\repos\SamoVR\RiftEngine\x64\Debug\RiftEngine.exe

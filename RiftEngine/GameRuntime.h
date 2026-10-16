@@ -5,14 +5,14 @@
 //   * spawns a player character (WASD / Space, the camera follows it),
 //   * simulates physics for parts with Anchored = off (gravity, collisions,
 //     bounciness),
-//   * runs every object's RiftScript (on start / on update / on touch).
+//   * runs the scene's Script objects with Lua (see LuaRuntime.h).
 // On Stop everything the game changed is put back exactly as it was, so the
-// edited scene is never affected by a test run.
+// edited scene is never affected by a test run: properties, hierarchy,
+// "destroyed" objects, and anything the scripts created are all undone.
 //
 #include "Scene.h"
 #include "Camera.h"
 #include "InputManager.h"
-#include "RiftScript.h"
 
 #include <glm/glm.hpp>
 #include <map>
@@ -20,12 +20,20 @@
 #include <set>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
-class GameRuntime : public rs::Host {
+class ScriptStore;
+class LuaRuntime;
+
+class GameRuntime {
 public:
     GameRuntime(Scene& scene, Camera& camera, InputManager& input);
-    ~GameRuntime() override;
+    ~GameRuntime();
+
+    // Scripts are read from here (the editor's in-memory copies, so unsaved
+    // edits can be tested). Must be set before start().
+    void setScriptStore(ScriptStore* store) { scripts_ = store; }
 
     void start();
     void stop();
@@ -47,8 +55,9 @@ public:
     float elapsed() const { return time_; }
     const Object* player() const { return player_.get(); }
 
-    // Checks a script for syntax errors (used by the script editor).
-    static std::string checkSyntax(const std::string& source);
+    // Checks a Lua script for syntax errors without running it (script editor).
+    // Returns "" when OK, otherwise "chunkName:line: message".
+    static std::string checkSyntax(const std::string& source, const std::string& chunkName = "script");
 
     // ---- tuning (shown in Settings > Game)
     float gravity = -30.0f;
@@ -56,11 +65,36 @@ public:
     float jumpSpeed = 12.0f;
     float killPlaneY = -60.0f;
 
-    // ---- rs::Host
-    bool command(const std::string& name, const std::vector<rs::Value>& args, std::string& error) override;
-    bool getField(const std::string& object, const std::string& field, rs::Value& out, std::string& error) override;
-    bool callFunction(const std::string& name, const std::vector<rs::Value>& args, rs::Value& out, std::string& error) override;
-    void print(const std::string& text) override;
+    // =======================================================================
+    //  Script-facing API (what LuaRuntime calls). Objects are addressed by
+    //  stable id, never by raw pointer, so a script holding a reference to a
+    //  destroyed object gets a clear error instead of a crash.
+    // =======================================================================
+    Scene& scene() { return scene_; }
+    InputManager& input() { return input_; }
+    void logLine(const std::string& text, bool isError);
+
+    // nullptr if the id is unknown or the object was destroyed.
+    Object* findObject(uint64_t id) const;
+    Object* playerObject() { return player_.get(); }
+    glm::vec3& playerVelocity() { return playerVelocity_; }
+    // Is the object part of the running world (scene or player)?
+    bool isInWorld(const Object* o) const;
+
+    // New parts start detached (not in the world) until given a Parent, like
+    // Instance.new in Roblox. Returns nullptr for an unknown class name.
+    Object* createObject(const std::string& className);
+    // Deep copy (detached). Scripts in the copy start when it enters the world.
+    Object* cloneSubtree(Object* o);
+    // newParent == nullptr && toWorld: workspace.  newParent == nullptr && !toWorld: Parent = nil.
+    bool setObjectParent(Object* o, Object* newParent, bool toWorld, std::string& error);
+    // Objects created by scripts are freed; objects from the scene are hidden
+    // and restored on Stop.
+    void destroyObject(Object* o);
+
+    void respawnPlayer();
+    void showMessage(const std::string& text, float seconds);
+    void finish(bool won, const std::string& text);
 
     // World-space axis-aligned bounds (also used by the editor to drop new parts onto surfaces).
     struct Box { glm::vec3 lo, hi; };
@@ -75,21 +109,25 @@ private:
     Scene& scene_;
     Camera& camera_;
     InputManager& input_;
+    ScriptStore* scripts_ = nullptr;
 
     bool running_ = false;
     bool paused_ = false;
     float time_ = 0.0f;
 
-    // Everything play mode may change, captured on Play and restored on Stop.
+    // Everything play mode may change, captured on Play and restored on Stop
+    // (including the hierarchy, which scripts can rearrange).
     struct Snapshot {
         glm::vec3 position, rotation, scale, color;
         Object::GameProps game;
+        Object* parent = nullptr;
+        std::vector<Object*> children;
     };
     std::unordered_map<Object*, Snapshot> snapshot_;
     Camera::Orbit savedOrbit_{};
 
-    std::unordered_map<Object*, std::unique_ptr<rs::Script>> scripts_;
-    std::set<std::pair<const Object*, const Object*>> touching_; // contacts last frame (for "on touch" edges)
+    std::unique_ptr<LuaRuntime> lua_;
+    std::set<std::pair<const Object*, const Object*>> touching_; // contacts last frame (Touched fires on the rising edge)
 
     // Player character: owned here (not in the Explorer, never saved); Engine draws it.
     std::unique_ptr<Object> player_;
@@ -98,14 +136,16 @@ private:
     bool playerGrounded_ = false;
 
     std::vector<LogLine> log_;
+    std::vector<Object*> objects_; // scene snapshot, refreshed once per update
     std::string message_;
     float messageTimer_ = 0.0f;
     Outcome outcome_ = Outcome::None;
 
-    // Script execution context (valid only inside a script call)
-    Object* self_ = nullptr;
-    const Object* other_ = nullptr;
-
+    // Object registry for the scripting API.
+    std::unordered_map<uint64_t, Object*> byId_;                        // everything addressable (scene + player + created)
+    std::unordered_set<Object*> created_;                               // made by scripts during this session
+    std::unordered_map<uint64_t, std::unique_ptr<Object>> detached_;    // created, not in the world yet
+    std::vector<Object*> dead_;                                         // created + destroyed, freed at end of frame
 
     void spawnPlayer();
     void updatePlayer(float dt, bool allowInput);
@@ -114,7 +154,6 @@ private:
     // Returns true if it ended up standing on something.
     bool resolveCollisions(Box& box, glm::vec3& velocity, const Object* self, float bounciness);
     void detectTouches();
-    void fire(Object* object, const std::string& event, const Object* other = nullptr);
-    void logLine(const std::string& text, bool isError);
-    Object* resolveObject(const std::string& name) const;
+    void flushDead();
+    std::vector<Object*> collectSubtree(Object* root) const;
 };

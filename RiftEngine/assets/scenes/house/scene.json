@@ -1,0 +1,12 @@
+{
+  "format": 3,
+  "objects": [
+    {"id":"50623ca9e5be6419","name":"Cube","class":"Part","mesh":"cube","position":[-0.13228,0.0,0.0],"scale":[8.016,0.05458,8.016],"texture":"assets/textures/texture_08.png","textureOwned":true},
+    {"id":"e2738498771cd6ee","name":"Cube (Copy)","class":"Part","mesh":"cube","position":[-2.75917,2.0506,3.88503],"rotation":[90.0,0.0,0.0],"scale":[2.65868,0.05458,4.17833],"texture":"assets/textures/texture_08.png","textureOwned":true},
+    {"id":"6e000dc527e828ee","name":"Cube (Copy) (Copy)","class":"Part","mesh":"cube","position":[0.0,2.0506,-3.99916],"rotation":[90.0,0.0,0.0],"scale":[8.01509,0.05458,4.17833],"texture":"assets/textures/texture_08.png","textureOwned":true},
+    {"id":"2c33b7a1c53b2592","name":"Cube (Copy) (Copy) (Copy)","class":"Part","mesh":"cube","position":[3.81052,2.0506,-0.04883],"rotation":[90.0,0.0,90.0],"scale":[8.01422,0.05458,4.17833],"texture":"assets/textures/texture_08.png","textureOwned":true},
+    {"id":"7034f13971c9dfda","name":"Cube (Copy) (Copy) (Copy) (Copy)","class":"Part","mesh":"cube","position":[-4.03803,2.0506,-0.04883],"rotation":[90.0,0.0,90.0],"scale":[8.01422,0.05458,4.17832],"texture":"assets/textures/texture_08.png","textureOwned":true},
+    {"id":"3ca629efb82e7568","name":"Cube (Copy) (Copy)_1","class":"Part","mesh":"cube","position":[2.46834,2.0506,3.88503],"rotation":[90.0,0.0,0.0],"scale":[2.6586,0.05458,4.17833],"texture":"assets/textures/texture_08.png","textureOwned":true},
+    {"id":"237dded6b1ea6243","name":"Cube (Copy) (Copy) (Copy)_1","class":"Part","mesh":"cube","position":[-0.10725,3.62637,3.88503],"rotation":[90.0,0.0,0.0],"scale":[2.65845,0.05458,1.02291],"texture":"assets/textures/texture_08.png","textureOwned":true}
+  ]
+}

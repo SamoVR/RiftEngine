@@ -1,0 +1,9 @@
+{
+  "format": 3,
+  "objects": [
+    {"id":"5e1884e50bc87cb7","name":"test","class":"Part","mesh":"cube","position":[0.0,0.9,0.0],"texture":"assets/images/icon.png","textureOwned":true},
+    {"id":"a640b6b47e19ab84","name":"Sphere","class":"Part","mesh":"sphere","position":[-1.9,0.0,0.0],"texture":"assets/textures/texture_08.png","textureOwned":true},
+    {"id":"ab9d477e28221b5e","name":"shw","class":"Part","mesh":"sphere","position":[0.0,0.0,0.0],"texture":"assets/images/Mona_Lisa.png","textureOwned":true},
+    {"id":"43e0979a1f0a99f7","name":"Sphere_1","class":"Part","mesh":"sphere","position":[1.8,0.0,0.0]}
+  ]
+}

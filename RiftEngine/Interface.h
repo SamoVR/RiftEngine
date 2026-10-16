@@ -15,6 +15,7 @@
 #include "TransformUtil.h"
 #include "Logger.h"
 #include "GameRuntime.h"
+#include "ScriptStore.h"
 
 #include "imgui.h"
 #include "imgui_internal.h"
@@ -69,13 +70,14 @@ public:
     void setGizmoOperation(ImGuizmo::OPERATION operation);
     void toggleGizmoSpace();
     void focusSelection();
-    bool openScene(const std::string& path) { return doLoad(path); } // command line: RiftEngine.exe scene.json
+    bool openScene(const std::string& path) { return doLoad(path); } // command line: RenderEngine.exe scene.json
 
     // ---- play mode (GameRuntime is owned by Engine)
     void setRuntime(GameRuntime* r) { runtime = r; }
     void togglePlay();
     bool isPlaying() const { return runtime && runtime->isRunning(); }
     const std::string& scenePath() const { return currentScenePath; }
+    ScriptStore& scripts() { return scriptStore; }   // the open scene's .lua files (editor + runtime share it)
 
     // ---- queries / hooks for Engine
     bool isGizmoActive() const;        // pointer is over / dragging the gizmo
@@ -153,7 +155,7 @@ private:
     void runPending(PendingAction action);
 
     // ---- helpers
-    std::string makeUniqueName(const std::string& base) const;
+    std::string makeUniqueName(const std::string& base, const Object* ignore = nullptr) const;
     void addPrimitive(const std::string& baseName, const std::vector<Vertex>& vertices);
     void deleteObjects(const std::vector<Object*>& objects);
     void reparent(Object* object, Object* newParent);
@@ -207,12 +209,24 @@ private:
     GameRuntime* runtime = nullptr;
     Object* scriptTarget = nullptr;                      // object open in the Script Editor
     std::string scriptCheckResult;
+    ScriptStore scriptStore;
+    float scriptPollTimer = 0.0f;
+    std::string pendingOverwritePath;                    // Save As target that already exists, awaiting confirmation
+    PendingAction overwriteThenAction = PendingAction::None;
+    bool openOverwritePopup = false;
     bool showScriptEditor = false;
     bool showOutput = true;
     size_t lastLogSize = 0;
     void insertTemplate(const std::string& kind);
     void gamePropertiesUI(Object* object);
+    void scriptPropertiesUI(Object* script);
     void scriptEditorUI();
+    void openScriptEditor(Object* script);
+    // A Script object (not yet in the scene) with a new .lua file in the store.
+    std::unique_ptr<Object> makeScriptObject(Object* parent, const std::string& name, const std::string& source);
+    void addScriptTo(Object* part);
+    int loadScriptsForScene();                           // returns how many script files were missing
+    void overwritePopup();
     void outputUI();
     void playOverlay();
     bool resetLayoutRequested = false;

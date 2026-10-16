@@ -47,6 +47,10 @@ public:
     // ownership to the caller (used by undo/redo commands). The object is
     // detached from the hierarchy first, like removeObject().
     std::unique_ptr<Object> extractObject(Object* object, size_t* outIndex = nullptr);
+    // Moves `root` and all its descendants out of the scene, keeping the links
+    // between them (only `root`'s link to its parent is cut). Used by the
+    // runtime to take script-created parts out of the world.
+    std::vector<std::unique_ptr<Object>> extractSubtree(Object* root);
     // Inserts at `index` (clamped), restoring list order on undo.
     void insertObjectAt(size_t index, std::unique_ptr<Object> object);
 
@@ -57,7 +61,10 @@ public:
     std::vector<Object*> getInternalObjects() const;
     size_t objectCount() const { return objects_.size(); }
     Object* findByName(const std::string& name) const;
+    Object* findById(uint64_t id) const;
 
+    // Scene files are format 3 JSON (see Object::toJSON). Scripts are NOT in
+    // the file: Script objects point at .lua files next to it (ScriptStore).
     // Both return false on failure (and log the reason).
     bool saveToFile(const std::string& filename) const;
     // `sharedTexture`: objects saved as using a shared texture with the same

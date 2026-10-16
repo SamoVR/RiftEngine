@@ -35,6 +35,25 @@ int main() {
         h.undo(); CHECK(!scene.contains(A) && scene.objectCount() == 0, "add undone: removed, but alive inside the command");
         h.redo(); CHECK(scene.contains(A), "add redone: back in the scene (same pointer)");
 
+        // ---- add a part together with a Script attached to it (Insert > Coin), undo, redo
+        {
+            Scene sc; CommandHistory ch;
+            auto part = std::make_unique<Object>("Coin", cube); Object* partRaw = part.get();
+            auto script = std::make_unique<Object>("CoinScript", std::vector<Vertex>());
+            script->kind = Object::Kind::Script; script->scriptPath = "scripts/CoinScript.lua";
+            Object* scriptRaw = script.get();
+            script->setParent(partRaw); // attached before either is in the scene, as Interface::insertTemplate does
+            std::vector<std::unique_ptr<Command>> cmds;
+            cmds.push_back(std::make_unique<AddObjectCommand>(sc, std::move(part), "Add part"));
+            cmds.push_back(std::make_unique<AddObjectCommand>(sc, std::move(script), "Add script"));
+            ch.execute(std::make_unique<CompositeCommand>("Insert Coin", std::move(cmds)));
+            CHECK(sc.objectCount() == 2 && scriptRaw->parent == partRaw, "insert part + script: one step, script attached");
+            ch.undo();
+            CHECK(sc.objectCount() == 0, "insert part + script undone together");
+            ch.redo();
+            CHECK(sc.objectCount() == 2 && scriptRaw->parent == partRaw && partRaw->children.size() == 1, "redo re-attaches the script to its part");
+        }
+
         // ---- modify / undo / redo
         ObjectState before = ObjectState::capture(*A);
         A->position = {5, 6, 7}; A->setName("Renamed");

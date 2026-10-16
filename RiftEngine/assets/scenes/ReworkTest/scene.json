@@ -1,0 +1,7 @@
+{
+  "format": 3,
+  "objects": [
+    {"id":"7b84396046010d8f","name":"Cube","class":"Part","mesh":"cube","position":[0.0,0.0,0.0],"texture":"assets/images/Mona_Lisa.png","textureOwned":true},
+    {"id":"2969d63a69c76340","name":"Cube (Copy)","class":"Part","mesh":"cube","position":[-0.00669,0.30465,-1.80597],"texture":"assets/images/icon.png","textureOwned":true}
+  ]
+}

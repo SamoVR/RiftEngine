@@ -1,0 +1,16 @@
+{
+  "format": 3,
+  "objects": [
+    {"id":"ddb1ca95ea6db3a2","name":"Head","class":"Part","color":[0.0,0.0,0.0],"mesh":"sphere","position":[0.0,0.0,0.0]},
+    {"id":"57877b288c78b8b4","name":"R_Ear","class":"Part","color":[0.0,0.0,0.0],"mesh":"sphere","position":[0.60032,0.6,0.0],"scale":[0.83,0.84,0.5],"parent":"ddb1ca95ea6db3a2"},
+    {"id":"9c7e0e2d2d8b3580","name":"L_Ear","class":"Part","color":[0.0,0.0,0.0],"mesh":"sphere","position":[-0.59968,0.6,0.0],"scale":[0.82,0.81,0.52],"parent":"ddb1ca95ea6db3a2"},
+    {"id":"d09348e185273d23","name":"Face","class":"Part","color":[0.42157,0.37404,0.37404],"mesh":"sphere","position":[0.00032,0.0,0.1],"scale":[0.89,0.88,0.93],"parent":"ddb1ca95ea6db3a2"},
+    {"id":"d138b5afdf94e5cf","name":"L_Eye","class":"Part","mesh":"sphere","position":[-0.2,0.1,0.5],"scale":[0.19,0.18,0.24],"parent":"d09348e185273d23"},
+    {"id":"483c2b07268a3342","name":"R_Eye","class":"Part","mesh":"sphere","position":[0.2,0.1,0.5],"scale":[0.2,0.2,0.2],"parent":"d09348e185273d23"},
+    {"id":"7c0b401c5dde7c2e","name":"L_Pupil","class":"Part","color":[0.0,0.0,0.0],"mesh":"sphere","position":[-0.2,0.1,0.6],"scale":[0.1,0.1,0.1],"parent":"d138b5afdf94e5cf"},
+    {"id":"c1d5527349628b45","name":"R_Pupil","class":"Part","color":[0.0,0.0,0.0],"mesh":"sphere","position":[0.2,0.1,0.6],"scale":[0.1,0.1,0.1],"parent":"483c2b07268a3342"},
+    {"id":"ee9861ea8f6cd94d","name":"Nose","class":"Part","color":[0.0,0.0,0.0],"mesh":"sphere","position":[0.0,0.0,0.6],"scale":[0.17,0.12,0.1],"parent":"d09348e185273d23"},
+    {"id":"2ef72c309f434e53","name":"Tongue","class":"Part","color":[1.0,0.0,0.0],"mesh":"sphere","position":[0.0,-0.2,0.5],"scale":[0.36,0.1,0.85],"parent":"d09348e185273d23"},
+    {"id":"e32a26526fe943b7","name":"Tongue2","class":"Part","color":[0.47549,0.0,0.0],"mesh":"sphere","position":[0.0,-0.17,0.6],"scale":[0.1,0.05,0.47],"parent":"2ef72c309f434e53"}
+  ]
+}

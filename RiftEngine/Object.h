@@ -3,6 +3,7 @@
 #include <vector>
 #include <string>
 #include <memory>
+#include <cstdint>
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
@@ -39,6 +40,24 @@ public:
     Object& operator=(Object&& other) noexcept;
 
     std::string name = "Obj";
+
+    // Stable identity. Survives renames and is what scene files (parent links)
+    // and Lua Instances refer to; names are only labels and may repeat.
+    // A copy gets a fresh id. 0 is never used (reserved for the workspace root).
+    uint64_t id = newId();
+    static uint64_t newId();
+    static std::string idToString(uint64_t id);          // 16 hex digits
+    static uint64_t idFromString(const std::string& s);  // 0 if malformed
+
+    // Part: a mesh in the world. Script: no mesh and no transform; it runs a
+    // Lua file (scriptPath, relative to the scene folder). A Script parented to
+    // a part is attached to it (script.Parent); parented to nothing it is
+    // scene-level.
+    enum class Kind { Part, Script };
+    Kind kind = Kind::Part;
+    std::string scriptPath;
+    bool scriptEnabled = true;
+
     std::vector<Vertex> vertices;
     glm::vec3 position = { 0.0f, 0.0f, 0.0f };
     glm::vec3 rotation = { 0.0f, 0.0f, 0.0f };
@@ -63,8 +82,8 @@ public:
         bool canCollide = true;    // false: other parts pass through it (touch events still fire)
         bool visible = true;
         float bounciness = 0.0f;   // 0 = no bounce, 1 = perfectly elastic
-        std::string script;        // RiftScript source, empty = no script
         glm::vec3 velocity{ 0.0f };
+        bool destroyed = false;    // runtime only: Destroy() was called on a scene object (undone on Stop)
     } game;
 
     // Draws with the GLOBAL transform (own transform composed with every

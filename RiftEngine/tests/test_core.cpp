@@ -90,37 +90,74 @@ int main() {
         CHECK(liveVAO.empty() && liveVBO.empty() && badDeletes == 0, "clear() frees everything, no double delete");
     }
 
-    // ---- 5. save / load round trip, duplicate names, normals ----
+    // ---- 5. scene format 3: stable ids, parents by id, Script objects ----
     {
         Scene s;
-        s.addObject(std::make_unique<Object>("Cube", cube));
-        s.addObject(std::make_unique<Object>("Cube", cube));   // duplicate name
-        s.addObject(std::make_unique<Object>("Kid", cube));
-        s.findByName("Kid")->setParent(s.findByName("Cube"));
-        s.findByName("Kid")->position = {1, 2, 3};
+        auto first = std::make_unique<Object>("Cube", cube);
+        auto second = std::make_unique<Object>("Cube", cube);       // names may repeat
+        second->position = { 5, 0, 0 };
+        Object* firstRaw = first.get();
+        Object* secondRaw = second.get();
+        s.addObject(std::move(first));
+        s.addObject(std::move(second));
+        auto kidOwner = std::make_unique<Object>("Kid", cube);
+        Object* kidRaw = kidOwner.get();
+        s.addObject(std::move(kidOwner));
+        kidRaw->setParent(secondRaw);   // the SECOND "Cube": a name-based file could not tell them apart
+        kidRaw->position = { 1, 2, 3 };
+        auto scriptOwner = std::make_unique<Object>("Brain", std::vector<Vertex>());
+        scriptOwner->kind = Object::Kind::Script;
+        scriptOwner->scriptPath = "scripts/Brain.lua";
+        scriptOwner->scriptEnabled = false;
+        Object* scriptRaw = scriptOwner.get();
+        s.addObject(std::move(scriptOwner));
+        scriptRaw->setParent(kidRaw);   // a script attached to a part
+        const uint64_t kidId = kidRaw->id, firstId = firstRaw->id, secondId = secondRaw->id;
+        CHECK(kidId != 0 && kidId != firstId && firstId != secondId, "every object gets its own non-zero id");
         CHECK(s.saveToFile("/tmp/rt_scene.json"), "saveToFile reports success");
 
         Scene t;
         CHECK(t.loadFromFile("/tmp/rt_scene.json"), "loadFromFile reports success");
-        CHECK(t.objectCount() == 3, "all three objects load back");
-        CHECK(t.findByName("Cube") && t.findByName("Cube_1"), "duplicate name is disambiguated, neither object is lost");
-        Object* kid = t.findByName("Kid");
-        CHECK(kid && kid->parent && kid->parent->name == "Cube", "parent link restored");
+        CHECK(t.objectCount() == 4, "all four objects load back");
+        CHECK(t.findById(kidId) && t.findById(firstId) && t.findById(secondId), "ids survive the round trip");
+        Object* kid = t.findById(kidId);
+        CHECK(kid->parent == t.findById(secondId) && kid->parent != t.findById(firstId), "parent link follows the id, not the (duplicate) name");
+        CHECK(t.findById(firstId)->name == "Cube" && t.findById(secondId)->name == "Cube", "duplicate names are kept as they are");
         CHECK(kid->position == glm::vec3(1, 2, 3), "transform restored");
         CHECK(glm::length(kid->vertices[0].normal) > 0.99f, "vertex normals survive the round trip");
+        Object* brain = t.findByName("Brain");
+        CHECK(brain && brain->kind == Object::Kind::Script && brain->scriptPath == "scripts/Brain.lua" && !brain->scriptEnabled, "Script object: kind, source path and enabled flag survive");
+        CHECK(brain->parent == kid && brain->vertices.empty(), "a script stays attached to its part and has no mesh");
 
-        // malformed file must not wipe the existing scene
+        // malformed or wrong-format files must not wipe the existing scene
         { std::ofstream bad("/tmp/rt_bad.json"); bad << "{ this is not json"; }
-        CHECK(!t.loadFromFile("/tmp/rt_bad.json") && t.objectCount() == 3, "unparseable file is rejected and leaves the scene intact");
-        { std::ofstream bad("/tmp/rt_bad2.json"); bad << R"({"objects":[{"name":"X","position":"oops"}]})"; }
-        CHECK(!t.loadFromFile("/tmp/rt_bad2.json") && t.objectCount() == 3, "structurally wrong file is rejected and leaves the scene intact");
+        CHECK(!t.loadFromFile("/tmp/rt_bad.json") && t.objectCount() == 4, "unparseable file is rejected and leaves the scene intact");
+        { std::ofstream bad("/tmp/rt_bad2.json"); bad << R"({"format":3,"objects":[{"name":"X","position":"oops"}]})"; }
+        CHECK(!t.loadFromFile("/tmp/rt_bad2.json") && t.objectCount() == 4, "structurally wrong file is rejected and leaves the scene intact");
+        { std::ofstream old("/tmp/rt_v2.json"); old << R"({"version":2,"objects":[{"name":"Old","position":[0,0,0]}]})"; }
+        CHECK(!t.loadFromFile("/tmp/rt_v2.json") && t.objectCount() == 4, "an old (pre-format-3) file is rejected with a clear error");
 
-        // old save files (no normals, no textureOwned) must still load
-        { std::ofstream old("/tmp/rt_old.json");
-          old << R"({"objects":[{"name":"Old","position":[0,0,0],"rotation":[0,0,0],"scale":[1,1,1],"color":[1,1,1],
-              "vertices":[{"position":[0,0,0],"texCoord":[0,0]},{"position":[1,0,0],"texCoord":[1,0]},{"position":[0,1,0],"texCoord":[0,1]}]}]})"; }
-        CHECK(t.loadFromFile("/tmp/rt_old.json") && t.findByName("Old") != nullptr, "legacy save file without normals still loads");
-        CHECK(t.findByName("Old")->vertices[0].normal == glm::vec3(0.0f), "legacy vertices get a zero (unlit) normal");
+        // hand-edited files: a missing parent and a repeated id are survivable
+        { std::ofstream f("/tmp/rt_edit.json");
+          f << R"({"format":3,"objects":[
+              {"id":"00000000000000aa","name":"A","class":"Part","mesh":"cube"},
+              {"id":"00000000000000aa","name":"B","class":"Part","mesh":"cube"},
+              {"id":"00000000000000bb","name":"Orphan","class":"Part","mesh":"cube","parent":"00000000000000ff"}]})"; }
+        Scene u;
+        CHECK(u.loadFromFile("/tmp/rt_edit.json") && u.objectCount() == 3, "file with a repeated id still loads");
+        CHECK(u.findByName("A")->id != u.findByName("B")->id, "the repeated id was replaced so ids stay unique");
+        CHECK(u.findByName("Orphan")->parent == nullptr, "a parent id that does not exist leaves the object unparented");
+        CHECK(u.findByName("A")->vertices.size() == 36, "\"mesh\": \"cube\" loads the built-in cube");
+    }
+    {
+        Object a("A", cube);
+        Object copy(a);
+        CHECK(copy.id != a.id && copy.id != 0, "a copy gets a fresh id");
+        const uint64_t id = a.id;
+        Object moved(std::move(a));
+        CHECK(moved.id == id, "a move keeps the id");
+        CHECK(Object::idFromString(Object::idToString(id)) == id, "id <-> string round trip");
+        CHECK(Object::idFromString("nonsense") == 0 && Object::idFromString("") == 0 && Object::idFromString("11111111111111111") == 0, "malformed id strings parse to 0");
     }
     CHECK(liveVAO.empty() && liveVBO.empty() && badDeletes == 0, "after everything: no leaked or double-freed GPU buffers");
 

@@ -1,4 +1,6 @@
 #include "GameRuntime.h"
+#include "LuaRuntime.h"
+#include "ScriptStore.h"
 #include "Geometry.h"
 #include "Logger.h"
 
@@ -6,46 +8,19 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <functional>
 
 namespace {
     constexpr const char* kPlayerName = "Player";
     const glm::vec3 kPlayerSize(0.8f, 1.8f, 0.8f);
+    constexpr float kMaxPhysicsStep = 1.0f / 120.0f; // longest single physics step
+    constexpr float kMaxStepDistance = 0.25f;        // longest distance any body moves in one step
+    constexpr int   kMaxPhysicsSteps = 64;           // safety cap per frame
 
     std::string lower(std::string s) {
         for (char& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
         return s;
     }
-
-    // key("W"), key("space"), key("left") ... -> GLFW key code, or -1.
-    int keyCodeFor(const std::string& nameIn) {
-        const std::string name = lower(nameIn);
-        if (name.size() == 1) {
-            const char c = name[0];
-            if (c >= 'a' && c <= 'z') return GLFW_KEY_A + (c - 'a');
-            if (c >= '0' && c <= '9') return GLFW_KEY_0 + (c - '0');
-        }
-        if (name == "space") return GLFW_KEY_SPACE;
-        if (name == "shift") return GLFW_KEY_LEFT_SHIFT;
-        if (name == "ctrl") return GLFW_KEY_LEFT_CONTROL;
-        if (name == "enter") return GLFW_KEY_ENTER;
-        if (name == "up") return GLFW_KEY_UP;
-        if (name == "down") return GLFW_KEY_DOWN;
-        if (name == "left") return GLFW_KEY_LEFT;
-        if (name == "right") return GLFW_KEY_RIGHT;
-        if (name == "tab") return GLFW_KEY_TAB;
-        return -1;
-    }
-
-    bool needArgs(const std::string& name, const std::vector<rs::Value>& args, size_t n, std::string& error) {
-        if (args.size() >= n) return true;
-        error = name + " needs " + std::to_string(n) + " value(s)";
-        return false;
-    }
-
-    float arg(const std::vector<rs::Value>& args, size_t i) {
-        return i < args.size() && !args[i].isString ? static_cast<float>(args[i].number) : 0.0f;
-    }
-    glm::vec3 vec(const std::vector<rs::Value>& args) { return { arg(args, 0), arg(args, 1), arg(args, 2) }; }
 }
 
 GameRuntime::GameRuntime(Scene& scene, Camera& camera, InputManager& input)
@@ -72,48 +47,52 @@ void GameRuntime::start() {
     savedOrbit_ = camera_.getOrbit();
 
     snapshot_.clear();
+    byId_.clear();
+    created_.clear();
+    detached_.clear();
+    dead_.clear();
     for (Object* o : scene_.getObjects()) {
-        snapshot_[o] = { o->position, o->rotation, o->scale, o->color, o->game };
+        snapshot_[o] = { o->position, o->rotation, o->scale, o->color, o->game, o->parent, o->children };
         o->game.velocity = glm::vec3(0.0f);
+        byId_[o->id] = o;
     }
+    objects_ = scene_.getObjects();
 
     spawnPlayer();
+    byId_[player_->id] = player_.get();
     // Third-person view behind/above the player, keeping the editor's heading.
     camera_.setOrbit({ 14.0f, savedOrbit_.yaw, 22.0f, player_->position });
     logLine("Game started. WASD / arrows = move, Space = jump, right-drag = look around, F5 = stop.", false);
 
-    // Compile everything first so a broken script is reported before anything runs.
-    scripts_.clear();
-    for (Object* o : scene_.getObjects()) {
-        if (o->game.script.find_first_not_of(" \t\r\n") == std::string::npos) continue;
-        auto script = std::make_unique<rs::Script>();
-        if (!script->compile(o->game.script)) {
-            logLine("[" + o->name + "] syntax error, " + script->error(), true);
-            continue;
-        }
-        scripts_[o] = std::move(script);
+    lua_ = std::make_unique<LuaRuntime>(*this);
+    if (scripts_) {
+        lua_->start(*scripts_);
+    } else {
+        logLine("No script store attached, scripts will not run.", true);
     }
-    for (auto& [object, script] : scripts_) {
-        self_ = object;
-        script->setVariable("dt", rs::Value(0.0));
-        script->setVariable("time", rs::Value(0.0));
-        script->setVariable("other", rs::Value(std::string()));
-        if (!script->runInit(*this)) logLine("[" + object->name + "] " + script->error(), true);
-        self_ = nullptr;
-    }
-    for (auto& entry : scripts_) fire(entry.first, "start");
-    LOG_INFO("Game", "Play mode started (" + std::to_string(scripts_.size()) + " script(s))");
+    LOG_INFO("Game", "Play mode started");
 }
 
 void GameRuntime::stop() {
     if (!running_) return;
     running_ = false;
-    scripts_.clear();
+    lua_.reset(); // closes the Lua state first: nothing can run after this
+
+    // Everything the scripts created goes away; scene objects they only hid
+    // ("destroyed") or rearranged are put back below.
+    for (Object* o : created_) {
+        if (scene_.contains(o)) scene_.removeObject(o);
+    }
+    created_.clear();
+    detached_.clear();
+    dead_.clear();
+    objects_.clear();
     touching_.clear();
+    byId_.clear();
     player_.reset();
 
-    // Objects can't be added or removed while playing (the editor is locked),
-    // but check anyway so a stale pointer is never written through.
+    // Objects can't be added or removed by the editor while playing, but check
+    // anyway so a stale pointer is never written through.
     for (auto& [object, s] : snapshot_) {
         if (!scene_.contains(object)) continue;
         object->position = s.position;
@@ -122,6 +101,8 @@ void GameRuntime::stop() {
         object->color = s.color;
         object->game = s.game;
         object->game.velocity = glm::vec3(0.0f);
+        object->parent = s.parent;     // scripts may have re-parented it
+        object->children = s.children; // ... and changed its children (script-created ones are gone by now)
     }
     snapshot_.clear();
     camera_.setOrbit(savedOrbit_); // back to the exact editor view
@@ -134,6 +115,7 @@ void GameRuntime::spawnPlayer() {
     // A part named "SpawnPoint" (or "Spawn") decides where the player appears.
     spawnPoint_ = glm::vec3(0.0f, 3.0f, 0.0f);
     for (Object* o : scene_.getObjects()) {
+        if (o->kind != Object::Kind::Part) continue;
         const std::string n = lower(o->name);
         if (n == "spawnpoint" || n == "spawn" || n == "spawnlocation") {
             const Box b = worldBox(*o);
@@ -165,15 +147,30 @@ void GameRuntime::update(float dt, bool allowPlayerInput) {
     }
     time_ += dt;
 
-    for (auto& [object, script] : scripts_) {
-        script->setVariable("dt", rs::Value(static_cast<double>(dt)));
-        script->setVariable("time", rs::Value(static_cast<double>(time_)));
-    }
-    for (auto& entry : scripts_) fire(entry.first, "update");
+    // Scripts first (Heartbeat, task.wait wake-ups, input events), then physics.
+    if (lua_) lua_->update(dt, allowPlayerInput);
+    objects_ = scene_.getObjects(); // scripts may have created parts
 
-    stepPhysics(dt);
-    updatePlayer(dt, allowPlayerInput);
+    // Adaptive substeps. A step is limited both in time (kMaxPhysicsStep) and
+    // in distance (kMaxStepDistance), so the fastest body never moves further
+    // in one step than it takes to cross a thin platform; a time cap alone
+    // still tunnelled at ~85 u/s. (Not a true fixed timestep: the step is
+    // dt/n, so results depend slightly on frame rate. A proper fix is
+    // continuous collision, planned with the physics rework.)
+    float fastest = glm::length(playerVelocity_);
+    for (Object* o : objects_) {
+        if (o->kind == Object::Kind::Part && !o->game.anchored && !o->parent) fastest = std::max(fastest, glm::length(o->game.velocity));
+    }
+    fastest += std::fabs(gravity) * dt; // speed reached by the end of this frame
+    const float needed = std::max(dt / kMaxPhysicsStep, fastest * dt / kMaxStepDistance);
+    const int steps = std::clamp(static_cast<int>(std::ceil(needed)), 1, kMaxPhysicsSteps);
+    const float h = dt / static_cast<float>(steps);
+    for (int i = 0; i < steps; ++i) {
+        stepPhysics(h);
+        updatePlayer(h, allowPlayerInput);
+    }
     detectTouches();
+    flushDead();
 
     if (player_) camera_.focusOn(player_->position + glm::vec3(0.0f, 0.6f, 0.0f));
 }
@@ -225,8 +222,8 @@ void GameRuntime::updatePlayer(float dt, bool allowInput) {
 // of solid parts along the axis of least penetration. Children of a moving
 // part simply move with it (that's how the hierarchy already works).
 void GameRuntime::stepPhysics(float dt) {
-    for (Object* o : scene_.getObjects()) {
-        if (o->game.anchored || o->parent) continue;
+    for (Object* o : objects_) {
+        if (o->kind != Object::Kind::Part || o->game.anchored || o->game.destroyed || o->parent) continue;
 
         glm::vec3& v = o->game.velocity;
         v.y += gravity * dt;
@@ -255,8 +252,8 @@ void GameRuntime::stepPhysics(float dt) {
 // blocked an 8 x 8 square), so walls/ramps/spinners felt invisible.
 bool GameRuntime::resolveCollisions(Box& box, glm::vec3& velocity, const Object* self, float bounciness) {
     bool grounded = false;
-    for (Object* other : scene_.getObjects()) {
-        if (other == self || !other->game.canCollide || !other->game.visible) continue;
+    for (Object* other : objects_) {
+        if (other == self || other->kind != Object::Kind::Part || other->game.destroyed || !other->game.canCollide || !other->game.visible) continue;
         if (self && (other->isChildOf(const_cast<Object*>(self)) || self->isChildOf(other))) continue;
         const Obb ob = worldObb(*other);
         glm::vec3 push;
@@ -286,48 +283,196 @@ bool GameRuntime::resolveCollisions(Box& box, glm::vec3& velocity, const Object*
 }
 
 void GameRuntime::detectTouches() {
+    if (!lua_) return;
     std::set<std::pair<const Object*, const Object*>> now;
-    const std::vector<Object*> objects = scene_.getObjects();
 
-    auto contact = [&](Object* a, const Object* b) {
+    auto contact = [&](Object* a, Object* b) {
         const std::pair<const Object*, const Object*> key(a, b);
         now.insert(key);
-        if (!touching_.count(key)) fire(a, "touch", b); // fires once when the contact begins
+        if (!touching_.count(key)) lua_->fireTouched(a, b); // fires once when the contact begins
     };
 
     std::vector<std::pair<Object*, Box>> boxes;
-    for (Object* o : objects) {
-        if (o->game.visible) boxes.emplace_back(o, worldBox(*o));
+    for (Object* o : objects_) {
+        if (o->kind == Object::Kind::Part && o->game.visible && !o->game.destroyed) boxes.emplace_back(o, worldBox(*o));
     }
     glm::vec3 scratch;
     const Box playerBox = player_ ? Box{ player_->position - kPlayerSize * 0.5f, player_->position + kPlayerSize * 0.5f } : Box{};
 
     for (size_t i = 0; i < boxes.size(); ++i) {
         Object* a = boxes[i].first;
-        const bool aListens = scripts_.count(a) && scripts_[a]->hasHandler("touch");
-        if (player_ && aListens && separate(playerBox, worldObb(*a), scratch, 0.05f)) contact(a, player_.get());
-        if (!aListens) continue;
+        // Only parts somebody listens to are tested (a handler may destroy parts mid-loop).
+        if (a->game.destroyed || !lua_->hasTouchedListeners(a)) continue;
+        if (player_ && separate(playerBox, worldObb(*a), scratch, 0.05f)) contact(a, player_.get());
         for (size_t j = 0; j < boxes.size(); ++j) {
             if (i == j) continue;
             Object* b = boxes[j].first;
-            if (a->isChildOf(b) || b->isChildOf(a)) continue;
+            if (b->game.destroyed || a->isChildOf(b) || b->isChildOf(a)) continue;
             if (separate(boxes[i].second, worldObb(*b), scratch, 0.02f)) contact(a, b);
         }
     }
     touching_ = std::move(now);
 }
 
-void GameRuntime::fire(Object* object, const std::string& event, const Object* other) {
-    auto it = scripts_.find(object);
-    if (it == scripts_.end() || it->second->failed() || !it->second->hasHandler(event)) return;
-    self_ = object;
-    other_ = other;
-    it->second->setVariable("other", rs::Value(other ? other->name : std::string()));
-    if (!it->second->fire(event, *this)) {
-        logLine("[" + object->name + "] error, " + it->second->error() + " (script stopped)", true);
+// ============================================================================
+//  Object registry + script-facing API
+// ============================================================================
+
+Object* GameRuntime::findObject(uint64_t id) const {
+    auto it = byId_.find(id);
+    if (it == byId_.end() || it->second->game.destroyed) return nullptr;
+    return it->second;
+}
+
+bool GameRuntime::isInWorld(const Object* o) const {
+    if (!o) return false;
+    if (o == player_.get()) return true;
+    return byId_.count(o->id) != 0 && detached_.count(o->id) == 0;
+}
+
+std::vector<Object*> GameRuntime::collectSubtree(Object* root) const {
+    std::vector<Object*> nodes;
+    std::vector<Object*> stack{ root };
+    while (!stack.empty()) {
+        Object* n = stack.back();
+        stack.pop_back();
+        nodes.push_back(n);
+        for (Object* c : n->children) stack.push_back(c);
     }
-    self_ = nullptr;
-    other_ = nullptr;
+    return nodes;
+}
+
+Object* GameRuntime::createObject(const std::string& className) {
+    std::string mesh;
+    if (className == "Part" || className == "Block") mesh = "cube";
+    else if (className == "Sphere") mesh = "sphere";
+    else if (className == "Wedge") mesh = "triangle";
+    else return nullptr;
+
+    auto o = std::make_unique<Object>(className == "Block" ? "Part" : className, primitiveVertices(mesh), static_cast<Texture*>(nullptr));
+    o->color = glm::vec3(0.64f);
+    o->game.anchored = false; // like Roblox: a new part falls until anchored
+    Object* raw = o.get();
+    byId_[raw->id] = raw;
+    created_.insert(raw);
+    detached_[raw->id] = std::move(o);
+    return raw;
+}
+
+Object* GameRuntime::cloneSubtree(Object* o) {
+    if (!o || o == player_.get() || o->game.destroyed) return nullptr;
+    std::function<Object*(Object*, Object*)> copyNode = [&](Object* src, Object* newParent) -> Object* {
+        if (src->game.destroyed) return nullptr;
+        auto copy = std::make_unique<Object>(*src); // fresh GPU buffers and a new id, no parent/children
+        Object* raw = copy.get();
+        byId_[raw->id] = raw;
+        created_.insert(raw);
+        detached_[raw->id] = std::move(copy);
+        if (newParent) raw->setParent(newParent);
+        for (Object* child : std::vector<Object*>(src->children)) copyNode(child, raw);
+        return raw;
+    };
+    return copyNode(o, nullptr);
+}
+
+bool GameRuntime::setObjectParent(Object* o, Object* newParent, bool toWorld, std::string& error) {
+    if (!o) { error = "no object"; return false; }
+    if (o == player_.get()) { error = "the player's Character cannot be re-parented"; return false; }
+    if (newParent == player_.get()) { error = "nothing can be parented to the player's Character"; return false; }
+    if (newParent && (newParent == o || newParent->isChildOf(o))) {
+        error = "an Instance cannot be parented under itself or one of its descendants";
+        return false;
+    }
+
+    const bool oInWorld = isInWorld(o);
+    const bool targetInWorld = toWorld || (newParent && isInWorld(newParent));
+
+    std::vector<Object*> enteredWorld;
+    if (targetInWorld) {
+        if (!oInWorld) {
+            // Detached subtree -> scene.
+            for (Object* n : collectSubtree(o)) {
+                auto it = detached_.find(n->id);
+                if (it == detached_.end()) continue;
+                scene_.addObject(std::move(it->second));
+                detached_.erase(it);
+                enteredWorld.push_back(n);
+            }
+        }
+        o->setParent(newParent); // nullptr = top level (workspace)
+    } else {
+        if (oInWorld) {
+            if (!created_.count(o)) {
+                error = "objects from the scene cannot be removed from the world; use :Destroy()";
+                return false;
+            }
+            // Scene -> detached subtree (links between its nodes are kept).
+            std::vector<std::unique_ptr<Object>> nodes = scene_.extractSubtree(o);
+            for (auto& n : nodes) {
+                const uint64_t id = n->id;
+                detached_[id] = std::move(n);
+            }
+        }
+        o->setParent(newParent); // nullptr (Parent = nil) or another detached object
+    }
+
+    if (lua_) {
+        for (Object* n : enteredWorld) {
+            if (n->kind == Object::Kind::Script) lua_->scriptAddedToWorld(n);
+        }
+    }
+    return true;
+}
+
+void GameRuntime::destroyObject(Object* o) {
+    if (!o || o == player_.get()) return;
+    std::vector<Object*> freeNow; // never-parented script objects: nothing else can see them
+    for (Object* n : collectSubtree(o)) {
+        n->game.destroyed = true;
+        n->game.visible = false;
+        n->game.canCollide = false;
+        n->game.velocity = glm::vec3(0.0f);
+        if (!created_.count(n)) continue; // scene objects are only hidden; Stop restores them
+        if (detached_.count(n->id)) freeNow.push_back(n);
+        else dead_.push_back(n);          // in the scene: freed at the end of the frame
+    }
+    if (!freeNow.empty()) {
+        o->removeParent();
+        for (Object* n : freeNow) {
+            created_.erase(n);
+            byId_.erase(n->id);
+            detached_.erase(n->id); // destroys the object
+        }
+    }
+}
+
+void GameRuntime::flushDead() {
+    if (dead_.empty()) return;
+    for (Object* n : dead_) {
+        created_.erase(n);
+        byId_.erase(n->id);
+        if (scene_.contains(n)) scene_.removeObject(n);
+    }
+    dead_.clear();
+    objects_.clear();
+}
+
+void GameRuntime::respawnPlayer() {
+    if (!player_) return;
+    player_->position = spawnPoint_;
+    playerVelocity_ = glm::vec3(0.0f);
+}
+
+void GameRuntime::showMessage(const std::string& text, float seconds) {
+    message_ = text;
+    messageTimer_ = seconds;
+}
+
+void GameRuntime::finish(bool won, const std::string& text) {
+    outcome_ = won ? Outcome::Won : Outcome::Lost;
+    message_ = text.empty() ? (won ? "You win!" : "Game over") : text;
+    messageTimer_ = 1e9f;
+    logLine(message_, false);
 }
 
 // ============================================================================
@@ -359,123 +504,8 @@ void GameRuntime::logLine(const std::string& text, bool isError) {
     if (isError) LOG_WARN("Script", text);
 }
 
-Object* GameRuntime::resolveObject(const std::string& name) const {
-    if (name == "self") return self_;
-    if (name == "other") return const_cast<Object*>(other_);
-    if (name == "player") return player_.get();
-    return scene_.findByName(name);
-}
-
-std::string GameRuntime::checkSyntax(const std::string& source) {
-    rs::Script script;
-    return script.compile(source) ? std::string() : script.error();
-}
-
-// ============================================================================
-//  rs::Host -- what scripts can do
-// ============================================================================
-
-void GameRuntime::print(const std::string& text) {
-    logLine(self_ ? "[" + self_->name + "] " + text : text, false);
-}
-
-bool GameRuntime::command(const std::string& name, const std::vector<rs::Value>& args, std::string& error) {
-    Object* o = self_;
-    if (!o) { error = "no object"; return false; }
-
-    if (name == "move")     { if (!needArgs(name, args, 3, error)) return false; o->position += vec(args); return true; }
-    if (name == "rotate")   { if (!needArgs(name, args, 3, error)) return false; o->rotation += vec(args); return true; }
-    if (name == "setpos")   { if (!needArgs(name, args, 3, error)) return false; o->position = vec(args); return true; }
-    if (name == "setrot")   { if (!needArgs(name, args, 3, error)) return false; o->rotation = vec(args); return true; }
-    if (name == "setscale") { if (!needArgs(name, args, 3, error)) return false; o->scale = glm::max(vec(args), glm::vec3(0.001f)); return true; }
-    if (name == "color")    { if (!needArgs(name, args, 3, error)) return false; o->color = glm::clamp(vec(args), 0.0f, 1.0f); return true; }
-    if (name == "velocity") { if (!needArgs(name, args, 3, error)) return false; o->game.velocity = vec(args); return true; }
-    if (name == "push")     { if (!needArgs(name, args, 3, error)) return false; o->game.velocity += vec(args); return true; }
-    if (name == "anchored") { o->game.anchored = args.empty() || args[0].truthy(); if (o->game.anchored) o->game.velocity = glm::vec3(0.0f); return true; }
-    if (name == "collide")  { o->game.canCollide = args.empty() || args[0].truthy(); return true; }
-    if (name == "hide")     { o->game.visible = false; return true; }
-    if (name == "show")     { o->game.visible = true; return true; }
-    if (name == "message") {
-        if (!needArgs(name, args, 1, error)) return false;
-        message_ = args[0].toString();
-        messageTimer_ = args.size() > 1 ? arg(args, 1) : 3.0f;
-        return true;
-    }
-    if (name == "teleport") {
-        if (!needArgs(name, args, 3, error)) return false;
-        if (player_) { player_->position = vec(args); playerVelocity_ = glm::vec3(0.0f); }
-        return true;
-    }
-    if (name == "respawn") {
-        if (player_) { player_->position = spawnPoint_; playerVelocity_ = glm::vec3(0.0f); }
-        return true;
-    }
-    if (name == "launch") {
-        if (!needArgs(name, args, 3, error)) return false;
-        playerVelocity_ = vec(args);
-        playerGrounded_ = false;
-        return true;
-    }
-    if (name == "win" || name == "lose") {
-        outcome_ = name == "win" ? Outcome::Won : Outcome::Lost;
-        message_ = args.empty() ? (name == "win" ? "You win!" : "Game over") : args[0].toString();
-        messageTimer_ = 1e9f;
-        logLine(message_, false);
-        return true;
-    }
-    error = "unknown command '" + name + "'";
-    return false;
-}
-
-bool GameRuntime::getField(const std::string& objectName, const std::string& field, rs::Value& out, std::string& error) {
-    const Object* o = resolveObject(objectName);
-    if (!o) {
-        error = objectName == "other" ? "'other' only exists inside 'on touch'" : "no object named '" + objectName + "'";
-        return false;
-    }
-    const glm::vec3 vel = o == player_.get() ? playerVelocity_ : o->game.velocity;
-    if (field == "name") { out = rs::Value(o->name); return true; }
-    if (field == "x") { out = rs::Value(o->position.x); return true; }
-    if (field == "y") { out = rs::Value(o->position.y); return true; }
-    if (field == "z") { out = rs::Value(o->position.z); return true; }
-    if (field == "rx") { out = rs::Value(o->rotation.x); return true; }
-    if (field == "ry") { out = rs::Value(o->rotation.y); return true; }
-    if (field == "rz") { out = rs::Value(o->rotation.z); return true; }
-    if (field == "sx") { out = rs::Value(o->scale.x); return true; }
-    if (field == "sy") { out = rs::Value(o->scale.y); return true; }
-    if (field == "sz") { out = rs::Value(o->scale.z); return true; }
-    if (field == "vx") { out = rs::Value(vel.x); return true; }
-    if (field == "vy") { out = rs::Value(vel.y); return true; }
-    if (field == "vz") { out = rs::Value(vel.z); return true; }
-    if (field == "anchored") { out = rs::Value(o->game.anchored ? 1.0 : 0.0); return true; }
-    if (field == "visible") { out = rs::Value(o->game.visible ? 1.0 : 0.0); return true; }
-    error = "unknown field '" + field + "'";
-    return false;
-}
-
-bool GameRuntime::callFunction(const std::string& name, const std::vector<rs::Value>& args, rs::Value& out, std::string& error) {
-    if (name == "key") {
-        if (args.empty()) { error = "key() needs a key name, e.g. key(\"E\")"; return false; }
-        const int code = keyCodeFor(args[0].toString());
-        if (code < 0) { error = "unknown key '" + args[0].toString() + "'"; return false; }
-        out = rs::Value(input_.isKeyPressed(code) ? 1.0 : 0.0);
-        return true;
-    }
-    if (name == "distance") {
-        // distance("Part") -> from self to that part; distance() -> from self to the player
-        const Object* a = self_;
-        const Object* b = args.empty() ? player_.get() : resolveObject(args[0].toString());
-        if (!a || !b) { error = "distance(): object not found"; return false; }
-        out = rs::Value(glm::length(glm::vec3(a->getGlobalTransform()[3]) - glm::vec3(b->getGlobalTransform()[3])));
-        return true;
-    }
-    if (name == "exists") {
-        const Object* o = args.empty() ? nullptr : resolveObject(args[0].toString());
-        out = rs::Value(o && o->game.visible ? 1.0 : 0.0);
-        return true;
-    }
-    error = "unknown function '" + name + "'";
-    return false;
+std::string GameRuntime::checkSyntax(const std::string& source, const std::string& chunkName) {
+    return LuaRuntime::checkSyntax(source, chunkName);
 }
 
 GameRuntime::Obb GameRuntime::worldObb(const Object& o) {

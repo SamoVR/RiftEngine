@@ -65,8 +65,8 @@ int main() {
         }
     };
 
-    std::printf("== (picture) the user's scene.json, camera pulled back\n");
-    e.UI->doLoad("scene.json");
+    std::printf("== (picture) a textured scene from assets/scenes, camera pulled back\n");
+    e.UI->doLoad("assets/scenes/scratch/scene.json");
     e.camera->handleScrollInput(-6.0f); e.camera->handleMouseInput(60.0f, 80.0f, true, false);
     step(90, "/tmp/f_legacy_pretty.ppm");
     e.UI->resetSceneState(); e.scene.clear();
@@ -177,18 +177,18 @@ int main() {
     step(3, "/tmp/f_prompt.ppm");
     EXPECT(e.UI->pendingAction == Interface::PendingAction::Exit, "pending action is Exit");
 
-    std::printf("== the user's real legacy scene.json (pre-normals, pre-ownership save format)\n");
+    std::printf("== a real textured scene (assets/scenes/scratch, format 3, textures stored with absolute Windows paths)\n");
     e.UI->resetSceneState(); e.scene.clear(); e.UI->markClean();
-    EXPECT(e.UI->doLoad("scene.json"), "scene.json from the original project loads");
+    EXPECT(e.UI->doLoad("assets/scenes/scratch/scene.json"), "assets/scenes/scratch/scene.json loads");
     std::printf("     loaded %zu object(s):", e.scene.objectCount());
     for (Object* o : e.scene.getObjects()) std::printf(" '%s'%s", o->name.c_str(), o->parent ? "(child)" : "");
     std::printf("\n");
-    EXPECT(e.scene.objectCount() > 0, "legacy scene contains objects");
+    EXPECT(e.scene.objectCount() > 0, "scene contains objects");
     int texturesOk = 0, texturesTotal = 0;
     for (Object* o : e.scene.getObjects()) if (o->texture) { ++texturesTotal; if (o->texture->isValid()) ++texturesOk; }
     std::printf("     textures resolved: %d of %d (stored as '%s')\n", texturesOk, texturesTotal,
         texturesTotal ? e.scene.getObjects()[0]->texture ? e.scene.getObjects()[0]->texture->getFilePath().c_str() : "-" : "-");
-    EXPECT(texturesTotal > 0 && texturesOk == texturesTotal, "Windows-absolute texture paths from an old save resolve against ./assets");
+    EXPECT(texturesTotal > 0 && texturesOk == texturesTotal, "Windows-absolute texture paths in a save file resolve against ./assets");
     step(10, "/tmp/f_legacy.ppm");
 
     std::printf("== shutdown with live objects (GL resources must be freed while the context exists)\n");

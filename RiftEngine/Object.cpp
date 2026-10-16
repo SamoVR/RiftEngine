@@ -4,6 +4,10 @@
 #include <cmath>
 #include <cstddef>
 #include "Geometry.h"
+#include <chrono>
+#include <cstdio>
+#include <cstdlib>
+#include <random>
 
 Object::Object(std::string name, const std::vector<Vertex>& vertices, Texture* texture)
     : name(std::move(name)),
@@ -33,6 +37,9 @@ Object::Object(std::string name, const std::vector<Vertex>& vertices, std::uniqu
 // shared.
 Object::Object(const Object& other)
     : name(other.name),
+    kind(other.kind),
+    scriptPath(other.scriptPath),
+    scriptEnabled(other.scriptEnabled),
     vertices(other.vertices),
     position(other.position),
     rotation(other.rotation),
@@ -59,6 +66,10 @@ Object::Object(const Object& other)
 
 Object::Object(Object&& other) noexcept
     : name(std::move(other.name)),
+    id(other.id),
+    kind(other.kind),
+    scriptPath(std::move(other.scriptPath)),
+    scriptEnabled(other.scriptEnabled),
     vertices(std::move(other.vertices)),
     position(other.position),
     rotation(other.rotation),
@@ -90,6 +101,10 @@ Object& Object::operator=(Object&& other) noexcept {
         releaseGPUResources();
 
         name = std::move(other.name);
+        id = other.id;
+        kind = other.kind;
+        scriptPath = std::move(other.scriptPath);
+        scriptEnabled = other.scriptEnabled;
         vertices = std::move(other.vertices);
         position = other.position;
         rotation = other.rotation;
@@ -166,7 +181,7 @@ glm::mat4 Object::getModelMatrix() const {
 
 void Object::draw(Shader& shader, Camera& camera) const {
     (void)camera; // kept for API compatibility
-    if (!game.visible) return;
+    if (kind == Kind::Script || vertexCount == 0 || !game.visible) return;
 
     // glUniform* calls apply to whichever program is bound. The engine interleaves other
     // shaders (measurement lines) between object draws, so bind ours explicitly.
@@ -274,18 +289,51 @@ namespace {
     glm::vec3 jsonVec3(const nlohmann::json& j) { return { j.at(0).get<float>(), j.at(1).get<float>(), j.at(2).get<float>() }; }
 }
 
-// Scene format v2: only non-default values are written, and a built-in
-// primitive is stored as its name ("mesh": "sphere") instead of thousands of
-// vertices. Other meshes go in "v" as one flat array (8 numbers per vertex:
-// position, uv, normal). Files in the old format still load.
+uint64_t Object::newId() {
+    static std::mt19937_64 rng{ std::random_device{}() ^ static_cast<uint64_t>(std::chrono::steady_clock::now().time_since_epoch().count()) };
+    uint64_t v;
+    do { v = rng(); } while (v == 0);
+    return v;
+}
+
+std::string Object::idToString(uint64_t id) {
+    char buf[17];
+    std::snprintf(buf, sizeof(buf), "%016llx", static_cast<unsigned long long>(id));
+    return buf;
+}
+
+uint64_t Object::idFromString(const std::string& s) {
+    if (s.empty() || s.size() > 16) return 0;
+    char* end = nullptr;
+    const unsigned long long v = std::strtoull(s.c_str(), &end, 16);
+    return (end && *end == '\0') ? static_cast<uint64_t>(v) : 0;
+}
+
+// Scene format v3. Every object has a stable "id" and a "class"; parents are
+// referenced by id (names may repeat). Only non-default values are written,
+// and a built-in primitive is stored as its name ("mesh": "sphere") instead of
+// thousands of vertices. Other meshes go in "v" as one flat array (8 numbers
+// per vertex: position, uv, normal). A Script has no mesh or transform; it
+// only points at a Lua file ("source", relative to the scene folder).
 nlohmann::json Object::toJSON() const {
     nlohmann::json j;
+    j["id"] = idToString(id);
     j["name"] = name;
+
+    if (kind == Kind::Script) {
+        j["class"] = "Script";
+        j["source"] = scriptPath;
+        if (!scriptEnabled) j["enabled"] = false;
+        if (parent) j["parent"] = idToString(parent->id);
+        return j;
+    }
+
+    j["class"] = "Part";
     j["position"] = vec3Json(position);
     if (rotation != glm::vec3(0.0f)) j["rotation"] = vec3Json(rotation);
     if (scale != glm::vec3(1.0f)) j["scale"] = vec3Json(scale);
     if (color != glm::vec3(1.0f)) j["color"] = vec3Json(color);
-    if (parent) j["parent"] = parent->name;
+    if (parent) j["parent"] = idToString(parent->id);
 
     const std::string primitive = identifyPrimitive(vertices);
     if (!primitive.empty()) {
@@ -312,13 +360,25 @@ nlohmann::json Object::toJSON() const {
     if (game.canCollide != defaults.canCollide) g["canCollide"] = game.canCollide;
     if (game.visible != defaults.visible) g["visible"] = game.visible;
     if (game.bounciness != defaults.bounciness) g["bounciness"] = round5(game.bounciness);
-    if (!game.script.empty()) g["script"] = game.script;
     if (!g.empty()) j["game"] = std::move(g);
     return j;
 }
 
 void Object::fromJSON(const nlohmann::json& j) {
+    if (j.contains("id") && j["id"].is_string()) {
+        const uint64_t parsed = idFromString(j["id"].get<std::string>());
+        if (parsed != 0) id = parsed; // otherwise keep the freshly generated one
+    }
     if (j.contains("name")) name = j["name"];
+
+    if (j.value("class", std::string("Part")) == "Script") {
+        kind = Kind::Script;
+        scriptPath = j.value("source", std::string());
+        scriptEnabled = j.value("enabled", true);
+        return;
+    }
+    kind = Kind::Part;
+
     if (j.contains("position")) position = jsonVec3(j["position"]);
     if (j.contains("rotation")) rotation = jsonVec3(j["rotation"]);
     if (j.contains("scale")) scale = jsonVec3(j["scale"]);
@@ -326,8 +386,6 @@ void Object::fromJSON(const nlohmann::json& j) {
 
     if (j.contains("texture")) {
         const std::string texturePath = j["texture"];
-        // Older save files have no "textureOwned" flag and always loaded a
-        // per-object texture, so default to true.
         const bool wasOwned = j.value("textureOwned", true);
         if (wasOwned) {
             auto loaded = std::make_unique<Texture>(texturePath);
@@ -340,14 +398,12 @@ void Object::fromJSON(const nlohmann::json& j) {
         // knows which shared Texture* to use (see Scene::loadFromFile).
     }
 
-    // Scenes saved before the game properties existed get the defaults (static, collidable parts).
     if (j.contains("game") && j["game"].is_object()) {
         const auto& g = j["game"];
         game.anchored = g.value("anchored", true);
         game.canCollide = g.value("canCollide", true);
         game.visible = g.value("visible", true);
         game.bounciness = g.value("bounciness", 0.0f);
-        game.script = g.value("script", std::string());
     }
 
     const std::string mesh = j.value("mesh", std::string());
@@ -364,17 +420,6 @@ void Object::fromJSON(const nlohmann::json& j) {
     } else if (!mesh.empty()) {
         const std::vector<Vertex> verts = primitiveVertices(mesh);
         if (verts.empty()) LOG_WARN("Object", "'" + name + "': unknown mesh '" + mesh + "'");
-        setVertices(verts);
-    } else if (j.contains("vertices")) { // scene format v1
-        std::vector<Vertex> verts = fromJSONToVertices(j["vertices"]);
-        if (verts.empty()) { // old builds sometimes saved primitives with no vertices (invisible objects)
-            LOG_WARN("Object", "'" + name + "': empty mesh in scene file, using a cube");
-            verts = createCubeVertices();
-        }
-        // v1 files store primitives vertex by vertex, some from before normals
-        // existed (unlit). Swap in the current primitive so they get lighting.
-        const std::string primitive = identifyPrimitive(verts);
-        if (!primitive.empty()) verts = primitiveVertices(primitive);
         setVertices(verts);
     }
 }

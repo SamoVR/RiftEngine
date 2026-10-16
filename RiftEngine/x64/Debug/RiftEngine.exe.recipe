@@ -2,51 +2,51 @@
 <Project>
   <ProjectOutputs>
     <ProjectOutput>
-      <FullPath>C:\Users\Samuel\Desktop\RiftEngine\x64\Debug\RiftEngine.exe</FullPath>
+      <FullPath>C:\Users\Samuel\source\repos\SamoVR\RiftEngine\x64\Debug\RiftEngine.exe</FullPath>
     </ProjectOutput>
   </ProjectOutputs>
   <ContentFiles>
     <ContentFile>
-      <FullPath>C:\Users\Samuel\Desktop\RiftEngine\RiftEngine\assets\fonts\Cousine-Regular.ttf</FullPath>
+      <FullPath>C:\Users\Samuel\source\repos\SamoVR\RiftEngine\RiftEngine\assets\fonts\Cousine-Regular.ttf</FullPath>
     </ContentFile>
     <ContentFile>
-      <FullPath>C:\Users\Samuel\Desktop\RiftEngine\RiftEngine\assets\fonts\DroidSans.ttf</FullPath>
+      <FullPath>C:\Users\Samuel\source\repos\SamoVR\RiftEngine\RiftEngine\assets\fonts\DroidSans.ttf</FullPath>
     </ContentFile>
     <ContentFile>
-      <FullPath>C:\Users\Samuel\Desktop\RiftEngine\RiftEngine\assets\fonts\Karla-Regular.ttf</FullPath>
+      <FullPath>C:\Users\Samuel\source\repos\SamoVR\RiftEngine\RiftEngine\assets\fonts\Karla-Regular.ttf</FullPath>
     </ContentFile>
     <ContentFile>
-      <FullPath>C:\Users\Samuel\Desktop\RiftEngine\RiftEngine\assets\fonts\ProggyClean.ttf</FullPath>
+      <FullPath>C:\Users\Samuel\source\repos\SamoVR\RiftEngine\RiftEngine\assets\fonts\ProggyClean.ttf</FullPath>
     </ContentFile>
     <ContentFile>
-      <FullPath>C:\Users\Samuel\Desktop\RiftEngine\RiftEngine\assets\fonts\ProggyTiny.ttf</FullPath>
+      <FullPath>C:\Users\Samuel\source\repos\SamoVR\RiftEngine\RiftEngine\assets\fonts\ProggyTiny.ttf</FullPath>
     </ContentFile>
     <ContentFile>
-      <FullPath>C:\Users\Samuel\Desktop\RiftEngine\RiftEngine\assets\fonts\ProggyVector-Regular.ttf</FullPath>
+      <FullPath>C:\Users\Samuel\source\repos\SamoVR\RiftEngine\RiftEngine\assets\fonts\ProggyVector-Regular.ttf</FullPath>
     </ContentFile>
     <ContentFile>
-      <FullPath>C:\Users\Samuel\Desktop\RiftEngine\RiftEngine\assets\fonts\Roboto-Medium.ttf</FullPath>
+      <FullPath>C:\Users\Samuel\source\repos\SamoVR\RiftEngine\RiftEngine\assets\fonts\Roboto-Medium.ttf</FullPath>
     </ContentFile>
     <ContentFile>
-      <FullPath>C:\Users\Samuel\Desktop\RiftEngine\RiftEngine\glew32.lib</FullPath>
+      <FullPath>C:\Users\Samuel\source\repos\SamoVR\RiftEngine\RiftEngine\glew32.lib</FullPath>
     </ContentFile>
     <ContentFile>
-      <FullPath>C:\Users\Samuel\Desktop\RiftEngine\RiftEngine\glfw3.lib</FullPath>
+      <FullPath>C:\Users\Samuel\source\repos\SamoVR\RiftEngine\RiftEngine\glfw3.lib</FullPath>
     </ContentFile>
     <ContentFile>
-      <FullPath>C:\Users\Samuel\Desktop\RiftEngine\RiftEngine\assets\images\icon.png</FullPath>
+      <FullPath>C:\Users\Samuel\source\repos\SamoVR\RiftEngine\RiftEngine\assets\images\icon.png</FullPath>
     </ContentFile>
     <ContentFile>
-      <FullPath>C:\Users\Samuel\Desktop\RiftEngine\RiftEngine\assets\images\Mona_Lisa.png</FullPath>
+      <FullPath>C:\Users\Samuel\source\repos\SamoVR\RiftEngine\RiftEngine\assets\images\Mona_Lisa.png</FullPath>
     </ContentFile>
     <ContentFile>
-      <FullPath>C:\Users\Samuel\Desktop\RiftEngine\RiftEngine\assets\textures\texture_01.png</FullPath>
+      <FullPath>C:\Users\Samuel\source\repos\SamoVR\RiftEngine\RiftEngine\assets\textures\texture_01.png</FullPath>
     </ContentFile>
     <ContentFile>
-      <FullPath>C:\Users\Samuel\Desktop\RiftEngine\RiftEngine\assets\textures\texture_08.png</FullPath>
+      <FullPath>C:\Users\Samuel\source\repos\SamoVR\RiftEngine\RiftEngine\assets\textures\texture_08.png</FullPath>
     </ContentFile>
     <ContentFile>
-      <FullPath>C:\Users\Samuel\Desktop\RiftEngine\RiftEngine\glew32.dll</FullPath>
+      <FullPath>C:\Users\Samuel\source\repos\SamoVR\RiftEngine\RiftEngine\glew32.dll</FullPath>
     </ContentFile>
   </ContentFiles>
   <SatelliteDlls />

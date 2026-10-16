@@ -2,7 +2,9 @@
 #include "Logger.h"
 #include <fstream>
 #include <unordered_map>
+#include <unordered_set>
 #include <algorithm>
+#include <filesystem>
 
 Scene::Scene() {}
 
@@ -82,6 +84,28 @@ std::unique_ptr<Object> Scene::extractObject(Object* object, size_t* outIndex) {
     return owned;
 }
 
+std::vector<std::unique_ptr<Object>> Scene::extractSubtree(Object* root) {
+    std::vector<std::unique_ptr<Object>> out;
+    if (!root || !contains(root)) return out;
+    std::vector<Object*> nodes;
+    std::vector<Object*> stack{ root };
+    while (!stack.empty()) {
+        Object* n = stack.back();
+        stack.pop_back();
+        nodes.push_back(n);
+        for (Object* c : n->children) stack.push_back(c);
+    }
+    root->removeParent(); // cut only the link to the outside
+    for (Object* n : nodes) {
+        auto it = std::find_if(objects_.begin(), objects_.end(),
+            [n](const std::unique_ptr<Object>& p) { return p.get() == n; });
+        if (it == objects_.end()) continue;
+        out.push_back(std::move(*it));
+        objects_.erase(it);
+    }
+    return out;
+}
+
 void Scene::insertObjectAt(size_t index, std::unique_ptr<Object> object) {
     if (!object) return;
     index = std::min(index, objects_.size());
@@ -120,8 +144,19 @@ Object* Scene::findByName(const std::string& name) const {
     return nullptr;
 }
 
+Object* Scene::findById(uint64_t id) const {
+    for (const auto& ptr : objects_) {
+        if (ptr->id == id) return ptr.get();
+    }
+    return nullptr;
+}
+
 bool Scene::saveToFile(const std::string& filename) const {
     const nlohmann::json j = buildJson();
+
+    std::error_code dirError;
+    const std::filesystem::path parentDir = std::filesystem::path(filename).parent_path();
+    if (!parentDir.empty()) std::filesystem::create_directories(parentDir, dirError);
 
     std::ofstream outFile(filename);
     if (!outFile.is_open()) {
@@ -129,7 +164,7 @@ bool Scene::saveToFile(const std::string& filename) const {
         return false;
     }
     // One object per line: small, and still readable / diff-friendly.
-    std::string text = "{\n  \"version\": 2,\n  \"objects\": [\n";
+    std::string text = "{\n  \"format\": 3,\n  \"objects\": [\n";
     const auto& objects = j["objects"];
     for (size_t i = 0; i < objects.size(); ++i) {
         text += "    " + objects[i].dump() + (i + 1 < objects.size() ? ",\n" : "\n");
@@ -160,6 +195,10 @@ bool Scene::loadFromFile(const std::string& filename, Texture* sharedTexture) {
         return false;
     }
 
+    if (!j.is_object() || j.value("format", 0) != 3) {
+        LOG_ERROR("Scene", "'" + filename + "' is not a format 3 scene (this build only reads format 3).");
+        return false;
+    }
     if (!j.contains("objects") || !j["objects"].is_array()) {
         LOG_ERROR("Scene", "Scene file '" + filename + "' has no valid 'objects' array; nothing loaded.");
         return false;
@@ -168,47 +207,38 @@ bool Scene::loadFromFile(const std::string& filename, Texture* sharedTexture) {
     // Build the whole new object list first and only swap it in once parsing
     // has succeeded, so a malformed file can no longer wipe the current scene.
     std::vector<std::unique_ptr<Object>> loaded;
-    std::unordered_map<std::string, Object*> nameToObject;
-    std::vector<std::pair<std::string, std::string>> pendingParents; // (child, parent)
+    std::unordered_map<uint64_t, Object*> idToObject;
+    std::vector<std::pair<Object*, uint64_t>> pendingParents; // (child, parent id)
 
     try {
         for (const auto& objJson : j["objects"]) {
-            if (!objJson.contains("name")) {
+            if (!objJson.is_object() || !objJson.contains("name")) {
                 LOG_WARN("Scene", "Skipping an object entry with no 'name' in " + filename);
                 continue;
             }
 
-            // Two objects sharing a name used to silently overwrite each other
-            // in the name map, making the first unreachable and sending any
-            // parent reference to the wrong object. Duplicates are renamed.
-            const std::string desiredName = objJson["name"].get<std::string>();
-            std::string finalName = desiredName;
-            for (int suffix = 1; nameToObject.count(finalName) != 0; ++suffix) {
-                finalName = desiredName + "_" + std::to_string(suffix);
-            }
-            if (finalName != desiredName) {
-                LOG_WARN("Scene", "Duplicate object name '" + desiredName + "' in " + filename
-                    + " -- renamed to '" + finalName + "'.");
-            }
-
-            auto obj = std::make_unique<Object>(finalName, std::vector<Vertex>(), nullptr);
+            auto obj = std::make_unique<Object>(objJson["name"].get<std::string>(), std::vector<Vertex>(), nullptr);
             obj->fromJSON(objJson);
-            obj->setName(finalName); // fromJSON restored the original name
+
+            // Ids must be unique; a hand-edited or merged file may repeat one.
+            if (idToObject.count(obj->id) != 0) {
+                LOG_WARN("Scene", "Duplicate object id for '" + obj->name + "' in " + filename + " -- assigned a new id.");
+                obj->id = Object::newId();
+            }
 
             // Shared (non-owned) texture: re-attach instead of reloading.
-            if (objJson.contains("texture") && !objJson.value("textureOwned", true)) {
+            if (obj->kind == Object::Kind::Part && objJson.contains("texture") && !objJson.value("textureOwned", true)) {
                 const std::string savedPath = objJson["texture"].get<std::string>();
                 if (sharedTexture && sharedTexture->isValid() && sharedTexture->getFilePath() == Texture::normalizePath(savedPath)) {
                     obj->setTexture(sharedTexture);
                 } else {
-                    auto own = std::make_unique<Texture>(savedPath);
-                    obj->setOwnedTexture(std::move(own));
+                    obj->setOwnedTexture(std::make_unique<Texture>(savedPath));
                 }
             }
 
-            nameToObject[finalName] = obj.get();
-            if (objJson.contains("parent")) {
-                pendingParents.emplace_back(finalName, objJson["parent"].get<std::string>());
+            idToObject[obj->id] = obj.get();
+            if (objJson.contains("parent") && objJson["parent"].is_string()) {
+                pendingParents.emplace_back(obj.get(), Object::idFromString(objJson["parent"].get<std::string>()));
             }
             loaded.push_back(std::move(obj));
         }
@@ -220,14 +250,12 @@ bool Scene::loadFromFile(const std::string& filename, Texture* sharedTexture) {
     // Parents are resolved after every object exists (a child may appear
     // before its parent in the file).
     for (const auto& link : pendingParents) {
-        auto childIt = nameToObject.find(link.first);
-        auto parentIt = nameToObject.find(link.second);
-        if (childIt == nameToObject.end()) continue;
-        if (parentIt == nameToObject.end()) {
-            LOG_WARN("Scene", "'" + link.first + "' references missing parent '" + link.second + "' -- left unparented.");
+        auto parentIt = idToObject.find(link.second);
+        if (parentIt == idToObject.end()) {
+            LOG_WARN("Scene", "'" + link.first->name + "' references a missing parent -- left unparented.");
             continue;
         }
-        childIt->second->setParent(parentIt->second); // rejects cycles
+        link.first->setParent(parentIt->second); // rejects cycles
     }
 
     objects_ = std::move(loaded); // old objects freed here

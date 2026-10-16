@@ -69,14 +69,22 @@ class AddObjectCommand : public Command {
 public:
     AddObjectCommand(Scene& scene, std::unique_ptr<Object> object, std::string description)
         : scene_(scene), owned_(std::move(object)), raw_(owned_.get()), description_(std::move(description)) {}
-    void execute() override { scene_.addObject(std::move(owned_)); }
-    void undo() override { owned_ = scene_.extractObject(raw_); }
+    void execute() override {
+        scene_.addObject(std::move(owned_));
+        // Redo: undo cut the link to the parent (e.g. a Script attached to a part); put it back.
+        if (parent_ && scene_.contains(parent_) && !raw_->parent) raw_->setParent(parent_);
+    }
+    void undo() override {
+        parent_ = raw_->parent;
+        owned_ = scene_.extractObject(raw_);
+    }
     std::string description() const override { return description_; }
     Object* object() const { return raw_; }
 private:
     Scene& scene_;
     std::unique_ptr<Object> owned_; // non-null only while the object is NOT in the scene
     Object* raw_;
+    Object* parent_ = nullptr;      // remembered on undo so redo can re-attach
     std::string description_;
 };
 

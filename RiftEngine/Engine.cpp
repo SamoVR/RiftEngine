@@ -236,6 +236,7 @@ void Engine::performObjectPicking(double mouseX, double mouseY) {
     float closestDistance = std::numeric_limits<float>::max();
 
     for (Object* obj : scene.getObjects()) {
+        if (obj->kind != Object::Kind::Part) continue; // scripts have no body to click on
         const glm::mat4 world = obj->getGlobalTransform();
         if (std::abs(glm::determinant(world)) < 1e-12f) continue; // collapsed object: nothing to hit
         const glm::mat4 inv = glm::inverse(world);
@@ -335,7 +336,7 @@ bool Engine::init() {
     // Without the main shader nothing can be drawn. This used to fail
     // silently, leaving an empty-looking window with no explanation.
     if (!shader->isValid()) {
-        throw std::runtime_error("The main shader (vertex.glsl / fragment.glsl) failed to load or compile.\nSee RiftEngine_log.txt for the GLSL error. The shader files must sit next to the executable.");
+        throw std::runtime_error("The main shader (vertex.glsl / fragment.glsl) failed to load or compile.\nSee RenderEngine_log.txt for the GLSL error. The shader files must sit next to the executable.");
     }
     if (!backgroundShader->isValid() || !gridShader->isValid() || !lineShader->isValid()) {
         LOG_WARN("Engine", "One of the helper shaders (background / grid / line) failed to load; those elements will not be drawn.");
@@ -360,6 +361,7 @@ bool Engine::init() {
     UI->applySavedKeybinds(); // user rebinds from settings.json override the defaults
 
     runtime = std::make_unique<GameRuntime>(scene, *camera, *inputManager);
+    runtime->setScriptStore(&UI->scripts()); // scripts run from the editor's in-memory copies
     UI->setRuntime(runtime.get());
 
     if (settings.discordRichPresence) discord.init(settings.discordClientId);
