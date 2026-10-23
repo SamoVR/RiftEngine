@@ -4,6 +4,7 @@
 #include "editor/Templates.h"
 #include "editor/Theme.h"
 #include "core/Paths.h"
+#include "render/ModelLoader.h"
 
 #include "IconsFontAwesome6.h"
 #include <algorithm>
@@ -126,13 +127,33 @@ void dropAsset(Editor& editor, const std::string& stored, Instance* target) {
             break;
         }
         case AssetKind::Model: {
+            // The model's own size (1 unit = 1 stud), colour and texture.
+            ModelData model;
+            std::string error;
+            if (!loadModel(file, model, &error)) {
+                editor.notify("Cannot import " + Paths::toUtf8(file.filename()) + ": " + error, NoticeLevel::Error);
+                break;
+            }
+            glm::vec3 size = model.nativeSize;
+            // Tiny or huge models (other units) get a sensible size; the shape is kept.
+            const float largest = std::max({ size.x, size.y, size.z });
+            if (largest < 0.5f || largest > 200.0f) size *= 8.0f / largest;
             Instance& workspace = editor.scene().workspace();
-            const glm::vec3 at = editor.placementPoint(glm::vec3(4.0f));
+            const glm::vec3 at = editor.placementPoint(size);
+            std::error_code ec;
+            const bool texture = !model.texture.empty() && std::filesystem::exists(model.texture, ec);
             editor.insertWith(ClassId::MeshPart, &workspace, [&](Instance& i) {
                 i.name = name;
                 i.mesh.path = stored;
-                i.size = glm::vec3(4.0f);
+                i.size = size;
                 i.position = at;
+                if (model.hasColor) i.color = Color3::from(model.color);
+                else i.color = Color3(0.85f, 0.85f, 0.85f);
+                if (texture) {
+                    i.texture.path = Paths::toStored(model.texture);
+                    i.textureScale = glm::vec2(0.0f); // the model's own UVs
+                    if (!model.hasColor) i.color = Color3(1.0f, 1.0f, 1.0f);
+                }
             });
             break;
         }

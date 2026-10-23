@@ -1,6 +1,7 @@
 #include "render/Renderer.h"
 #include "core/Log.h"
 #include "core/Paths.h"
+#include "render/ModelLoader.h"
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
@@ -110,6 +111,22 @@ const GpuMesh& Renderer::primitive(PartShape shape) const {
     return *primitives_[i >= 0 && i < 5 ? i : 0];
 }
 
+const GpuMesh& Renderer::meshFor(const Instance& p) {
+    if (p.cls == ClassId::MeshPart && !p.mesh.path.empty()) {
+        auto it = models_.find(p.mesh.path);
+        if (it == models_.end()) {
+            ModelData model;
+            std::string error;
+            std::unique_ptr<GpuMesh> gpu;
+            if (loadModel(Paths::resolveAsset(p.mesh.path), model, &error)) gpu = std::make_unique<GpuMesh>(model.mesh);
+            else LOG_WARN("Renderer", "Cannot load the model " + p.mesh.path + ": " + error);
+            it = models_.emplace(p.mesh.path, std::move(gpu)).first;
+        }
+        if (it->second) return *it->second;
+    }
+    return primitive(p.cls == ClassId::Part ? p.shape : PartShape::Block);
+}
+
 // ============================================================================
 //  Overlay lines
 // ============================================================================
@@ -190,7 +207,7 @@ void Renderer::drawParts(const std::vector<DrawItem>& items, const RenderSetting
         float tint = 0.0f;
         if (settings.editor && settings.hovered == p.id && !settings.selected.count(p.id)) tint = 0.12f;
         partShader_->setFloat("uTintAmount", tint);
-        const GpuMesh& mesh = primitive(p.cls == ClassId::Part ? p.shape : PartShape::Block);
+        const GpuMesh& mesh = meshFor(p);
         mesh.draw();
         ++stats_.drawCalls;
         stats_.triangles += static_cast<int>(mesh.triangleCount());
@@ -319,7 +336,7 @@ void Renderer::render(const Scene& scene, const RenderCamera& camera, const Rend
         for (const DrawItem& d : opaque) {
             if (!d.part->castShadow) continue;
             shadowShader_->setMat4("uModel", d.world);
-            primitive(d.part->cls == ClassId::Part ? d.part->shape : PartShape::Block).draw();
+            meshFor(*d.part).draw();
             ++stats_.drawCalls;
         }
         glDisable(GL_POLYGON_OFFSET_FILL);

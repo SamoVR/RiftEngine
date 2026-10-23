@@ -16,6 +16,7 @@
 #include <array>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -76,6 +77,11 @@ public:
     TextureCache& textures() { return textures_; }
     const RenderStats& stats() const { return stats_; }
     const GpuMesh& primitive(PartShape shape) const;
+    // The mesh a part is drawn with: its shape, or (MeshPart) its model file,
+    // loaded on first use. A model that cannot be loaded draws as a block.
+    const GpuMesh& meshFor(const Instance& part);
+    // Forget loaded models (project switch, a model file changed).
+    void clearModels() { models_.clear(); }
 
 private:
     struct DrawItem {
@@ -87,6 +93,7 @@ private:
 
     std::unique_ptr<Shader> partShader_, shadowShader_, skyShader_, gridShader_, lineShader_;
     std::array<std::unique_ptr<GpuMesh>, 5> primitives_;
+    std::unordered_map<std::string, std::unique_ptr<GpuMesh>> models_; // null: failed to load
     ShadowMap shadowMap_;
     TextureCache textures_;
     GLuint emptyVao_ = 0, gridVao_ = 0, gridVbo_ = 0, lineVao_ = 0, lineVbo_ = 0;

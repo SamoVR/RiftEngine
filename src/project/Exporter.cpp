@@ -155,6 +155,7 @@ namespace {
     // Loads `png`, scales it to fit 256x256, and encodes it as PNG again (icons store PNG data).
     bool iconImage(const fs::path& png, std::vector<unsigned char>& out) {
         int w = 0, h = 0, n = 0;
+        stbi_set_flip_vertically_on_load(false); // textures turn this on for OpenGL
         unsigned char* pixels = stbi_load(Paths::toUtf8(png).c_str(), &w, &h, &n, 4);
         if (!pixels) return false;
         const int size = 256;

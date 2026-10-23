@@ -97,7 +97,8 @@ void PlayerApp::initWindow() {
     if (iconPath.empty() || !fs::exists(Paths::fromUtf8(iconPath))) iconPath = Paths::toUtf8(Paths::icon("rift.png"));
     GLFWimage icon{};
     int channels = 0;
-    icon.pixels = stbi_load(iconPath.c_str(), &icon.width, &icon.height, &channels, 4);
+    stbi_set_flip_vertically_on_load(false); // textures turn this on for OpenGL
+        icon.pixels = stbi_load(iconPath.c_str(), &icon.width, &icon.height, &channels, 4);
     if (icon.pixels) {
         glfwSetWindowIcon(window_, 1, &icon);
         stbi_image_free(icon.pixels);
