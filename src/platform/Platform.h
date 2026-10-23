@@ -40,4 +40,9 @@ void openWithShell(const std::string& pathOrUrl);
 // Clipboard (text).
 void setClipboard(const std::string& text);
 
+// The user's Documents folder ("" if unknown).
+std::string documentsFolder();
+// Deletes a file or folder by moving it to the Recycle Bin (recoverable).
+bool moveToRecycleBin(const std::string& path);
+
 } // namespace Platform

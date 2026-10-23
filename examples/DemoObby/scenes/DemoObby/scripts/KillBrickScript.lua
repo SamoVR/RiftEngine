@@ -1,10 +1,10 @@
--- Sends the player back to the spawn point when touched.
+-- Kills any character that touches it (the player respawns at the spawn).
 local brick = script.Parent
-local player = Players.LocalPlayer
 
-brick.Touched:Connect(function(other)
-    if other == player.Character then
+brick.Touched:Connect(function(hit)
+    local humanoid = hit.Parent:FindFirstChildOfClass("Humanoid")
+    if humanoid and humanoid.Health > 0 then
+        humanoid.Health = 0
         game:Message("Ouch! Back to spawn.", 2)
-        player:LoadCharacter()
     end
 end)

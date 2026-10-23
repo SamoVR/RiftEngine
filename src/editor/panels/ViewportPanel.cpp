@@ -1,0 +1,490 @@
+#include "editor/panels/Panels.h"
+#include "editor/Theme.h"
+#include "core/TransformUtil.h"
+#include "render/Picking.h"
+#include "render/Renderer.h"
+#include "game/GuiSystem.h"
+#include "platform/Input.h"
+#include "ui/GameOverlay.h"
+
+#include "IconsFontAwesome6.h"
+#include <GLFW/glfw3.h>
+#include <ImGuizmo.h>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+#include <algorithm>
+#include <cmath>
+#include <cstdio>
+
+namespace rift {
+
+namespace {
+    constexpr float kClickSlop = 4.0f; // pixels the mouse may move and still count as a click
+
+    // What a click on `part` selects: the outermost Model it belongs to
+    // (like Roblox), or the part itself with Alt held.
+    Instance* selectionTarget(Instance* part, bool exact) {
+        if (!part || exact) return part;
+        Instance* target = part;
+        for (Instance* p = part->parent; p && !p->isService(); p = p->parent)
+            if (p->cls == ClassId::Model) target = p;
+        return target;
+    }
+
+    void notifyTransform(Scene& scene, Instance& i) {
+        for (const char* name : { "Position", "Rotation", "Size" })
+            if (const PropertyInfo* p = findProperty(i.cls, name)) scene.notifyPropertyChanged(i, *p);
+    }
+
+    // Topmost GUI element under `mouse` (view pixels), or 0.
+    uint64_t guiAt(const GuiSystem& gui, const glm::vec2& mouse) {
+        const auto& items = gui.drawList();
+        for (auto it = items.rbegin(); it != items.rend(); ++it)
+            if (it->rect.contains(mouse) && it->clip.contains(mouse)) return it->id;
+        return 0;
+    }
+
+    void styleGizmo() {
+        static bool done = false;
+        if (done) return;
+        done = true;
+        ImGuizmo::Style& s = ImGuizmo::GetStyle();
+        s.TranslationLineThickness = 3.5f;
+        s.TranslationLineArrowSize = 7.0f;
+        s.RotationLineThickness = 3.0f;
+        s.RotationOuterLineThickness = 3.5f;
+        s.ScaleLineThickness = 3.5f;
+        s.ScaleLineCircleSize = 7.0f;
+        s.CenterCircleSize = 5.0f;
+        s.Colors[ImGuizmo::DIRECTION_X] = ImVec4(0.93f, 0.33f, 0.36f, 1.0f);
+        s.Colors[ImGuizmo::DIRECTION_Y] = ImVec4(0.45f, 0.82f, 0.36f, 1.0f);
+        s.Colors[ImGuizmo::DIRECTION_Z] = ImVec4(0.33f, 0.56f, 0.96f, 1.0f);
+        s.Colors[ImGuizmo::PLANE_X] = ImVec4(0.93f, 0.33f, 0.36f, 0.45f);
+        s.Colors[ImGuizmo::PLANE_Y] = ImVec4(0.45f, 0.82f, 0.36f, 0.45f);
+        s.Colors[ImGuizmo::PLANE_Z] = ImVec4(0.33f, 0.56f, 0.96f, 0.45f);
+        s.Colors[ImGuizmo::SELECTION] = ImVec4(1.0f, 0.82f, 0.30f, 1.0f);
+    }
+}
+
+ViewportInput ViewportPanel::gameInput(const Editor& editor) const {
+    ViewportInput v;
+    v.size = size_;
+    v.mouse = const_cast<Editor&>(editor).input().mousePosition() - origin_;
+    v.hovered = hovered_;
+    v.keyboard = focused_ && !ImGui::GetIO().WantTextInput;
+    return v;
+}
+
+void ViewportPanel::draw(UiContext& ui) {
+    Editor& editor = ui.editor;
+    EditorSettings& settings = editor.settings();
+    const ImGuiIO& io = ImGui::GetIO();
+
+    if (focusRequest_) {
+        ImGui::SetNextWindowFocus();
+        focusRequest_ = false;
+    }
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+    const bool visible = ImGui::Begin(ICON_FA_CUBE "  Viewport###Viewport", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoCollapse);
+    ImGui::PopStyleVar();
+    if (!visible) {
+        hovered_ = focused_ = false;
+        ImGui::End();
+        return;
+    }
+
+    const ImVec2 pos = ImGui::GetCursorScreenPos();
+    const ImVec2 avail = ImGui::GetContentRegionAvail();
+    origin_ = { pos.x, pos.y };
+    size_ = { std::max(avail.x, 1.0f), std::max(avail.y, 1.0f) };
+    editor.viewportSize = size_;
+    // While the cursor is hidden ImGui sees no mouse, so keep the hover we had.
+    hovered_ = ImGui::IsWindowHovered() || capture_;
+    if (hovered_ && !capture_ && (ImGui::IsMouseClicked(ImGuiMouseButton_Right) || ImGui::IsMouseClicked(ImGuiMouseButton_Middle))) ImGui::SetWindowFocus();
+    focused_ = ImGui::IsWindowFocused();
+    if (focused_ && ImGui::IsKeyPressed(ImGuiKey_Escape) && editor.playing()) {
+        ImGui::SetWindowFocus(nullptr); // gives the mouse back
+        focused_ = false;
+    }
+
+    // ---- camera
+    bool cameraCapture = false;
+    if (!editor.playing()) {
+        EditorCamera::ViewInput vi;
+        vi.hovered = hovered_;
+        vi.keyboard = !io.WantTextInput;
+        vi.mouse = editor.input().mousePosition() - origin_;
+        vi.size = size_;
+        cameraCapture = editor.camera().update(ui.dt, editor.input(), vi, settings.cameraSpeed, settings.mouseSensitivity);
+    }
+    bool gameCapture = false;
+    if (GameSession* s = editor.session()) {
+        gameCapture = focused_ && (s->wantsMouseLock() || (hovered_ && editor.input().mouseDown(GLFW_MOUSE_BUTTON_RIGHT)));
+    }
+    const bool capture = cameraCapture || gameCapture;
+    if (capture != capture_) {
+        glfwSetInputMode(ui.window, GLFW_CURSOR, capture ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
+        capture_ = capture;
+    }
+
+    // ---- render the scene
+    const float aspect = size_.x / size_.y;
+    glm::mat4 view, proj;
+    RenderCamera camera;
+    if (GameSession* s = editor.session()) {
+        view = s->camera().view();
+        proj = s->camera().projection(aspect);
+        camera.position = s->camera().position;
+    } else {
+        view = editor.camera().view();
+        proj = editor.camera().projection(aspect);
+        camera.position = editor.camera().position();
+    }
+    camera.view = view;
+    camera.projection = proj;
+
+    RenderSettings rs;
+    rs.editor = !editor.playing();
+    rs.grid = settings.showGrid;
+    rs.gridStep = settings.gridStep;
+    rs.wireframe = settings.wireframe;
+    rs.shadows = settings.shadows;
+    for (uint64_t id : editor.selection()) rs.selected.insert(id);
+    rs.hovered = editor.playing() ? 0 : hoveredId_;
+    framebuffer_.resize(static_cast<int>(size_.x), static_cast<int>(size_.y), 4);
+    ui.renderer.render(editor.scene(), camera, rs, framebuffer_);
+    ImGui::Image(static_cast<ImTextureID>(framebuffer_.texture()), ImVec2(size_.x, size_.y), ImVec2(0, 1), ImVec2(1, 0));
+    handleDrop(ui);
+
+    // ---- 2D GUI over the scene
+    const OverlayFonts fonts{ theme::fonts().ui, theme::fonts().heading };
+    std::unique_ptr<GuiSystem> editGui;
+    if (GameSession* s = editor.session()) {
+        drawGameGui(*s, ui.renderer.textures(), ImGui::GetWindowDrawList(), origin_, fonts);
+        drawGameHud(*s, ImGui::GetWindowDrawList(), origin_, size_, fonts);
+    } else if (settings.showGui) {
+        editGui = std::make_unique<GuiSystem>(editor.scene());
+        editGui->layout(size_);
+        drawGui(editor.scene(), *editGui, ui.renderer.textures(), ImGui::GetWindowDrawList(), origin_, fonts);
+        // Selected GUI elements get an outline.
+        for (const GuiSystem::Item& item : editGui->drawList()) {
+            if (!editor.isSelected(item.id)) continue;
+            const ImVec2 a(origin_.x + item.rect.pos.x, origin_.y + item.rect.pos.y);
+            ImGui::GetWindowDrawList()->AddRect(a, ImVec2(a.x + item.rect.size.x, a.y + item.rect.size.y), theme::u32(theme::color::accentHover), 0.0f, 0, 2.0f);
+        }
+    }
+
+    drawGizmo(ui, view, proj);
+    drawOverlays(ui, view, proj);
+    handleSelection(ui, view, proj, editGui.get());
+    ImGui::End();
+}
+
+void ViewportPanel::drawGizmo(UiContext& ui, const glm::mat4& view, const glm::mat4& proj) {
+    Editor& editor = ui.editor;
+    EditorSettings& settings = editor.settings();
+    Scene& scene = editor.scene();
+    styleGizmo();
+    ImGuizmo::SetDrawlist(ImGui::GetWindowDrawList());
+    ImGuizmo::SetRect(origin_.x, origin_.y, size_.x, size_.y);
+    ImGuizmo::SetOrthographic(false);
+    ImGuizmo::Enable(!ImGui::GetIO().KeyAlt && !capture_);
+
+    std::vector<Instance*> roots;
+    for (Instance* i : editor.selectionRoots()) if (i->hasTransform()) roots.push_back(i);
+    Instance* primary = scene.find(editor.primary());
+    if (editor.tool == Tool::Select || roots.empty() || !primary || !primary->hasTransform()) {
+        gizmoDragging_ = false;
+        return;
+    }
+    const bool scaling = editor.tool == Tool::Scale;
+    if (scaling && !primary->isBasePart()) return; // models and lights have no size
+
+    if (!gizmoDragging_) gizmoMatrix_ = scaling ? primary->worldTransform() : primary->worldFrame();
+    const glm::mat4 before = gizmoMatrix_;
+
+    ImGuizmo::OPERATION op = editor.tool == Tool::Move ? ImGuizmo::TRANSLATE : editor.tool == Tool::Rotate ? ImGuizmo::ROTATE : ImGuizmo::BOUNDS;
+    const ImGuizmo::MODE mode = scaling || settings.localSpace ? ImGuizmo::LOCAL : ImGuizmo::WORLD;
+    const bool snap = settings.snap != ImGui::GetIO().KeyCtrl; // Ctrl flips snapping while dragging
+    const float moveSnap[3] = { settings.snapMove, settings.snapMove, settings.snapMove };
+    const float rotateSnap[3] = { settings.snapRotate, settings.snapRotate, settings.snapRotate };
+    const float scaleSnap[3] = { settings.snapScale, settings.snapScale, settings.snapScale };
+    static const float unitBounds[6] = { -0.5f, -0.5f, -0.5f, 0.5f, 0.5f, 0.5f };
+
+    const float* snapValues = nullptr;
+    if (snap && op == ImGuizmo::TRANSLATE) snapValues = moveSnap;
+    if (snap && op == ImGuizmo::ROTATE) snapValues = rotateSnap;
+    // BOUNDS needs a non-bounds operation too; translate handles stay off (scale only).
+    const bool changed = ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(proj), op, mode, glm::value_ptr(gizmoMatrix_), nullptr,
+                                              snapValues, op == ImGuizmo::BOUNDS ? unitBounds : nullptr, op == ImGuizmo::BOUNDS && snap ? scaleSnap : nullptr);
+    const bool using_ = ImGuizmo::IsUsing();
+
+    if (using_ && !gizmoDragging_) {
+        gizmoDragging_ = true;
+        dragPivotStart_ = before;
+        dragChanges_.clear();
+        dragStartWorld_.clear();
+        for (Instance* r : roots) {
+            dragChanges_.push_back({ r->id, TransformCommand::capture(*r), {} });
+            dragStartWorld_.push_back(r->worldFrame());
+        }
+    }
+    if (gizmoDragging_ && changed) {
+        if (op == ImGuizmo::BOUNDS) {
+            primary->setWorldTransform(gizmoMatrix_);
+            primary->size = glm::max(primary->size, glm::vec3(0.05f));
+            notifyTransform(scene, *primary);
+        } else {
+            const glm::mat4 delta = gizmoMatrix_ * glm::inverse(dragPivotStart_);
+            for (size_t k = 0; k < dragChanges_.size(); ++k) {
+                Instance* i = scene.find(dragChanges_[k].id);
+                if (!i) continue;
+                glm::vec3 p, r, s;
+                TransformUtil::decompose(delta * dragStartWorld_[k], p, r, s);
+                if (op == ImGuizmo::TRANSLATE) r = i->worldRotation(); // pure moves never touch rotation (no drift)
+                i->setWorldFrame(p, r);
+                notifyTransform(scene, *i);
+            }
+        }
+    }
+    if (gizmoDragging_ && !using_) {
+        gizmoDragging_ = false;
+        std::vector<TransformCommand::Change> changes;
+        for (auto& c : dragChanges_) {
+            Instance* i = scene.find(c.id);
+            if (!i) continue;
+            c.after = TransformCommand::capture(*i);
+            if (c.after.position != c.before.position || c.after.rotation != c.before.rotation || c.after.size != c.before.size) changes.push_back(c);
+        }
+        if (!changes.empty()) {
+            const char* verb = op == ImGuizmo::TRANSLATE ? "Move " : op == ImGuizmo::ROTATE ? "Rotate " : "Resize ";
+            const Instance* first = scene.find(changes[0].id);
+            const std::string what = changes.size() == 1 && first ? first->name : std::to_string(changes.size()) + " objects";
+            editor.record(std::make_unique<TransformCommand>(verb + what, std::move(changes)));
+        }
+        dragChanges_.clear();
+    }
+}
+
+void ViewportPanel::handleSelection(UiContext& ui, const glm::mat4& view, const glm::mat4& proj, const GuiSystem* gui) {
+    Editor& editor = ui.editor;
+    if (editor.playing()) {
+        hoveredId_ = 0;
+        pressing_ = marquee_ = guiDragging_ = false;
+        return;
+    }
+    Scene& scene = editor.scene();
+    const ImGuiIO& io = ImGui::GetIO();
+    const glm::vec2 mouse = editor.input().mousePosition() - origin_;
+    // Gizmo handles, the orientation cube and the overlay buttons take clicks first.
+    const bool overGizmo = ImGuizmo::IsOver() || ImGuizmo::IsUsing() || gizmoDragging_ || ImGuizmo::IsViewManipulateHovered() ||
+                           ImGuizmo::IsUsingViewManipulate() || ImGui::IsAnyItemHovered();
+    glm::vec3 rayOrigin, rayDir;
+    editor.camera().ray(mouse, size_, rayOrigin, rayDir);
+
+    // Hover highlight
+    hoveredId_ = 0;
+    if (hovered_ && !capture_ && !overGizmo && !pressing_) {
+        if (gui && guiAt(*gui, mouse)) hoveredId_ = 0;
+        else if (auto hit = pickPart(scene, rayOrigin, rayDir)) hoveredId_ = selectionTarget(hit->part, io.KeyAlt)->id;
+    }
+
+    if (hovered_ && !capture_ && !overGizmo && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+        pressing_ = true;
+        marquee_ = false;
+        pressPos_ = mouse;
+        // Pressing a selected GUI element starts moving it.
+        if (gui) {
+            const uint64_t id = guiAt(*gui, mouse);
+            Instance* element = id ? scene.find(id) : nullptr;
+            if (element && editor.isSelected(id) && element->isGuiObject()) {
+                guiDragging_ = true;
+                guiDragId_ = id;
+                guiDragStart_ = element->guiPosition;
+            }
+        }
+    }
+    if (!pressing_) return;
+
+    if (ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+        const glm::vec2 delta = mouse - pressPos_;
+        if (guiDragging_) {
+            if (glm::length(delta) > kClickSlop || editor.previewing()) {
+                UDim2 p = guiDragStart_;
+                p.xOffset += std::round(delta.x);
+                p.yOffset += std::round(delta.y);
+                editor.previewProperty({ guiDragId_ }, "Position", p);
+            }
+        } else if (!io.KeyAlt && glm::length(delta) > kClickSlop) {
+            marquee_ = true;
+        }
+        if (marquee_) {
+            const ImVec2 a(origin_.x + std::min(pressPos_.x, mouse.x), origin_.y + std::min(pressPos_.y, mouse.y));
+            const ImVec2 b(origin_.x + std::max(pressPos_.x, mouse.x), origin_.y + std::max(pressPos_.y, mouse.y));
+            ImDrawList* draw = ImGui::GetWindowDrawList();
+            draw->AddRectFilled(a, b, theme::u32(theme::color::accent, 0.12f));
+            draw->AddRect(a, b, theme::u32(theme::color::accentHover, 0.9f), 0.0f, 0, 1.0f);
+        }
+        return;
+    }
+
+    // Released
+    pressing_ = false;
+    const bool additive = io.KeyCtrl || io.KeyShift;
+    if (guiDragging_) {
+        guiDragging_ = false;
+        if (editor.previewing()) {
+            editor.commitPreview();
+            return;
+        }
+    }
+    if (marquee_) {
+        marquee_ = false;
+        const glm::vec2 lo = glm::min(pressPos_, mouse), hi = glm::max(pressPos_, mouse);
+        std::vector<uint64_t> ids = additive ? editor.selection() : std::vector<uint64_t>();
+        const glm::mat4 viewProj = proj * view;
+        Scene::forEachDescendant(scene.workspace(), [&](Instance& part) {
+            if (!part.isBasePart() || !part.visible) return;
+            const glm::vec4 clip = viewProj * glm::vec4(part.worldPosition(), 1.0f);
+            if (clip.w <= 0.0f) return;
+            const glm::vec2 ndc = glm::vec2(clip) / clip.w;
+            const glm::vec2 pixel((ndc.x * 0.5f + 0.5f) * size_.x, (0.5f - ndc.y * 0.5f) * size_.y);
+            if (pixel.x < lo.x || pixel.y < lo.y || pixel.x > hi.x || pixel.y > hi.y) return;
+            const uint64_t id = selectionTarget(&part, io.KeyAlt)->id;
+            if (std::find(ids.begin(), ids.end(), id) == ids.end()) ids.push_back(id);
+        });
+        editor.setSelection(ids);
+        return;
+    }
+    if (glm::length(mouse - pressPos_) > kClickSlop) return; // an Alt-orbit, not a click
+
+    Instance* target = nullptr;
+    if (gui) {
+        if (const uint64_t id = guiAt(*gui, mouse)) target = scene.find(id);
+    }
+    if (!target) {
+        if (auto hit = pickPart(scene, rayOrigin, rayDir)) target = selectionTarget(hit->part, io.KeyAlt);
+    }
+    if (!target) {
+        if (!additive) editor.clearSelection();
+        return;
+    }
+    editor.select(target->id, additive ? SelectMode::Toggle : SelectMode::Replace);
+}
+
+void ViewportPanel::handleDrop(UiContext& ui) {
+    if (!ImGui::BeginDragDropTarget()) return;
+    Editor& editor = ui.editor;
+    if (const ImGuiPayload* p = ImGui::AcceptDragDropPayload(kAssetPayload)) {
+        const std::string path(static_cast<const char*>(p->Data));
+        const glm::vec2 mouse = editor.input().mousePosition() - origin_;
+        Instance* target = nullptr;
+        if (!editor.playing() && editor.settings().showGui) {
+            GuiSystem gui(editor.scene());
+            gui.layout(size_);
+            if (const uint64_t id = guiAt(gui, mouse)) target = editor.scene().find(id);
+        }
+        if (!target) {
+            glm::vec3 o, d;
+            editor.camera().ray(mouse, size_, o, d);
+            if (auto hit = pickPart(editor.scene(), o, d)) target = hit->part;
+        }
+        dropAsset(editor, path, target);
+    }
+    ImGui::EndDragDropTarget();
+}
+
+void ViewportPanel::drawOverlays(UiContext& ui, const glm::mat4& view, const glm::mat4& proj) {
+    Editor& editor = ui.editor;
+    EditorSettings& settings = editor.settings();
+    ImDrawList* draw = ImGui::GetWindowDrawList();
+    const float pad = ImGui::GetStyle().WindowPadding.x;
+    const ImVec2 a(origin_.x, origin_.y), b(origin_.x + size_.x, origin_.y + size_.y);
+
+    // Frame rate
+    ++frames_;
+    fpsTimer_ += ui.dt;
+    if (fpsTimer_ >= 0.5f) {
+        fps_ = frames_ / fpsTimer_;
+        frames_ = 0;
+        fpsTimer_ = 0.0f;
+    }
+
+    // Playing: a coloured frame around the view.
+    if (GameSession* s = editor.session()) {
+        const ImVec4 c = s->paused() ? theme::color::warning : theme::color::success;
+        draw->AddRect(a, b, theme::u32(c, 0.9f), 0.0f, 0, 2.0f);
+    }
+
+    // ---- view options (top right)
+    const float button = ImGui::GetFrameHeight();
+    ImGui::SetCursorScreenPos(ImVec2(b.x - button - pad, a.y + pad));
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.08f, 0.08f, 0.10f, 0.65f));
+    if (theme::iconButton(ICON_FA_EYE, "View options")) ImGui::OpenPopup("##viewOptions");
+    ImGui::PopStyleColor();
+    if (ImGui::BeginPopup("##viewOptions")) {
+        ImGui::SeparatorText("Show");
+        ImGui::Checkbox("Grid", &settings.showGrid);
+        ImGui::Checkbox("GUI while editing", &settings.showGui);
+        ImGui::Checkbox("Shadows", &settings.shadows);
+        ImGui::Checkbox("Wireframe", &settings.wireframe);
+        ImGui::Checkbox("Statistics", &settings.showStats);
+        ImGui::SeparatorText("Camera");
+        ImGui::SetNextItemWidth(ImGui::GetFontSize() * 10.0f);
+        ImGui::SliderFloat("Speed", &settings.cameraSpeed, 2.0f, 200.0f, "%.0f studs/s", ImGuiSliderFlags_Logarithmic);
+        ImGui::SetNextItemWidth(ImGui::GetFontSize() * 10.0f);
+        ImGui::SliderFloat("Field of view", &editor.camera().fieldOfView, 30.0f, 110.0f, "%.0f deg");
+        ImGui::SetNextItemWidth(ImGui::GetFontSize() * 10.0f);
+        ImGui::DragFloat("Grid step", &settings.gridStep, 0.05f, 0.1f, 64.0f, "%.2f");
+        ImGui::EndPopup();
+    }
+
+    // ---- orientation cube (edit mode): click a face to look along it
+    if (!editor.playing()) {
+        const float cube = ImGui::GetFontSize() * 5.5f;
+        glm::mat4 v = editor.camera().view();
+        const glm::mat4 old = v;
+        ImGuizmo::ViewManipulate(glm::value_ptr(v), 12.0f, ImVec2(b.x - cube - pad, a.y + button + pad * 2.0f), ImVec2(cube, cube), 0x00000000);
+        if (v != old) {
+            const glm::mat4 world = glm::inverse(v);
+            const glm::vec3 position(world[3]);
+            const glm::vec3 forward = -glm::normalize(glm::vec3(world[2]));
+            const float pitch = glm::degrees(std::asin(std::clamp(forward.y, -1.0f, 1.0f)));
+            const float yaw = glm::degrees(std::atan2(forward.z, forward.x));
+            editor.camera().set(position, yaw, pitch);
+        }
+    }
+
+    // ---- statistics (bottom left)
+    if (settings.showStats) {
+        const RenderStats& st = ui.renderer.stats();
+        char text[256];
+        int n = std::snprintf(text, sizeof(text), "%.0f FPS  %.1f ms\n%d parts  %d draws  %dk tris", fps_, fps_ > 0.0f ? 1000.0f / fps_ : 0.0f,
+                              st.parts, st.drawCalls, st.triangles / 1000);
+        if (GameSession* s = editor.session()) std::snprintf(text + n, sizeof(text) - n, "\ngame time %.1f s", s->time());
+        const ImVec2 t = ImGui::CalcTextSize(text);
+        const ImVec2 p(a.x + pad, b.y - t.y - pad * 1.5f);
+        draw->AddRectFilled(ImVec2(p.x - 6.0f, p.y - 4.0f), ImVec2(p.x + t.x + 6.0f, p.y + t.y + 4.0f), IM_COL32(10, 10, 14, 150), 5.0f);
+        draw->AddText(p, IM_COL32(220, 220, 230, 230), text);
+    }
+
+    // ---- hints
+    if (!editor.hasScene()) return;
+    if (editor.playing()) {
+        if (!focused_) {
+            const char* text = ICON_FA_GAMEPAD "  Click the view to control the game";
+            const ImVec2 t = ImGui::CalcTextSize(text);
+            const ImVec2 p(a.x + (size_.x - t.x) * 0.5f, a.y + pad * 2.0f);
+            draw->AddRectFilled(ImVec2(p.x - 12.0f, p.y - 6.0f), ImVec2(p.x + t.x + 12.0f, p.y + t.y + 6.0f), IM_COL32(10, 10, 14, 170), 8.0f);
+            draw->AddText(p, IM_COL32(235, 235, 245, 255), text);
+        }
+    } else if (editor.scene().workspace().children.empty()) {
+        const char* text = "The scene is empty. Insert a part from the toolbar, or drag files from the Assets panel.";
+        const ImVec2 t = ImGui::CalcTextSize(text);
+        draw->AddText(ImVec2(a.x + (size_.x - t.x) * 0.5f, a.y + size_.y * 0.45f), theme::u32(theme::color::textDim), text);
+    }
+    (void)view;
+    (void)proj;
+}
+
+} // namespace rift

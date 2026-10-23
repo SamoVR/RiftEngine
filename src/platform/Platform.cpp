@@ -5,6 +5,7 @@
 #ifdef _WIN32
 #include <Windows.h>
 #include <ShObjIdl.h>
+#include <ShlObj.h>
 #include <shellapi.h>
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3.h>
@@ -172,6 +173,31 @@ void setClipboard(const std::string& text) {
     CloseClipboard();
 }
 
+std::string documentsFolder() {
+    PWSTR path = nullptr;
+    std::string out;
+    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Documents, 0, nullptr, &path))) out = narrow(path);
+    CoTaskMemFree(path);
+    return out;
+}
+
+bool moveToRecycleBin(const std::string& path) {
+    // SHFileOperation wants a double-NUL-terminated list.
+    std::wstring from = widen(path);
+    from.push_back(L'\0');
+    SHFILEOPSTRUCTW op{};
+    op.hwnd = g_owner;
+    op.wFunc = FO_DELETE;
+    op.pFrom = from.c_str();
+    op.fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI;
+    const int r = SHFileOperationW(&op);
+    if (r != 0 || op.fAnyOperationsAborted) {
+        LOG_WARN("Platform", "Could not move " + path + " to the Recycle Bin");
+        return false;
+    }
+    return true;
+}
+
 #else // non-Windows: not supported (RIFT targets Windows); keep the build working for tests.
 void setMainWindow(GLFWwindow*) {}
 std::string openFileDialog(const std::string&, const std::vector<FileFilter>&, const std::string&) { return {}; }
@@ -182,6 +208,8 @@ bool askYesNo(const std::string&, const std::string&) { return false; }
 void revealInExplorer(const std::string&) {}
 void openWithShell(const std::string&) {}
 void setClipboard(const std::string&) {}
+std::string documentsFolder() { return {}; }
+bool moveToRecycleBin(const std::string&) { return false; }
 #endif
 
 } // namespace Platform

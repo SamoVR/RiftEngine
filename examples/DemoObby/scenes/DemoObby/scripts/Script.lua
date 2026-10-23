@@ -1,8 +1,9 @@
--- Lua script. It runs while the game is playing (Game > Play / F5).
--- script.Parent is the part this script is attached to (or workspace).
+-- Prints what touches this part (at most once per second).
+local part = script.Parent
+local last = -1
 
-
-
-script.Parent.Touched:Connect(function(other)
-	print("fred is gay")
+part.Touched:Connect(function(hit)
+    if time() - last < 1 then return end
+    last = time()
+    print(hit:GetFullName() .. " touched " .. part.Name)
 end)

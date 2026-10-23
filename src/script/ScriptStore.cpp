@@ -1,4 +1,5 @@
 #include "script/ScriptStore.h"
+#include "core/Paths.h"
 #include "core/Log.h"
 #include <algorithm>
 #include <cctype>
@@ -15,6 +16,11 @@ void ScriptStore::reset(const std::string& sceneDir) {
 }
 
 std::string ScriptStore::normalize(const std::string& relPath) {
+    // "project:scripts/X.lua" -> a file in the project's shared scripts folder.
+    if (relPath.rfind(kProjectPrefix, 0) == 0) {
+        const std::string rest = normalize(relPath.substr(std::char_traits<char>::length(kProjectPrefix)));
+        return rest.empty() ? std::string() : std::string(kProjectPrefix) + rest;
+    }
     std::string p = relPath;
     std::replace(p.begin(), p.end(), '\\', '/');
     if (p.empty() || p.front() == '/' || p.find(':') != std::string::npos) return "";
@@ -36,7 +42,10 @@ bool ScriptStore::isValidPath(const std::string& relPath) {
 }
 
 fs::path ScriptStore::diskPath(const std::string& relPath) const {
-    return fs::path(root_) / fs::path(relPath);
+    if (relPath.rfind(kProjectPrefix, 0) == 0) {
+        return fs::path(Paths::fromUtf8(projectRoot_)) / Paths::fromUtf8(relPath.substr(std::char_traits<char>::length(kProjectPrefix)));
+    }
+    return fs::path(Paths::fromUtf8(root_)) / Paths::fromUtf8(relPath);
 }
 
 bool ScriptStore::readFile(const fs::path& p, std::string& out) {
@@ -79,7 +88,8 @@ bool ScriptStore::load(const std::string& relPath) {
     const fs::path p = diskPath(key);
     // An unsaved scene has no folder yet, so there is nothing on disk to read
     // (and a relative path would wrongly resolve against the working directory).
-    if (root_.empty() || !readFile(p, e.text)) {
+    const bool hasRoot = key.rfind(kProjectPrefix, 0) == 0 ? !projectRoot_.empty() : !root_.empty();
+    if (!hasRoot || !readFile(p, e.text)) {
         LOG_WARN("ScriptStore", "Script file not found: " + p.string());
         return false;
     }

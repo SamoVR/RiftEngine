@@ -31,6 +31,10 @@ public:
     // Forget everything and point at a new scene folder.
     void reset(const std::string& sceneDir);
     const std::string& root() const { return root_; }
+    // The project folder: "project:scripts/X.lua" paths live there (shared modules).
+    static constexpr const char* kProjectPrefix = "project:";
+    void setProjectRoot(const std::string& projectDir) { projectRoot_ = projectDir; }
+    const std::string& projectRoot() const { return projectRoot_; }
 
     // True if `relPath` is a safe relative path ending in .lua.
     static bool isValidPath(const std::string& relPath);
@@ -70,6 +74,7 @@ public:
 
 private:
     std::string root_;
+    std::string projectRoot_;
     std::map<std::string, Entry> entries_;
 
     std::filesystem::path diskPath(const std::string& relPath) const;

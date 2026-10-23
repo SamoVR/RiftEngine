@@ -1,0 +1,212 @@
+#pragma once
+//
+// Panels.h -- the editor's windows. Each panel draws itself with Dear ImGui
+// and changes the scene only through Editor (so everything is undoable).
+//
+//   ViewportPanel      the 3D view: camera, picking, gizmos, play mode
+//   ExplorerPanel      the instance tree: select, rename, drag to reparent
+//   PropertiesPanel    reflected properties, attributes and tags
+//   OutputPanel        engine and game log
+//   ScriptEditorPanel  Lua editing, one dockable tab per script
+//   AssetBrowserPanel  the project's files, drag them into the scene
+//
+#include "editor/Editor.h"
+#include "game/GameSession.h"
+#include "render/Framebuffer.h"
+
+#include <imgui.h>
+#include <filesystem>
+#include <memory>
+#include <string>
+#include <vector>
+
+struct GLFWwindow;
+
+namespace rift {
+
+class Renderer;
+class GuiSystem;
+
+// What every panel can reach.
+struct UiContext {
+    Editor& editor;
+    Renderer& renderer;
+    GLFWwindow* window = nullptr;
+    float dt = 0.0f;
+};
+
+// Drag and drop payload types.
+inline constexpr const char* kAssetPayload = "RIFT_ASSET";        // stored asset path (UTF-8, NUL-terminated)
+inline constexpr const char* kInstancesPayload = "RIFT_INSTANCES"; // uint64_t ids
+
+// The Insert menu's items (main menu, Explorer context menu, toolbar).
+void drawInsertMenuItems(Editor& editor);
+
+// An asset file dropped onto an instance (or onto nothing): an image becomes
+// the part's Texture / the GUI image, a sound becomes a Sound inside it, a
+// scene opens. Undoable.
+void dropAsset(Editor& editor, const std::string& storedPath, Instance* target);
+
+// "Workspace.Part.Script:12: message" -> 12 (1-based), or -1. `chunk` is the
+// script's full name (the chunk name scripts run under); empty = any.
+int scriptErrorLine(const std::string& message, const std::string& chunk);
+
+// What kind of file an asset is, by extension.
+enum class AssetKind { Folder, Image, Sound, Model, Script, Scene, Other };
+AssetKind assetKind(const std::filesystem::path& path);
+const char* assetIcon(AssetKind kind);
+
+// ---------------------------------------------------------------------------
+class ViewportPanel {
+public:
+    void draw(UiContext& ui);
+    // The view the game sees (from the last frame's layout), for GameSession::update.
+    ViewportInput gameInput(const Editor& editor) const;
+    // True while the camera or the game holds the mouse (the cursor is hidden).
+    bool capturingMouse() const { return capture_; }
+    bool focused() const { return focused_; }
+    void focus() { focusRequest_ = true; }
+
+private:
+    Framebuffer framebuffer_;
+    glm::vec2 origin_{ 0.0f }, size_{ 1.0f };
+    bool hovered_ = false, focused_ = false, capture_ = false, focusRequest_ = false;
+    uint64_t hoveredId_ = 0;
+
+    // Click / box selection
+    bool pressing_ = false;
+    glm::vec2 pressPos_{ 0.0f };
+    bool marquee_ = false;
+
+    // Gizmo drag
+    bool gizmoDragging_ = false;
+    std::vector<TransformCommand::Change> dragChanges_;
+    std::vector<glm::mat4> dragStartWorld_;
+    glm::mat4 dragPivotStart_{ 1.0f };
+    glm::mat4 gizmoMatrix_{ 1.0f };
+
+    // GUI element drag (moving a Frame / label with the mouse while editing)
+    bool guiDragging_ = false;
+    uint64_t guiDragId_ = 0;
+    UDim2 guiDragStart_{};
+
+    // Stats
+    float fpsTimer_ = 0.0f, fps_ = 0.0f;
+    int frames_ = 0;
+
+    void handleSelection(UiContext& ui, const glm::mat4& view, const glm::mat4& proj, const GuiSystem* gui);
+    void drawGizmo(UiContext& ui, const glm::mat4& view, const glm::mat4& proj);
+    void handleDrop(UiContext& ui);
+    void drawOverlays(UiContext& ui, const glm::mat4& view, const glm::mat4& proj);
+};
+
+// ---------------------------------------------------------------------------
+class ExplorerPanel {
+public:
+    void draw(UiContext& ui, bool* open);
+    void beginRename(uint64_t id) { renameRequest_ = id; }
+
+private:
+    char filter_[128] = {};
+    uint64_t renaming_ = 0, renameRequest_ = 0;
+    std::string renameBuffer_;
+    bool renameFocus_ = false;
+    uint64_t lastPrimary_ = 0;      // reveal the selection when it changes elsewhere
+    uint64_t revealId_ = 0;
+    bool selectedHere_ = false;
+    std::vector<uint64_t> visibleOrder_, lastOrder_; // rows in draw order (Shift+click ranges)
+    uint64_t rangeAnchor_ = 0;
+
+    void drawNode(UiContext& ui, Instance& node, int depth);
+    void drawFiltered(UiContext& ui);
+    void contextMenu(UiContext& ui, Instance& node);
+    void clickRow(UiContext& ui, Instance& node);
+    void dropTarget(UiContext& ui, Instance& node);
+};
+
+// ---------------------------------------------------------------------------
+class PropertiesPanel {
+public:
+    void draw(UiContext& ui, bool* open);
+
+private:
+    char filter_[96] = {};
+    char newAttrName_[64] = {};
+    int newAttrType_ = 0;
+    char newTag_[64] = {};
+    std::vector<AttributeCommand::Change> attrBefore_; // values when an attribute drag started
+
+    void drawProperty(UiContext& ui, const std::vector<Instance*>& list, const PropertyInfo& prop);
+    void drawAttributes(UiContext& ui, const std::vector<Instance*>& list);
+    void drawTags(UiContext& ui, Instance& instance);
+};
+
+// ---------------------------------------------------------------------------
+class OutputPanel {
+public:
+    void draw(UiContext& ui, bool* open);
+
+private:
+    bool showInfo_ = true, showWarnings_ = true, showErrors_ = true;
+    bool autoScroll_ = true;
+    char filter_[128] = {};
+    uint64_t lastCounter_ = 0;
+};
+
+// ---------------------------------------------------------------------------
+class ScriptEditorPanel {
+public:
+    ScriptEditorPanel();
+    ~ScriptEditorPanel();
+    // Opens new tabs for Editor::scriptRequests and draws every open script,
+    // docked next to the viewport (`dockId`).
+    void draw(UiContext& ui, ImGuiID dockId);
+    bool anyFocused() const { return focused_; }
+    void closeAll();
+    size_t openCount() const { return docs_.size(); }
+
+    struct Doc;
+private:
+    std::vector<std::unique_ptr<Doc>> docs_;
+    std::filesystem::path scenePath_; // tabs belong to the scene they were opened in
+    bool focused_ = false;
+
+    void open(UiContext& ui, const Editor::ScriptRequest& request);
+    bool drawDoc(UiContext& ui, Doc& doc, ImGuiID dockId); // false: closed
+};
+
+// ---------------------------------------------------------------------------
+class AssetBrowserPanel {
+public:
+    void draw(UiContext& ui, bool* open);
+    void refresh() { dirty_ = true; }
+
+private:
+    struct Entry {
+        std::filesystem::path path;
+        std::string name;
+        AssetKind kind = AssetKind::Other;
+        uintmax_t size = 0;
+    };
+    std::filesystem::path root_, folder_;
+    std::vector<Entry> entries_;
+    bool dirty_ = true;
+    float refreshTimer_ = 0.0f;
+    float tileSize_ = 84.0f;
+    char filter_[96] = {};
+    std::filesystem::path selected_;
+    std::filesystem::path renaming_;
+    std::string renameBuffer_;
+    bool renameFocus_ = false;
+    std::filesystem::path pendingDelete_;
+
+    void scan();
+    void drawFolderTree(UiContext& ui, const std::filesystem::path& dir);
+    void drawTile(UiContext& ui, const Entry& e);
+    void activate(UiContext& ui, const Entry& e);
+    void itemMenu(UiContext& ui, const Entry& e);
+    void backgroundMenu(UiContext& ui);
+    void importFiles(UiContext& ui);
+};
+
+} // namespace rift

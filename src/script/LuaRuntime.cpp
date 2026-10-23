@@ -476,11 +476,16 @@ sol::object LuaRuntime::Impl::requireModule(const sol::object& target, lua_State
         return runModule("id:" + std::to_string(m->id), m->source, m->fullName(), caller);
     }
     if (target.is<std::string>()) {
-        // require("Utils") / require("lib.Utils") loads scripts/Utils.lua next to the scene.
+        // require("Utils") / require("lib.Utils") loads scripts/Utils.lua next to
+        // the scene, or else from the project's shared scripts folder.
         std::string name = target.as<std::string>();
         std::string path = name;
         std::replace(path.begin(), path.end(), '.', '/');
-        return runModule("name:" + name, "scripts/" + path + ".lua", name, caller);
+        const std::string local = "scripts/" + path + ".lua";
+        const std::string shared = std::string(ScriptStore::kProjectPrefix) + "scripts/" + path + ".lua";
+        ScriptStore& store = session.scripts();
+        const bool useLocal = store.has(local) || store.load(local) || !store.load(shared);
+        return runModule("name:" + name, useLocal ? local : shared, name, caller);
     }
     fail("require() expects a ModuleScript or a module name");
 }

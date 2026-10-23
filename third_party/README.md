@@ -16,7 +16,11 @@ Everything RIFT builds from source, trimmed to the files that are compiled
 | sol2 | 3.2.3 | MIT | Lua bindings |
 | Jolt Physics | 5.6.0 | MIT | Physics (CPU only; Hair, compute and shader folders removed) |
 | doctest | 2.5.3 | MIT | Unit tests |
-| Font Awesome (icons header + fonts) | 5 | SIL OFL 1.1 / MIT | Editor icons |
+| miniaudio | 0.11.25 | public domain / MIT-0 | Audio playback (compiled in src/audio/AudioSystem.cpp) |
+| stb_vorbis | 1.22 | public domain / MIT | .ogg decoding for miniaudio |
+| ImGuiColorTextEdit (goossens fork) | master (2026) | MIT | Script editor (Lua highlighting, find, markers) |
+| Font Awesome Free (fonts in data/fonts, header here) | 6.7.2 | SIL OFL 1.1 (fonts), MIT (header: IconFontCppHeaders, zlib) | Editor icons |
+| Inter, JetBrains Mono (data/fonts) | 4.1, 2.304 | SIL OFL 1.1 | Editor UI and code fonts |
 | Discord Game SDK | 3.x | Discord SDK licence | Optional Rich Presence (delay-loaded DLL) |
 
 ## Local modifications

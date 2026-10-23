@@ -500,7 +500,8 @@ void GameSession::updateSounds() {
             audio->setLooped(it->second.handle, s->looped);
             if (s->parent && s->parent->isBasePart()) audio->setPosition(it->second.handle, s->parent->worldPosition());
             if (!it->second.paused && !audio->isPlaying(it->second.handle)) {
-                s->playing = false; // ended
+                audio->stop(it->second.handle); // release the voice
+                s->playing = false;             // ended
                 lua_->onSoundEnded(*s);
                 it = sounds_.erase(it);
                 continue;
