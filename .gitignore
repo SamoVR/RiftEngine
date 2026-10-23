@@ -24,6 +24,7 @@ Release/
 .vs/
 .vscode/
 .claude/
+.gallery.json
 *.vcxproj.user
 *.suo
 *.user

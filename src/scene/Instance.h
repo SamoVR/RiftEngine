@@ -116,11 +116,11 @@ struct Instance {
     float fallenPartsHeight = -60.0f;     // Workspace: parts below this are destroyed
     float clockTime = 14.0f;              // Lighting: 0..24, drives the sun
     Color3 ambient{ 0.42f, 0.44f, 0.48f };
-    Color3 skyColor{ 0.36f, 0.58f, 0.92f };
-    Color3 horizonColor{ 0.78f, 0.86f, 0.96f };
+    Color3 skyColor{ 0.30f, 0.53f, 0.92f };
+    Color3 horizonColor{ 0.70f, 0.80f, 0.94f };
     Color3 fogColor{ 0.78f, 0.86f, 0.96f };
-    float fogStart = 120.0f;
-    float fogEnd = 600.0f;
+    float fogStart = 0.0f;                // Roblox defaults: no fog until FogEnd is lowered
+    float fogEnd = 100000.0f;
     float exposure = 1.0f;
     float walkSpeed = 8.0f;               // StarterPlayer, Humanoid
     float jumpPower = 12.0f;

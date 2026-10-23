@@ -9,21 +9,6 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
-namespace {
-    // The original only distinguished 4 channels (RGBA) from "everything
-    // else" (RGB), so a 1- or 2-channel image was uploaded as RGB and read
-    // past its pixel data. All four stb outputs are mapped explicitly now.
-    GLenum formatForChannels(int channels) {
-        switch (channels) {
-            case 1: return GL_RED;
-            case 2: return GL_RG;
-            case 3: return GL_RGB;
-            case 4: return GL_RGBA;
-            default: return GL_RGB;
-        }
-    }
-}
-
 std::string Texture::normalizePath(const std::string& path) {
     std::string p = path;
     std::replace(p.begin(), p.end(), '\\', '/');
@@ -52,7 +37,7 @@ Texture::Texture(const std::string& path) {
 
     int width, height, nrChannels;
     stbi_set_flip_vertically_on_load(true);
-    unsigned char* data = stbi_load(loadPath.c_str(), &width, &height, &nrChannels, 0);
+    unsigned char* data = stbi_load(loadPath.c_str(), &width, &height, &nrChannels, 4); // always RGBA: grey / grey+alpha images look right
 
     if (!data) {
         // textureID stays 0 -> isValid() is false and the destructor won't
@@ -61,6 +46,8 @@ Texture::Texture(const std::string& path) {
         return;
     }
 
+    width_ = width;
+    height_ = height;
     glGenTextures(1, &textureID);
     glBindTexture(GL_TEXTURE_2D, textureID);
 
@@ -73,9 +60,14 @@ Texture::Texture(const std::string& path) {
     // alignment of 4 would corrupt the upload for odd widths.
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
-    const GLenum format = formatForChannels(nrChannels);
-    glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
     glGenerateMipmap(GL_TEXTURE_2D);
+    if (GLEW_EXT_texture_filter_anisotropic) {
+        // Floors and walls seen at a shallow angle stay sharp.
+        GLfloat maxAniso = 1.0f;
+        glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &maxAniso);
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, std::min(8.0f, maxAniso));
+    }
 
     stbi_image_free(data);
 }
@@ -90,7 +82,7 @@ void Texture::release() {
 }
 
 Texture::Texture(Texture&& other) noexcept
-    : textureID(other.textureID), filePath(std::move(other.filePath)) {
+    : textureID(other.textureID), filePath(std::move(other.filePath)), width_(other.width_), height_(other.height_) {
     other.textureID = 0;
 }
 
@@ -99,6 +91,8 @@ Texture& Texture::operator=(Texture&& other) noexcept {
         release();
         textureID = other.textureID;
         filePath = std::move(other.filePath);
+        width_ = other.width_;
+        height_ = other.height_;
         other.textureID = 0;
     }
     return *this;

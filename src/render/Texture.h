@@ -28,10 +28,14 @@ public:
     // False if the image failed to load. Callers should check this instead
     // of binding a texture that silently contains nothing.
     bool isValid() const { return textureID != 0; }
+    GLuint id() const { return textureID; }
+    int width() const { return width_; }
+    int height() const { return height_; }
 
 private:
     void release();
 
     GLuint textureID = 0;
     std::string filePath;
+    int width_ = 0, height_ = 0;
 };
