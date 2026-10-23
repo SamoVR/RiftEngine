@@ -4,6 +4,7 @@
 #include "core/Paths.h"
 #include "core/Version.h"
 #include "platform/Platform.h"
+#include "project/Exporter.h"
 #include "render/Texture.h"
 
 #include "IconsFontAwesome6.h"
@@ -11,6 +12,7 @@
 #include <imgui_internal.h>
 #include <misc/cpp/imgui_stdlib.h>
 #include <algorithm>
+#include <cstdio>
 #include <cstring>
 
 namespace rift {
@@ -72,6 +74,7 @@ namespace {
         { "Drag on empty space", "Box select" },
         { "Ctrl+N / Ctrl+Shift+N / Ctrl+O", "New scene / New project / Open project" },
         { "Ctrl+,", "Preferences" },
+        { "Ctrl+B / Ctrl+F5", "Build the game / Run it in the player" },
         { "Esc (while playing)", "Give the mouse back to the editor" },
     };
 }
@@ -124,6 +127,49 @@ void EditorApp::openSceneNameDialog(bool saveAs) {
     sceneNameIsSaveAs_ = saveAs;
     std::strncpy(sceneName_, saveAs ? (editor_->sceneName() + " Copy").c_str() : "NewScene", sizeof(sceneName_) - 1);
     showSceneName_ = true;
+}
+
+// ============================================================================
+//  Build Game / Run in Player
+// ============================================================================
+void EditorApp::openBuildDialog() {
+    if (!editor_->hasProject()) return;
+    const Project& p = editor_->project();
+    buildFolder_ = Paths::toUtf8(p.root() / "Builds" / Paths::fromUtf8(executableName(p.settings().name)));
+    showBuild_ = true;
+}
+
+void EditorApp::buildGame() {
+    Editor& e = *editor_;
+    // The build is made from the files on disk.
+    if (e.isDirty() && !e.saveScene()) return;
+    ExportOptions options;
+    options.outputFolder = Paths::fromUtf8(buildFolder_);
+    options.playerExe = Paths::exeDir() / "RiftPlayer.exe";
+    options.engineData = Paths::engineData();
+    const ExportResult r = exportGame(e.project(), options);
+    if (!r.ok) {
+        e.notify("Build failed: " + r.error, NoticeLevel::Error);
+        return;
+    }
+    char size[32];
+    std::snprintf(size, sizeof(size), "%.1f MB", r.bytes / (1024.0 * 1024.0));
+    e.notify("Built " + e.project().settings().name + " (" + std::to_string(r.files) + " files, " + size + ")", NoticeLevel::Success);
+    if (buildOpenFolder_) Platform::revealInExplorer(Paths::toUtf8(r.executable));
+    if (buildRun_) Platform::launch(Paths::toUtf8(r.executable), {}, Paths::toUtf8(r.executable.parent_path()));
+}
+
+void EditorApp::runInPlayer() {
+    Editor& e = *editor_;
+    if (!e.hasProject()) return;
+    if (e.isDirty() && !e.saveScene()) return;
+    const fs::path player = Paths::exeDir() / "RiftPlayer.exe";
+    std::error_code ec;
+    if (!fs::exists(player, ec)) {
+        e.notify("RiftPlayer.exe is missing next to the editor; build the RiftPlayer project", NoticeLevel::Error);
+        return;
+    }
+    Platform::launch(Paths::toUtf8(player), { Paths::toUtf8(e.project().root()) }, Paths::toUtf8(Paths::exeDir()));
 }
 
 // ============================================================================
@@ -412,6 +458,39 @@ void EditorApp::drawDialogs() {
             if (ImGui::Button("Cancel", ImVec2(buttonWidth(), 0.0f))) showProjectSettings_ = false;
         }
         ImGui::End();
+    }
+
+    // ---- build game
+    if (showBuild_) {
+        ImGui::OpenPopup("Build game");
+        showBuild_ = false;
+    }
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    if (ImGui::BeginPopupModal("Build game", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings)) {
+        const float w = fs_ * 32.0f;
+        ImGui::PushTextWrapPos(w);
+        ImGui::TextUnformatted("Makes a folder with the game, ready to zip and share: the game's .exe, the engine files it needs and the project's scenes, scripts and assets. Nothing else has to be installed to play it.");
+        ImGui::PopTextWrapPos();
+        ImGui::Spacing();
+        ImGui::TextUnformatted("Folder");
+        ImGui::SetNextItemWidth(w - ImGui::GetFrameHeight() - ImGui::GetStyle().ItemInnerSpacing.x);
+        ImGui::InputText("##buildFolder", &buildFolder_);
+        ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
+        if (ImGui::Button(ICON_FA_FOLDER_OPEN "##pickBuild", ImVec2(ImGui::GetFrameHeight(), 0.0f))) {
+            const std::string picked = Platform::pickFolderDialog("Where should the game go?", buildFolder_);
+            if (!picked.empty()) buildFolder_ = picked;
+        }
+        ImGui::TextDisabled("%s.exe", executableName(e.project().settings().name).c_str());
+        ImGui::Checkbox("Show the folder afterwards", &buildOpenFolder_);
+        ImGui::Checkbox("Run the game afterwards", &buildRun_);
+        ImGui::Spacing();
+        if (ImGui::Button(ICON_FA_BOX_OPEN "  Build", ImVec2(buttonWidth(), 0.0f))) {
+            ImGui::CloseCurrentPopup();
+            buildGame();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(buttonWidth(), 0.0f)) || ImGui::IsKeyPressed(ImGuiKey_Escape)) ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
     }
 
     // ---- shortcuts

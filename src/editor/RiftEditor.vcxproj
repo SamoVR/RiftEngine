@@ -68,6 +68,12 @@
     <ProjectReference Include="..\RiftCore.vcxproj">
       <Project>{F40B43EB-B20F-4510-A860-319E2118C478}</Project>
     </ProjectReference>
+    <!-- Built first so File > Build Game finds RiftPlayer.exe next to the editor. -->
+    <ProjectReference Include="..\player\RiftPlayer.vcxproj">
+      <Project>{3C8E2A71-5B94-4D2E-9F61-7A0D4C2B8E15}</Project>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
     <ProjectReference Include="..\..\third_party\ThirdParty.vcxproj">
       <Project>{89CE27C0-4D91-4FD6-9B81-C95A82E68A63}</Project>
     </ProjectReference>

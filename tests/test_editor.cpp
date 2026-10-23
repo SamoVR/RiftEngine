@@ -6,6 +6,7 @@
 #include "platform/Input.h"
 #include "core/Paths.h"
 #include "scene/SceneIO.h"
+#include "project/Exporter.h"
 
 #include <glm/gtc/epsilon.hpp>
 #include <filesystem>
@@ -332,4 +333,47 @@ TEST_CASE("projects: templates and settings round trip") {
     CHECK(Project::findRoot(project.startScenePath()) == fs::absolute(p.folder));
     // Creating over an existing project fails.
     CHECK_FALSE(Project::create(p.parent, "Test Game", Project::Template::Empty, nullptr, &error));
+}
+
+TEST_CASE("exporting a game makes a self-contained folder") {
+    TempProject p(Project::Template::Obby);
+    Project project;
+    REQUIRE(project.load(p.folder));
+    // A stand-in player executable (the real one is copied the same way).
+    const fs::path fakePlayer = p.parent / "RiftPlayer.exe";
+    std::ofstream(fakePlayer, std::ios::binary) << "MZ";
+    fs::create_directories(p.folder / "scenes" / "Main");
+    std::ofstream(p.folder / "scenes" / "Main" / "scene.autosave.json") << "{}";
+
+    ExportOptions options;
+    options.outputFolder = p.parent / "Build";
+    options.playerExe = fakePlayer;
+    options.engineData = Paths::engineData();
+    ExportResult r = exportGame(project, options);
+    REQUIRE_MESSAGE(r.ok, r.error);
+    CHECK(fs::exists(options.outputFolder / "Test Game.exe"));
+    CHECK(fs::exists(options.outputFolder / "data" / "shaders" / "part.frag"));
+    CHECK(fs::exists(options.outputFolder / "data" / "fonts" / "Inter-Regular.ttf"));
+    CHECK(fs::exists(options.outputFolder / "game" / "project.json"));
+    CHECK(fs::exists(options.outputFolder / "game" / "scenes" / "Main" / "scene.json"));
+    CHECK(fs::exists(options.outputFolder / "game" / "scenes" / "Main" / "scripts" / "FinishScript.lua"));
+    CHECK_FALSE(fs::exists(options.outputFolder / "game" / "scenes" / "Main" / "scene.autosave.json"));
+
+    // Building again replaces the earlier build.
+    r = exportGame(project, options);
+    CHECK_MESSAGE(r.ok, r.error);
+
+    // A folder with other things in it is refused (and left alone).
+    const fs::path other = p.parent / "Other";
+    fs::create_directories(other);
+    std::ofstream(other / "keep.txt") << "mine";
+    options.outputFolder = other;
+    r = exportGame(project, options);
+    CHECK_FALSE(r.ok);
+    CHECK(fs::exists(other / "keep.txt"));
+
+    // Never into the project's own folders.
+    options.outputFolder = p.folder / "assets" / "build";
+    CHECK_FALSE(exportGame(project, options).ok);
+    CHECK(executableName("My: Game?") == "My Game");
 }

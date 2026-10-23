@@ -313,7 +313,7 @@ void EditorApp::handleShortcuts() {
 
     // Play controls work everywhere (even while the game has the keyboard).
     if (e.hasScene()) {
-        if (key(ImGuiKey_F5) && !e.playing()) play();
+        if (key(ImGuiKey_F5) && !e.playing() && !ImGui::GetIO().KeyCtrl) play();
         if (key(ImGuiMod_Shift | ImGuiKey_F5) && e.playing()) e.stop();
         if (key(ImGuiKey_F6) && e.playing()) e.session()->setPaused(!e.session()->paused());
     }
@@ -324,6 +324,8 @@ void EditorApp::handleShortcuts() {
     if (key(ImGuiMod_Ctrl | ImGuiKey_O)) openProjectDialog();
     if (key(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_N)) openNewProject();
     if (key(ImGuiMod_Ctrl | ImGuiKey_Comma)) showPreferences_ = true;
+    if (key(ImGuiMod_Ctrl | ImGuiKey_B) && e.hasProject() && !e.playing()) openBuildDialog();
+    if (key(ImGuiMod_Ctrl | ImGuiKey_F5) && e.hasProject() && !e.playing()) runInPlayer();
     if (!e.hasScene()) return;
 
     if (key(ImGuiMod_Ctrl | ImGuiKey_S)) e.saveScene();
@@ -444,6 +446,7 @@ void EditorApp::drawMenuBar() {
             showProjectSettings_ = true;
         }
         if (ImGui::MenuItem(ICON_FA_FOLDER_OPEN "  Show Project Folder", nullptr, false, e.hasProject())) Platform::openWithShell(Paths::toUtf8(e.project().root()));
+        if (ImGui::MenuItem(ICON_FA_BOX_OPEN "  Build Game...", "Ctrl+B", false, e.hasProject() && !e.playing())) openBuildDialog();
         ImGui::Separator();
         if (ImGui::MenuItem(ICON_FA_RIGHT_FROM_BRACKET "  Exit", "Alt+F4")) requestQuit();
         ImGui::EndMenu();
@@ -498,6 +501,9 @@ void EditorApp::drawMenuBar() {
         if (ImGui::MenuItem(ICON_FA_PLAY "  Play", "F5", false, !e.playing())) play();
         if (ImGui::MenuItem(ICON_FA_PAUSE "  Pause", "F6", e.playing() && e.session()->paused(), e.playing())) e.session()->setPaused(!e.session()->paused());
         if (ImGui::MenuItem(ICON_FA_STOP "  Stop", "Shift+F5", false, e.playing())) e.stop();
+        ImGui::Separator();
+        if (ImGui::MenuItem(ICON_FA_UP_RIGHT_FROM_SQUARE "  Run in Player", "Ctrl+F5", false, !e.playing())) runInPlayer();
+        theme::tooltip("Saves, then runs the project in the standalone player, the way players will see it.");
         ImGui::EndMenu();
     }
 

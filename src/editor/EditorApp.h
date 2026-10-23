@@ -70,6 +70,10 @@ private:
     bool showSceneName_ = false;
     bool sceneNameIsSaveAs_ = false;
     bool showImGuiDemo_ = false;
+    bool showBuild_ = false;
+    std::string buildFolder_;
+    bool buildOpenFolder_ = true;
+    bool buildRun_ = false;
     char sceneName_[64] = {};
     char newProjectName_[64] = "My Game";
     std::string newProjectFolder_;
@@ -99,6 +103,9 @@ private:
     void openExample(const std::filesystem::path& folder);
     void openSceneNameDialog(bool saveAs);
     void play();
+    void openBuildDialog();
+    void buildGame();
+    void runInPlayer();
     std::string defaultProjectsFolder() const;
 
     static void onKey(GLFWwindow* w, int key, int scancode, int action, int mods);

@@ -173,6 +173,21 @@ void setClipboard(const std::string& text) {
     CloseClipboard();
 }
 
+bool launch(const std::string& exe, const std::vector<std::string>& arguments, const std::string& workingFolder) {
+    std::wstring params;
+    for (const std::string& a : arguments) {
+        if (!params.empty()) params += L' ';
+        params += L'"' + widen(a) + L'"';
+    }
+    const std::wstring file = widen(exe), dir = widen(workingFolder);
+    const HINSTANCE r = ShellExecuteW(g_owner, L"open", file.c_str(), params.c_str(), dir.empty() ? nullptr : dir.c_str(), SW_SHOWNORMAL);
+    if (reinterpret_cast<INT_PTR>(r) <= 32) {
+        LOG_WARN("Platform", "Could not start " + exe);
+        return false;
+    }
+    return true;
+}
+
 std::string documentsFolder() {
     PWSTR path = nullptr;
     std::string out;
@@ -208,6 +223,7 @@ bool askYesNo(const std::string&, const std::string&) { return false; }
 void revealInExplorer(const std::string&) {}
 void openWithShell(const std::string&) {}
 void setClipboard(const std::string&) {}
+bool launch(const std::string&, const std::vector<std::string>&, const std::string&) { return false; }
 std::string documentsFolder() { return {}; }
 bool moveToRecycleBin(const std::string&) { return false; }
 #endif

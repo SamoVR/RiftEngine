@@ -40,6 +40,9 @@ void openWithShell(const std::string& pathOrUrl);
 // Clipboard (text).
 void setClipboard(const std::string& text);
 
+// Starts another program (arguments are quoted as needed). False if it could not start.
+bool launch(const std::string& exe, const std::vector<std::string>& arguments, const std::string& workingFolder = "");
+
 // The user's Documents folder ("" if unknown).
 std::string documentsFolder();
 // Deletes a file or folder by moving it to the Recycle Bin (recoverable).

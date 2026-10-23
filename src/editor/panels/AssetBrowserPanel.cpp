@@ -50,7 +50,7 @@ namespace {
     // Files the browser does not show (editor bookkeeping).
     bool hidden(const fs::path& p) {
         const std::string name = Paths::toUtf8(p.filename());
-        return name.empty() || name[0] == '.' || name == "scene.autosave.json" || name == "project.json";
+        return name.empty() || name[0] == '.' || name == "scene.autosave.json" || name == "project.json" || name == "Builds";
     }
 }
 
