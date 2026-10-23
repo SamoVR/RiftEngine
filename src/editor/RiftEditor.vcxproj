@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- RIFT Editor: the Roblox-Studio-style editor (RiftEditor.exe). -->
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>17.0</VCProjectVersion>
+    <ProjectGuid>{486D129A-31C8-4F14-9E7B-052B94804DD0}</ProjectGuid>
+    <RootNamespace>RiftEditor</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <PlatformToolset Condition="'$(VisualStudioVersion)'=='17.0'">v143</PlatformToolset>
+    <PlatformToolset Condition="'$(PlatformToolset)'==''">v145</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <UseDebugLibraries Condition="'$(Configuration)'=='Debug'">true</UseDebugLibraries>
+    <UseDebugLibraries Condition="'$(Configuration)'=='Release'">false</UseDebugLibraries>
+    <WholeProgramOptimization Condition="'$(Configuration)'=='Release'">false</WholeProgramOptimization>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="PropertySheets">
+    <Import Project="..\..\Rift.props" />
+  </ImportGroup>
+  <PropertyGroup>
+    <TargetName>RiftEditor</TargetName>
+    <LocalDebuggerWorkingDirectory>$(OutDir)</LocalDebuggerWorkingDirectory>
+    <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <AdditionalDependencies>opengl32.lib;gdi32.lib;user32.lib;shell32.lib;ole32.lib;uuid.lib;comdlg32.lib;dbghelp.lib;discord_game_sdk.lib;delayimp.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <DelayLoadDLLs>discord_game_sdk.dll;%(DelayLoadDLLs)</DelayLoadDLLs>
+    </Link>
+    <Manifest>
+      <AdditionalManifestFiles>..\platform\rift.manifest;%(AdditionalManifestFiles)</AdditionalManifestFiles>
+    </Manifest>
+    <PostBuildEvent>
+      <Command>xcopy /Y /D /Q "$(RiftThirdParty)discord\lib\discord_game_sdk.dll" "$(OutDir)" &gt;nul</Command>
+      <Message>Copying discord_game_sdk.dll next to the executable</Message>
+    </PostBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="*.cpp" />
+    <ClCompile Include="panels\*.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="*.h" />
+    <ClInclude Include="panels\*.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="RiftEditor.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="rift.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\RiftCore.vcxproj">
+      <Project>{F40B43EB-B20F-4510-A860-319E2118C478}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\third_party\ThirdParty.vcxproj">
+      <Project>{89CE27C0-4D91-4FD6-9B81-C95A82E68A63}</Project>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

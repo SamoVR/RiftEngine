@@ -1,0 +1,15 @@
+# Normalise line endings in the repository; Windows checkouts get CRLF.
+* text=auto
+*.sln text eol=crlf
+*.vcxproj text eol=crlf
+*.filters text eol=crlf
+*.props text eol=crlf
+*.bat text eol=crlf
+*.sh text eol=lf
+
+*.png binary
+*.jpg binary
+*.ico binary
+*.ttf binary
+*.dll binary
+*.lib binary

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="core"><UniqueIdentifier>{c31135a3-329e-4087-9942-e7f0276e0fad}</UniqueIdentifier></Filter>
+    <Filter Include="render"><UniqueIdentifier>{e6cf56d9-76bf-497a-b267-4440172d5bb6}</UniqueIdentifier></Filter>
+    <Filter Include="scene"><UniqueIdentifier>{d688ea24-6557-4fbe-af66-9fb3f7ea9853}</UniqueIdentifier></Filter>
+    <Filter Include="script"><UniqueIdentifier>{87f49ec6-d218-410e-93bb-173161848395}</UniqueIdentifier></Filter>
+    <Filter Include="game"><UniqueIdentifier>{3034c0ce-22e4-4bbd-b782-50623699a35b}</UniqueIdentifier></Filter>
+    <Filter Include="physics"><UniqueIdentifier>{a9cf0776-9c2e-43d6-b825-048fe2e84147}</UniqueIdentifier></Filter>
+    <Filter Include="audio"><UniqueIdentifier>{a9a79692-7f36-4a41-9fd0-8e230c823ba6}</UniqueIdentifier></Filter>
+    <Filter Include="project"><UniqueIdentifier>{8743bc63-3d32-4170-87c7-fbbdbfbfddd1}</UniqueIdentifier></Filter>
+    <Filter Include="platform"><UniqueIdentifier>{f6c2285e-b8ce-42d8-970d-8d44148497f6}</UniqueIdentifier></Filter>
+    <Filter Include="ui"><UniqueIdentifier>{a6d06d52-e1ac-44ed-9c37-6b8c034c8505}</UniqueIdentifier></Filter>
+    <Filter Include="shaders"><UniqueIdentifier>{c22b6a33-9361-45b9-a810-a2deb268753f}</UniqueIdentifier></Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="core\**\*.cpp"><Filter>core</Filter></ClCompile>
+    <ClInclude Include="core\**\*.h"><Filter>core</Filter></ClInclude>
+    <ClCompile Include="render\**\*.cpp"><Filter>render</Filter></ClCompile>
+    <ClInclude Include="render\**\*.h"><Filter>render</Filter></ClInclude>
+    <ClCompile Include="scene\**\*.cpp"><Filter>scene</Filter></ClCompile>
+    <ClInclude Include="scene\**\*.h"><Filter>scene</Filter></ClInclude>
+    <ClCompile Include="script\**\*.cpp"><Filter>script</Filter></ClCompile>
+    <ClInclude Include="script\**\*.h"><Filter>script</Filter></ClInclude>
+    <ClCompile Include="game\**\*.cpp"><Filter>game</Filter></ClCompile>
+    <ClInclude Include="game\**\*.h"><Filter>game</Filter></ClInclude>
+    <ClCompile Include="physics\**\*.cpp"><Filter>physics</Filter></ClCompile>
+    <ClInclude Include="physics\**\*.h"><Filter>physics</Filter></ClInclude>
+    <ClCompile Include="audio\**\*.cpp"><Filter>audio</Filter></ClCompile>
+    <ClInclude Include="audio\**\*.h"><Filter>audio</Filter></ClInclude>
+    <ClCompile Include="project\**\*.cpp"><Filter>project</Filter></ClCompile>
+    <ClInclude Include="project\**\*.h"><Filter>project</Filter></ClInclude>
+    <ClCompile Include="platform\**\*.cpp"><Filter>platform</Filter></ClCompile>
+    <ClInclude Include="platform\**\*.h"><Filter>platform</Filter></ClInclude>
+    <ClCompile Include="ui\**\*.cpp"><Filter>ui</Filter></ClCompile>
+    <ClInclude Include="ui\**\*.h"><Filter>ui</Filter></ClInclude>
+    <None Include="..\data\shaders\*.glsl"><Filter>shaders</Filter></None>
+  </ItemGroup>
+</Project>

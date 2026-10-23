@@ -1,0 +1,4 @@
+{
+  "name": "Demo Obby",
+  "startScene": "scenes/DemoObby/scene.json"
+}
