@@ -34,7 +34,7 @@
       <SDLCheck>true</SDLCheck>
       <AdditionalOptions>/utf-8 /bigobj /Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
       <PreprocessorDefinitions>WIN32_LEAN_AND_MEAN;NOMINMAX;_CRT_SECURE_NO_WARNINGS;GLEW_STATIC;GLM_ENABLE_EXPERIMENTAL;SOL_USING_CXX_LUA=1;SOL_ALL_SAFETIES_ON=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(RiftRoot)src;$(RiftThirdParty)imgui;$(RiftThirdParty)imgui\backends;$(RiftThirdParty)imguizmo;$(RiftThirdParty)fontawesome;$(RiftThirdParty)glfw\include;$(RiftThirdParty)glew\include;$(RiftThirdParty)glm;$(RiftThirdParty)json;$(RiftThirdParty)stb;$(RiftThirdParty)lua;$(RiftThirdParty)sol2\include;$(RiftThirdParty)discord;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(RiftRoot)src;$(RiftThirdParty)imgui;$(RiftThirdParty)imgui\backends;$(RiftThirdParty)imguizmo;$(RiftThirdParty)fontawesome;$(RiftThirdParty)glfw\include;$(RiftThirdParty)glew\include;$(RiftThirdParty)glm;$(RiftThirdParty)json;$(RiftThirdParty)stb;$(RiftThirdParty)lua;$(RiftThirdParty)sol2\include;$(RiftThirdParty)discord;$(RiftThirdParty)jolt;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>

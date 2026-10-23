@@ -1,264 +1,265 @@
 #include "scene/Scene.h"
-#include "core/Log.h"
-#include <fstream>
-#include <unordered_map>
-#include <unordered_set>
+
 #include <algorithm>
-#include <filesystem>
 
-Scene::Scene() {}
+namespace rift {
 
-void Scene::addObject(std::unique_ptr<Object> object) {
-    if (object) objects_.push_back(std::move(object));
-}
-
-void Scene::addInternalObject(std::unique_ptr<Object> object) {
-    if (object) internalObjects_.push_back(std::move(object));
-}
-
-void Scene::detachFromHierarchy(Object* object) {
-    if (!object) return;
-
-    object->removeParent();
-
-    // Children are detached, not deleted: silently destroying everything
-    // inside a "group" as a side effect of deleting the group would be a
-    // nasty surprise in an editor.
-    for (Object* child : std::vector<Object*>(object->children)) { // copy: removeChild mutates the list
-        object->removeChild(child);
+Scene::Scene() {
+    for (int i = 0; i < kServiceCount; ++i) {
+        auto service = std::make_unique<Instance>();
+        service->cls = static_cast<ClassId>(i);
+        service->id = newInstanceId();
+        service->scene = this;
+        applyClassDefaults(*service);
+        services_[i] = service.get();
+        instances_.emplace(service->id, std::move(service));
     }
 }
 
-bool Scene::removeObjectAt(size_t index) {
-    if (index >= objects_.size()) {
-        LOG_WARN("Scene", "removeObjectAt: index " + std::to_string(index) + " out of range");
-        return false;
+Scene::~Scene() = default;
+
+std::unique_ptr<Scene> Scene::clone() const {
+    auto copy = std::make_unique<Scene>();
+    // Drop the fresh services; they are replaced by copies of ours.
+    copy->instances_.clear();
+
+    std::unordered_map<const Instance*, Instance*> map;
+    map.reserve(instances_.size());
+    for (const auto& [id, original] : instances_) {
+        auto c = std::make_unique<Instance>(*original);
+        c->scene = copy.get();
+        map[original.get()] = c.get();
+        copy->instances_.emplace(id, std::move(c));
     }
-    detachFromHierarchy(objects_[index].get());
-    objects_.erase(objects_.begin() + static_cast<std::ptrdiff_t>(index));
-    return true;
+    for (auto& [id, c] : copy->instances_) {
+        if (c->parent) c->parent = map.at(c->parent);
+        for (Instance*& child : c->children) child = map.at(child);
+    }
+    for (int i = 0; i < kServiceCount; ++i) copy->services_[i] = map.at(services_[i]);
+    copy->revision_ = revision_;
+    return copy;
 }
 
-bool Scene::removeObject(Object* object) {
-    if (!object) return false;
+Instance* Scene::service(ClassId cls) const {
+    const int i = static_cast<int>(cls);
+    return i < kServiceCount ? services_[i] : nullptr;
+}
 
-    auto it = std::find_if(objects_.begin(), objects_.end(),
-        [object](const std::unique_ptr<Object>& p) { return p.get() == object; });
+Instance* Scene::adopt(std::unique_ptr<Instance> instance) {
+    if (instance->id == 0 || instances_.count(instance->id)) instance->id = newInstanceId();
+    while (instances_.count(instance->id)) instance->id = newInstanceId();
+    instance->scene = this;
+    Instance* raw = instance.get();
+    instances_.emplace(raw->id, std::move(instance));
+    ++revision_;
+    return raw;
+}
 
-    if (it == objects_.end()) {
-        LOG_WARN("Scene", "removeObject: object not found in scene");
-        return false;
+Instance* Scene::create(ClassId cls, Instance* parent, uint64_t id) {
+    if (static_cast<int>(cls) < kServiceCount) return nullptr; // services are fixed
+    auto instance = std::make_unique<Instance>();
+    instance->cls = cls;
+    instance->id = id;
+    applyClassDefaults(*instance);
+    Instance* raw = adopt(std::move(instance));
+    if (parent && !setParent(raw, parent)) {
+        destroy(raw);
+        return nullptr;
     }
-    detachFromHierarchy(object);
-    objects_.erase(it);
-    return true;
+    return raw;
+}
+
+Instance* Scene::cloneSubtree(const Instance& source, bool keepIds) {
+    if (source.isService() || !source.archivable) return nullptr;
+    std::function<Instance*(const Instance&)> copyNode = [&](const Instance& src) -> Instance* {
+        auto c = std::make_unique<Instance>(src);
+        c->parent = nullptr;
+        c->children.clear();
+        c->id = keepIds ? src.id : 0;
+        Instance* raw = adopt(std::move(c));
+        for (const Instance* child : src.children) {
+            if (!child->archivable) continue;
+            if (Instance* childCopy = copyNode(*child)) {
+                childCopy->parent = raw;
+                raw->children.push_back(childCopy);
+            }
+        }
+        return raw;
+    };
+    return copyNode(source);
+}
+
+void Scene::detachFromParent(Instance* instance) {
+    if (Instance* p = instance->parent) {
+        auto& siblings = p->children;
+        siblings.erase(std::remove(siblings.begin(), siblings.end(), instance), siblings.end());
+        instance->parent = nullptr;
+    }
+}
+
+void Scene::destroyRecursive(Instance* instance) {
+    for (SceneObserver* o : std::vector<SceneObserver*>(observers_)) o->onInstanceRemoving(*instance);
+    const std::vector<Instance*> kids = instance->children; // observers may not change the tree, but be safe
+    for (Instance* child : kids) {
+        child->parent = nullptr;
+        destroyRecursive(child);
+    }
+    instances_.erase(instance->id); // frees it
+}
+
+void Scene::destroy(Instance* instance) {
+    if (!instance || instance->isService() || instance->scene != this) return;
+    detachFromParent(instance);
+    destroyRecursive(instance);
+    ++revision_;
 }
 
 void Scene::clear() {
-    objects_.clear(); // unique_ptr destructors free everything
-}
-
-void Scene::clearAll() {
-    objects_.clear();
-    internalObjects_.clear();
-}
-
-bool Scene::contains(const Object* object) const {
-    return indexOf(object) != npos;
-}
-
-size_t Scene::indexOf(const Object* object) const {
-    for (size_t i = 0; i < objects_.size(); ++i) {
-        if (objects_[i].get() == object) return i;
+    for (Instance* s : services_) {
+        const std::vector<Instance*> kids = s->children;
+        for (Instance* child : kids) destroy(child);
     }
-    return npos;
+    // Detached leftovers (script-created instances never parented).
+    std::vector<Instance*> loose;
+    for (auto& [id, inst] : instances_) if (!inst->isService() && !inst->parent) loose.push_back(inst.get());
+    for (Instance* inst : loose) destroy(inst);
 }
 
-std::unique_ptr<Object> Scene::extractObject(Object* object, size_t* outIndex) {
-    const size_t index = indexOf(object);
-    if (index == npos) return nullptr;
-    if (outIndex) *outIndex = index;
-    detachFromHierarchy(object);
-    std::unique_ptr<Object> owned = std::move(objects_[index]);
-    objects_.erase(objects_.begin() + static_cast<std::ptrdiff_t>(index));
-    return owned;
+bool Scene::canParent(const Instance* instance, const Instance* newParent, std::string* error) const {
+    auto fail = [&](const char* msg) { if (error) *error = msg; return false; };
+    if (!instance) return fail("no instance");
+    if (instance->isService()) return fail("services cannot be moved");
+    if (newParent == instance) return fail("an instance cannot be its own parent");
+    if (newParent && newParent->isDescendantOf(instance)) return fail("an instance cannot be parented under one of its descendants");
+    if (newParent && newParent->scene != this) return fail("the new parent belongs to another scene");
+    return true;
 }
 
-std::vector<std::unique_ptr<Object>> Scene::extractSubtree(Object* root) {
-    std::vector<std::unique_ptr<Object>> out;
-    if (!root || !contains(root)) return out;
-    std::vector<Object*> nodes;
-    std::vector<Object*> stack{ root };
+bool Scene::setParent(Instance* instance, Instance* newParent, size_t index, std::string* error) {
+    if (!canParent(instance, newParent, error)) return false;
+    Instance* oldParent = instance->parent;
+    const bool wasInTree = isInTree(instance);
+
+    detachFromParent(instance);
+    if (newParent) {
+        auto& siblings = newParent->children;
+        if (index >= siblings.size()) siblings.push_back(instance);
+        else siblings.insert(siblings.begin() + static_cast<std::ptrdiff_t>(index), instance);
+        instance->parent = newParent;
+    }
+    ++revision_;
+
+    if (oldParent != newParent) {
+        for (SceneObserver* o : std::vector<SceneObserver*>(observers_)) o->onParentChanged(*instance, oldParent);
+    }
+    // Entering the tree (from detached) counts as being added, for it and its descendants.
+    if (!wasInTree && isInTree(instance)) {
+        std::vector<Instance*> entered{ instance };
+        forEachDescendant(*instance, [&](Instance& d) { entered.push_back(&d); });
+        for (Instance* e : entered) {
+            for (SceneObserver* o : std::vector<SceneObserver*>(observers_)) o->onInstanceAdded(*e);
+        }
+    }
+    return true;
+}
+
+bool Scene::isInTree(const Instance* instance) const {
+    if (!instance) return false;
+    const Instance* top = instance;
+    while (top->parent) top = top->parent;
+    return top->isService() && top->scene == this;
+}
+
+Instance* Scene::serviceOf(const Instance* instance) const {
+    if (!instance) return nullptr;
+    const Instance* top = instance;
+    while (top->parent) top = top->parent;
+    return top->isService() ? const_cast<Instance*>(top) : nullptr;
+}
+
+size_t Scene::siblingIndex(const Instance* instance) const {
+    if (!instance || !instance->parent) return npos;
+    const auto& siblings = instance->parent->children;
+    auto it = std::find(siblings.begin(), siblings.end(), instance);
+    return it == siblings.end() ? npos : static_cast<size_t>(it - siblings.begin());
+}
+
+Instance* Scene::find(uint64_t id) const {
+    auto it = instances_.find(id);
+    return it == instances_.end() ? nullptr : it->second.get();
+}
+
+bool Scene::reassignId(Instance* instance, uint64_t newId) {
+    if (!instance || newId == 0 || instance->scene != this) return false;
+    if (newId == instance->id) return true;
+    if (instances_.count(newId)) return false;
+    auto node = instances_.extract(instance->id);
+    node.key() = newId;
+    instance->id = newId;
+    instances_.insert(std::move(node));
+    return true;
+}
+
+void Scene::forEach(const std::function<void(Instance&)>& fn) const {
+    std::vector<Instance*> all;
+    all.reserve(instances_.size());
+    for (const auto& [id, inst] : instances_) all.push_back(inst.get());
+    for (Instance* inst : all) fn(*inst);
+}
+
+void Scene::forEachDescendant(Instance& root, const std::function<void(Instance&)>& fn) {
+    std::vector<Instance*> stack(root.children.rbegin(), root.children.rend());
     while (!stack.empty()) {
-        Object* n = stack.back();
+        Instance* n = stack.back();
         stack.pop_back();
-        nodes.push_back(n);
-        for (Object* c : n->children) stack.push_back(c);
+        fn(*n);
+        for (auto it = n->children.rbegin(); it != n->children.rend(); ++it) stack.push_back(*it);
     }
-    root->removeParent(); // cut only the link to the outside
-    for (Object* n : nodes) {
-        auto it = std::find_if(objects_.begin(), objects_.end(),
-            [n](const std::unique_ptr<Object>& p) { return p.get() == n; });
-        if (it == objects_.end()) continue;
-        out.push_back(std::move(*it));
-        objects_.erase(it);
+}
+
+void Scene::forEachInTree(const std::function<void(Instance&)>& fn) const {
+    for (Instance* s : services_) {
+        fn(*s);
+        forEachDescendant(*s, fn);
     }
-    return out;
 }
 
-void Scene::insertObjectAt(size_t index, std::unique_ptr<Object> object) {
-    if (!object) return;
-    index = std::min(index, objects_.size());
-    objects_.insert(objects_.begin() + static_cast<std::ptrdiff_t>(index), std::move(object));
-}
-
-nlohmann::json Scene::buildJson() const {
-    nlohmann::json j;
-    j["objects"] = nlohmann::json::array();
-    for (const auto& obj : objects_) j["objects"].push_back(obj->toJSON());
-    return j;
-}
-
-std::string Scene::toJsonString() const {
-    return buildJson().dump();
-}
-
-std::vector<Object*> Scene::getObjects() const {
-    std::vector<Object*> view;
-    view.reserve(objects_.size());
-    for (const auto& ptr : objects_) view.push_back(ptr.get());
-    return view;
-}
-
-std::vector<Object*> Scene::getInternalObjects() const {
-    std::vector<Object*> view;
-    view.reserve(internalObjects_.size());
-    for (const auto& ptr : internalObjects_) view.push_back(ptr.get());
-    return view;
-}
-
-Object* Scene::findByName(const std::string& name) const {
-    for (const auto& ptr : objects_) {
-        if (ptr->name == name) return ptr.get();
-    }
-    return nullptr;
-}
-
-Object* Scene::findById(uint64_t id) const {
-    for (const auto& ptr : objects_) {
-        if (ptr->id == id) return ptr.get();
-    }
-    return nullptr;
-}
-
-bool Scene::saveToFile(const std::string& filename) const {
-    const nlohmann::json j = buildJson();
-
-    std::error_code dirError;
-    const std::filesystem::path parentDir = std::filesystem::path(filename).parent_path();
-    if (!parentDir.empty()) std::filesystem::create_directories(parentDir, dirError);
-
-    std::ofstream outFile(filename);
-    if (!outFile.is_open()) {
-        LOG_ERROR("Scene", "Failed to open file for saving: " + filename);
-        return false;
-    }
-    // One object per line: small, and still readable / diff-friendly.
-    std::string text = "{\n  \"format\": 3,\n  \"objects\": [\n";
-    const auto& objects = j["objects"];
-    for (size_t i = 0; i < objects.size(); ++i) {
-        text += "    " + objects[i].dump() + (i + 1 < objects.size() ? ",\n" : "\n");
-    }
-    text += "  ]\n}\n";
-    outFile << text;
-    outFile.close();
-    if (outFile.fail()) {
-        LOG_ERROR("Scene", "Error while writing scene file: " + filename);
-        return false;
-    }
-    LOG_INFO("Scene", "Saved " + std::to_string(objects_.size()) + " object(s) to " + filename);
+bool Scene::setProperty(Instance& instance, const PropertyInfo& prop, const Value& value, std::string* error) {
+    const Value before = prop.get(instance);
+    if (!rift::setProperty(instance, prop, value, error)) return false;
+    if (!valuesEqual(before, prop.get(instance))) notifyPropertyChanged(instance, prop);
     return true;
 }
 
-bool Scene::loadFromFile(const std::string& filename, Texture* sharedTexture) {
-    std::ifstream inFile(filename);
-    if (!inFile.is_open()) {
-        LOG_ERROR("Scene", "Failed to open file for loading: " + filename);
+bool Scene::setProperty(Instance& instance, const std::string& propName, const Value& value, std::string* error) {
+    const PropertyInfo* prop = findProperty(instance.cls, propName);
+    if (!prop) {
+        if (error) *error = "'" + propName + "' is not a property of " + classInfo(instance.cls).name;
         return false;
     }
-
-    nlohmann::json j;
-    try {
-        inFile >> j;
-    } catch (const nlohmann::json::exception& e) {
-        LOG_ERROR("Scene", "Failed to parse scene file '" + filename + "': " + e.what());
-        return false;
-    }
-
-    if (!j.is_object() || j.value("format", 0) != 3) {
-        LOG_ERROR("Scene", "'" + filename + "' is not a format 3 scene (this build only reads format 3).");
-        return false;
-    }
-    if (!j.contains("objects") || !j["objects"].is_array()) {
-        LOG_ERROR("Scene", "Scene file '" + filename + "' has no valid 'objects' array; nothing loaded.");
-        return false;
-    }
-
-    // Build the whole new object list first and only swap it in once parsing
-    // has succeeded, so a malformed file can no longer wipe the current scene.
-    std::vector<std::unique_ptr<Object>> loaded;
-    std::unordered_map<uint64_t, Object*> idToObject;
-    std::vector<std::pair<Object*, uint64_t>> pendingParents; // (child, parent id)
-
-    try {
-        for (const auto& objJson : j["objects"]) {
-            if (!objJson.is_object() || !objJson.contains("name")) {
-                LOG_WARN("Scene", "Skipping an object entry with no 'name' in " + filename);
-                continue;
-            }
-
-            auto obj = std::make_unique<Object>(objJson["name"].get<std::string>(), std::vector<Vertex>(), nullptr);
-            obj->fromJSON(objJson);
-
-            // Ids must be unique; a hand-edited or merged file may repeat one.
-            if (idToObject.count(obj->id) != 0) {
-                LOG_WARN("Scene", "Duplicate object id for '" + obj->name + "' in " + filename + " -- assigned a new id.");
-                obj->id = Object::newId();
-            }
-
-            // Shared (non-owned) texture: re-attach instead of reloading.
-            if (obj->kind == Object::Kind::Part && objJson.contains("texture") && !objJson.value("textureOwned", true)) {
-                const std::string savedPath = objJson["texture"].get<std::string>();
-                if (sharedTexture && sharedTexture->isValid() && sharedTexture->getFilePath() == Texture::normalizePath(savedPath)) {
-                    obj->setTexture(sharedTexture);
-                } else {
-                    obj->setOwnedTexture(std::make_unique<Texture>(savedPath));
-                }
-            }
-
-            idToObject[obj->id] = obj.get();
-            if (objJson.contains("parent") && objJson["parent"].is_string()) {
-                pendingParents.emplace_back(obj.get(), Object::idFromString(objJson["parent"].get<std::string>()));
-            }
-            loaded.push_back(std::move(obj));
-        }
-    } catch (const nlohmann::json::exception& e) {
-        LOG_ERROR("Scene", "Malformed scene file '" + filename + "': " + e.what() + " -- current scene left untouched.");
-        return false;
-    }
-
-    // Parents are resolved after every object exists (a child may appear
-    // before its parent in the file).
-    for (const auto& link : pendingParents) {
-        auto parentIt = idToObject.find(link.second);
-        if (parentIt == idToObject.end()) {
-            LOG_WARN("Scene", "'" + link.first->name + "' references a missing parent -- left unparented.");
-            continue;
-        }
-        link.first->setParent(parentIt->second); // rejects cycles
-    }
-
-    objects_ = std::move(loaded); // old objects freed here
-    LOG_INFO("Scene", "Loaded " + std::to_string(objects_.size()) + " object(s) from " + filename);
-    return true;
+    return setProperty(instance, *prop, value, error);
 }
+
+void Scene::setAttribute(Instance& instance, const std::string& name, const Value& value) {
+    const Value* old = instance.attribute(name);
+    if (old && valuesEqual(*old, value)) return;
+    if (!old && typeOf(value) == ValueType::None) return;
+    instance.setAttribute(name, value);
+    ++revision_;
+    for (SceneObserver* o : std::vector<SceneObserver*>(observers_)) o->onAttributeChanged(instance, name);
+}
+
+void Scene::notifyPropertyChanged(Instance& instance, const PropertyInfo& prop) {
+    ++revision_;
+    for (SceneObserver* o : std::vector<SceneObserver*>(observers_)) o->onPropertyChanged(instance, prop);
+}
+
+void Scene::addObserver(SceneObserver* observer) {
+    if (observer && std::find(observers_.begin(), observers_.end(), observer) == observers_.end()) observers_.push_back(observer);
+}
+
+void Scene::removeObserver(SceneObserver* observer) {
+    observers_.erase(std::remove(observers_.begin(), observers_.end(), observer), observers_.end());
+}
+
+} // namespace rift

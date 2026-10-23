@@ -1,80 +1,115 @@
 #pragma once
+//
+// Scene.h -- owns a tree of Instances (Roblox's DataModel).
+//
+// The root of the tree is a fixed set of services (Workspace, Lighting,
+// ReplicatedStorage, ...). Everything else lives under one of them, or is
+// "detached" (created by a script and not parented yet, like Parent = nil).
+//
+// Play mode runs on a clone() of the edited scene: the game can change or
+// destroy anything, and Stop simply throws the clone away.
+//
+#include "scene/Instance.h"
+#include "scene/Reflection.h"
 
-#include "scene/Object.h"
-#include <vector>
+#include <array>
+#include <functional>
 #include <memory>
 #include <string>
-#include <nlohmann/json.hpp>
+#include <unordered_map>
+#include <vector>
 
-// OWNERSHIP: Scene is the single owner of every Object in it (unique_ptr), so
-// "who deletes this" is enforced by the compiler instead of by convention.
-//
-// The original removeObject() had two overloads with DIFFERENT ownership
-// semantics (index version deleted the object, pointer version only
-// detached it). Interface.cpp used both in one delete operation, leaking
-// children and leaving a still-selected child with a dangling parent pointer
-// -> use-after-free in the gizmo. There is now exactly one way to remove an
-// object, and it always detaches it from the hierarchy first.
-//
-// getObjects()/getInternalObjects() return non-owning snapshots of raw
-// pointers for the rest of the codebase. They stay valid until the object is
-// removed or the scene is cleared/loaded -- callers holding Object* across
-// those operations (selection, animation items) must drop them first.
+namespace rift {
+
+constexpr int kServiceCount = static_cast<int>(ClassId::SoundService) + 1;
+
+// Notified about changes made through the Scene API (scripts use these for
+// ChildAdded / Destroying / Changed; the editor for refreshes).
+class SceneObserver {
+public:
+    virtual ~SceneObserver() = default;
+    virtual void onInstanceAdded(Instance&) {}                       // created in, or moved into, the tree
+    virtual void onInstanceRemoving(Instance&) {}                    // about to be destroyed (instance and each descendant)
+    virtual void onParentChanged(Instance&, Instance* /*oldParent*/) {}
+    virtual void onPropertyChanged(Instance&, const PropertyInfo&) {}
+    virtual void onAttributeChanged(Instance&, const std::string& /*name*/) {}
+};
+
 class Scene {
 public:
-    Scene();
-
-    void addObject(std::unique_ptr<Object> object);
-    void addInternalObject(std::unique_ptr<Object> object);
-
-    // Destroys the object. Its children are detached (not deleted) first so
-    // nothing is left pointing at freed memory. Returns false if not found.
-    bool removeObjectAt(size_t index);
-    bool removeObject(Object* object);
-
-    // Destroys every user object (internal objects are kept).
-    void clear();
-    // Destroys user AND internal objects. Engine calls this during shutdown,
-    // while the GL context is still alive (GL resources must not outlive it).
-    void clearAll();
-
-    bool contains(const Object* object) const;
-    // Index of the object in the user list, or npos.
     static constexpr size_t npos = static_cast<size_t>(-1);
-    size_t indexOf(const Object* object) const;
 
-    // Removes the object from the scene WITHOUT destroying it and hands
-    // ownership to the caller (used by undo/redo commands). The object is
-    // detached from the hierarchy first, like removeObject().
-    std::unique_ptr<Object> extractObject(Object* object, size_t* outIndex = nullptr);
-    // Moves `root` and all its descendants out of the scene, keeping the links
-    // between them (only `root`'s link to its parent is cut). Used by the
-    // runtime to take script-created parts out of the world.
-    std::vector<std::unique_ptr<Object>> extractSubtree(Object* root);
-    // Inserts at `index` (clamped), restoring list order on undo.
-    void insertObjectAt(size_t index, std::unique_ptr<Object> object);
+    Scene();
+    ~Scene();
+    Scene(const Scene&) = delete;
+    Scene& operator=(const Scene&) = delete;
 
-    // Compact JSON of the whole scene; used to detect unsaved changes.
-    std::string toJsonString() const;
+    // Deep copy with the same ids (Play mode).
+    std::unique_ptr<Scene> clone() const;
 
-    std::vector<Object*> getObjects() const;
-    std::vector<Object*> getInternalObjects() const;
-    size_t objectCount() const { return objects_.size(); }
-    Object* findByName(const std::string& name) const;
-    Object* findById(uint64_t id) const;
+    // ---- services
+    Instance* service(ClassId cls) const;
+    Instance& workspace() const { return *services_[static_cast<int>(ClassId::Workspace)]; }
+    Instance& lighting() const { return *services_[static_cast<int>(ClassId::Lighting)]; }
+    Instance& starterPlayer() const { return *services_[static_cast<int>(ClassId::StarterPlayer)]; }
+    const std::array<Instance*, kServiceCount>& services() const { return services_; }
 
-    // Scene files are format 3 JSON (see Object::toJSON). Scripts are NOT in
-    // the file: Script objects point at .lua files next to it (ScriptStore).
-    // Both return false on failure (and log the reason).
-    bool saveToFile(const std::string& filename) const;
-    // `sharedTexture`: objects saved as using a shared texture with the same
-    // file path get it re-attached instead of loading their own copy.
-    bool loadFromFile(const std::string& filename, Texture* sharedTexture = nullptr);
+    // ---- create / destroy
+    // A new instance with its class defaults. `parent` == nullptr leaves it
+    // detached. `id` 0 picks a fresh id; a used id is replaced by a fresh one.
+    Instance* create(ClassId cls, Instance* parent = nullptr, uint64_t id = 0);
+    // Copies `source` (from this or another scene) with its archivable
+    // descendants, detached, with new ids (or the same ids if keepIds and free).
+    Instance* cloneSubtree(const Instance& source, bool keepIds = false);
+    // Destroys the instance and its descendants. Services cannot be destroyed.
+    void destroy(Instance* instance);
+    // Destroys everything except the services (and resets nothing else).
+    void clear();
+
+    // ---- hierarchy
+    // Moves `instance` under `newParent` at sibling position `index` (npos =
+    // last). nullptr detaches it. Refuses cycles and moving services.
+    bool setParent(Instance* instance, Instance* newParent, size_t index = npos, std::string* error = nullptr);
+    bool canParent(const Instance* instance, const Instance* newParent, std::string* error = nullptr) const;
+    bool isInTree(const Instance* instance) const;          // under a service (not detached)
+    Instance* serviceOf(const Instance* instance) const;    // the service at the top of its branch
+    size_t siblingIndex(const Instance* instance) const;    // position in parent's children (npos for roots)
+
+    // ---- lookup / iteration
+    Instance* find(uint64_t id) const;
+    // Gives an instance another id (loaders keep the ids stored in files,
+    // including the services'). Fails if the id is 0 or taken.
+    bool reassignId(Instance* instance, uint64_t newId);
+    size_t size() const { return instances_.size(); }
+    // Every instance, detached ones included (no particular order).
+    void forEach(const std::function<void(Instance&)>& fn) const;
+    // Depth-first over the attached tree, services first, siblings in order.
+    void forEachInTree(const std::function<void(Instance&)>& fn) const;
+    static void forEachDescendant(Instance& root, const std::function<void(Instance&)>& fn); // excludes root
+
+    // ---- property / attribute changes with notification
+    bool setProperty(Instance& instance, const PropertyInfo& prop, const Value& value, std::string* error = nullptr);
+    bool setProperty(Instance& instance, const std::string& propName, const Value& value, std::string* error = nullptr);
+    void setAttribute(Instance& instance, const std::string& name, const Value& value);
+    // For code that writes fields directly (gizmo, physics) and wants listeners told.
+    void notifyPropertyChanged(Instance& instance, const PropertyInfo& prop);
+
+    void addObserver(SceneObserver* observer);
+    void removeObserver(SceneObserver* observer);
+
+    // Incremented by every change made through this API (cheap dirty checks).
+    uint64_t revision() const { return revision_; }
+    void bumpRevision() { ++revision_; }
 
 private:
-    std::vector<std::unique_ptr<Object>> objects_;
-    std::vector<std::unique_ptr<Object>> internalObjects_; // not user-visible
+    std::unordered_map<uint64_t, std::unique_ptr<Instance>> instances_;
+    std::array<Instance*, kServiceCount> services_{};
+    std::vector<SceneObserver*> observers_;
+    uint64_t revision_ = 0;
 
-    static void detachFromHierarchy(Object* object);
-    nlohmann::json buildJson() const;
+    Instance* adopt(std::unique_ptr<Instance> instance);
+    void detachFromParent(Instance* instance);
+    void destroyRecursive(Instance* instance);
 };
+
+} // namespace rift

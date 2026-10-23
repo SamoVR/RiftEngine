@@ -69,6 +69,8 @@
     <ClCompile Include="lua\*.c">
       <CompileAs>CompileAsCpp</CompileAs>
     </ClCompile>
+    <!-- Jolt Physics 5.6 (CPU) -->
+    <ClCompile Include="jolt\Jolt\**\*.cpp" Exclude="jolt\Jolt\Physics\Hair\**" />
     <!-- Discord Game SDK wrappers (the DLL itself is delay-loaded) -->
     <ClCompile Include="discord\*.cpp" />
   </ItemGroup>

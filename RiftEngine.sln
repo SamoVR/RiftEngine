@@ -9,6 +9,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "RiftCore", "src\RiftCore.vc
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ThirdParty", "third_party\ThirdParty.vcxproj", "{89CE27C0-4D91-4FD6-9B81-C95A82E68A63}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "RiftTests", "tests\RiftTests.vcxproj", "{6DB2B9A5-7F0C-4F38-98D1-95DEE026B4CE}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -27,6 +29,10 @@ Global
 		{89CE27C0-4D91-4FD6-9B81-C95A82E68A63}.Debug|x64.Build.0 = Debug|x64
 		{89CE27C0-4D91-4FD6-9B81-C95A82E68A63}.Release|x64.ActiveCfg = Release|x64
 		{89CE27C0-4D91-4FD6-9B81-C95A82E68A63}.Release|x64.Build.0 = Release|x64
+		{6DB2B9A5-7F0C-4F38-98D1-95DEE026B4CE}.Debug|x64.ActiveCfg = Debug|x64
+		{6DB2B9A5-7F0C-4F38-98D1-95DEE026B4CE}.Debug|x64.Build.0 = Debug|x64
+		{6DB2B9A5-7F0C-4F38-98D1-95DEE026B4CE}.Release|x64.ActiveCfg = Release|x64
+		{6DB2B9A5-7F0C-4F38-98D1-95DEE026B4CE}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
