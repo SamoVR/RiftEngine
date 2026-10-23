@@ -25,6 +25,9 @@ namespace {
 
         ImFontConfig base;
         base.OversampleH = 2;
+        // Inter has its own glyphs in the private-use area, where Font Awesome's icons live.
+        static const ImWchar privateUse[] = { 0xE000, 0xF8FF, 0 };
+        base.GlyphExcludeRanges = privateUse;
         auto add = [&](const std::string& file) -> ImFont* {
             ImFont* f = io.Fonts->AddFontFromFileTTF(file.c_str(), kBaseFontSize, &base);
             if (!f) {

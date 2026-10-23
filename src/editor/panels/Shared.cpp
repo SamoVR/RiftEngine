@@ -55,7 +55,7 @@ void drawInsertMenuItems(Editor& editor) {
     classItem(editor, ClassId::Part, "Block");
     classItem(editor, ClassId::Part, "Sphere", PartShape::Ball, ICON_FA_CIRCLE);
     classItem(editor, ClassId::Part, "Cylinder", PartShape::Cylinder, ICON_FA_DATABASE);
-    classItem(editor, ClassId::Part, "Wedge", PartShape::Wedge, ICON_FA_CARET_UP);
+    classItem(editor, ClassId::Part, "Wedge", PartShape::Wedge, ICON_FA_STAIRS);
     classItem(editor, ClassId::Part, "Corner Wedge", PartShape::CornerWedge, ICON_FA_MOUNTAIN);
     classItem(editor, ClassId::SpawnLocation, "Spawn Location");
 

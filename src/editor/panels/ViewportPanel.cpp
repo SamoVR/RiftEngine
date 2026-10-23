@@ -276,9 +276,8 @@ void ViewportPanel::handleSelection(UiContext& ui, const glm::mat4& view, const 
     Scene& scene = editor.scene();
     const ImGuiIO& io = ImGui::GetIO();
     const glm::vec2 mouse = editor.input().mousePosition() - origin_;
-    // Gizmo handles, the orientation cube and the overlay buttons take clicks first.
-    const bool overGizmo = ImGuizmo::IsOver() || ImGuizmo::IsUsing() || gizmoDragging_ || ImGuizmo::IsViewManipulateHovered() ||
-                           ImGuizmo::IsUsingViewManipulate() || ImGui::IsAnyItemHovered();
+    // Gizmo handles, the axis widget and the overlay buttons take clicks first.
+    const bool overGizmo = ImGuizmo::IsOver() || ImGuizmo::IsUsing() || gizmoDragging_ || ImGui::IsAnyItemHovered();
     glm::vec3 rayOrigin, rayDir;
     editor.camera().ray(mouse, size_, rayOrigin, rayDir);
 
@@ -439,19 +438,52 @@ void ViewportPanel::drawOverlays(UiContext& ui, const glm::mat4& view, const glm
         ImGui::EndPopup();
     }
 
-    // ---- orientation cube (edit mode): click a face to look along it
+    // ---- axis widget (edit mode): shows the orientation; click an axis to look along it
     if (!editor.playing()) {
-        const float cube = ImGui::GetFontSize() * 5.5f;
-        glm::mat4 v = editor.camera().view();
-        const glm::mat4 old = v;
-        ImGuizmo::ViewManipulate(glm::value_ptr(v), 12.0f, ImVec2(b.x - cube - pad, a.y + button + pad * 2.0f), ImVec2(cube, cube), 0x00000000);
-        if (v != old) {
-            const glm::mat4 world = glm::inverse(v);
-            const glm::vec3 position(world[3]);
-            const glm::vec3 forward = -glm::normalize(glm::vec3(world[2]));
-            const float pitch = glm::degrees(std::asin(std::clamp(forward.y, -1.0f, 1.0f)));
-            const float yaw = glm::degrees(std::atan2(forward.z, forward.x));
-            editor.camera().set(position, yaw, pitch);
+        const float radius = ImGui::GetFontSize() * 2.6f;
+        const float dot = ImGui::GetFontSize() * 0.62f;
+        const ImVec2 c(b.x - radius - dot - pad, a.y + button + pad * 2.0f + radius + dot);
+        ImGui::SetCursorScreenPos(ImVec2(c.x - radius - dot, c.y - radius - dot));
+        ImGui::InvisibleButton("##axes", ImVec2((radius + dot) * 2.0f, (radius + dot) * 2.0f));
+        const bool hoveredWidget = ImGui::IsItemHovered();
+        const bool clicked = ImGui::IsItemClicked(ImGuiMouseButton_Left);
+        if (hoveredWidget) draw->AddCircleFilled(c, radius + dot, IM_COL32(20, 20, 28, 90));
+
+        struct Axis { glm::vec3 dir; ImVec4 color; const char* label; };
+        const Axis axes[6] = {
+            { { 1, 0, 0 }, { 0.93f, 0.33f, 0.36f, 1.0f }, "X" }, { { 0, 1, 0 }, { 0.45f, 0.82f, 0.36f, 1.0f }, "Y" }, { { 0, 0, 1 }, { 0.33f, 0.56f, 0.96f, 1.0f }, "Z" },
+            { { -1, 0, 0 }, { 0.93f, 0.33f, 0.36f, 1.0f }, nullptr }, { { 0, -1, 0 }, { 0.45f, 0.82f, 0.36f, 1.0f }, nullptr }, { { 0, 0, -1 }, { 0.33f, 0.56f, 0.96f, 1.0f }, nullptr },
+        };
+        const glm::mat3 toCamera(editor.camera().view());
+        int order[6] = { 0, 1, 2, 3, 4, 5 };
+        glm::vec3 projected[6];
+        for (int k = 0; k < 6; ++k) projected[k] = toCamera * axes[k].dir;
+        std::sort(order, order + 6, [&](int l, int r) { return projected[l].z < projected[r].z; }); // far ones first
+        const ImVec2 mouse = ImGui::GetIO().MousePos;
+        int hit = -1;
+        for (int k : order) {
+            const ImVec2 end(c.x + projected[k].x * radius, c.y - projected[k].y * radius);
+            const bool over = hoveredWidget && (mouse.x - end.x) * (mouse.x - end.x) + (mouse.y - end.y) * (mouse.y - end.y) < dot * dot;
+            if (over) hit = k;
+            const ImVec4 col = axes[k].color;
+            if (axes[k].label) {
+                draw->AddLine(c, end, theme::u32(col), 2.0f);
+                draw->AddCircleFilled(end, dot, theme::u32(over ? ImVec4(1, 1, 1, 1) : col));
+                const ImVec2 t = ImGui::CalcTextSize(axes[k].label);
+                draw->AddText(ImVec2(end.x - t.x * 0.5f, end.y - t.y * 0.5f), IM_COL32(20, 20, 26, 255), axes[k].label);
+            } else {
+                draw->AddCircleFilled(end, dot * 0.8f, theme::u32(col, over ? 0.9f : 0.45f));
+                draw->AddCircle(end, dot * 0.8f, theme::u32(col), 0, 1.5f);
+            }
+        }
+        if (hit >= 0) theme::tooltip(hit < 3 ? "Look from this side" : "Look from the opposite side");
+        if (clicked && hit >= 0) {
+            // Orbit around the point in front of the camera so the view stays on what you were looking at.
+            const float distance = 24.0f;
+            const glm::vec3 target = editor.camera().position() + editor.camera().forward() * distance;
+            glm::vec3 from = axes[hit].dir;
+            if (std::abs(from.y) > 0.5f) from += glm::vec3(0.0f, 0.0f, 0.001f); // straight up/down needs a hint of direction
+            editor.camera().lookAt(target + glm::normalize(from) * distance, target);
         }
     }
 

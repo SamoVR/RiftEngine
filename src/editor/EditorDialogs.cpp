@@ -330,9 +330,9 @@ void EditorApp::drawDialogs() {
     // ---- preferences
     if (showPreferences_) {
         ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-        ImGui::SetNextWindowSize(ImVec2(fs_ * 30.0f, fs_ * 26.0f), ImGuiCond_Appearing);
-        if (ImGui::Begin(ICON_FA_SLIDERS "  Preferences###Preferences", &showPreferences_, ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoCollapse)) {
+        if (ImGui::Begin(ICON_FA_SLIDERS "  Preferences###Preferences", &showPreferences_, ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_AlwaysAutoResize)) {
             EditorSettings& s = settings_;
+            ImGui::PushItemWidth(fs_ * 14.0f);
             if (ImGui::BeginTabBar("##prefs")) {
                 if (ImGui::BeginTabItem("General")) {
                     ImGui::SliderFloat("Interface size", &s.uiScale, 0.75f, 2.0f, "%.2fx");
@@ -367,6 +367,7 @@ void EditorApp::drawDialogs() {
                 }
                 ImGui::EndTabBar();
             }
+            ImGui::PopItemWidth();
         }
         ImGui::End();
         if (!showPreferences_) settings_.save();

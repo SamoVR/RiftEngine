@@ -48,6 +48,12 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="*.cpp" />
+    <!-- The editor's logic (no UI) is tested too. -->
+    <ClCompile Include="..\src\editor\Commands.cpp" />
+    <ClCompile Include="..\src\editor\Editor.cpp" />
+    <ClCompile Include="..\src\editor\EditorCamera.cpp" />
+    <ClCompile Include="..\src\editor\EditorSettings.cpp" />
+    <ClCompile Include="..\src\editor\Templates.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\src\RiftCore.vcxproj">

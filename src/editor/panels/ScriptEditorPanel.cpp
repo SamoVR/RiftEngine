@@ -195,6 +195,7 @@ bool ScriptEditorPanel::drawDoc(UiContext& ui, Doc& doc, ImGuiID dockId) {
 
     if (doc.focus) {
         ImGui::SetNextWindowFocus();
+        doc.editor.SetFocus(); // the text, not just the tab
         doc.focus = false;
     }
     if (dockId) ImGui::SetNextWindowDockID(dockId, ImGuiCond_FirstUseEver);
