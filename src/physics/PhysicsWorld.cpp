@@ -731,6 +731,7 @@ void PhysicsWorld::step(float dt) {
 }
 
 std::optional<RaycastHit> PhysicsWorld::raycast(const glm::vec3& origin, const glm::vec3& direction, const RaycastFilter& filter) const {
+    impl_->processDirty(); // parts created since the last step must be hittable
     const Impl& s = *impl_;
     if (glm::length(direction) < 1e-6f) return std::nullopt;
 
@@ -773,6 +774,7 @@ std::optional<RaycastHit> PhysicsWorld::raycast(const glm::vec3& origin, const g
 }
 
 std::vector<uint64_t> PhysicsWorld::partsInBox(const glm::vec3& center, const glm::vec3& size, const glm::vec3& rotation) const {
+    impl_->processDirty();
     const Impl& s = *impl_;
     std::vector<uint64_t> out;
     JPH::Ref<JPH::Shape> box = new JPH::BoxShape(toJ(glm::max(size * 0.5f, glm::vec3(0.01f))), 0.0f);
@@ -802,7 +804,10 @@ std::vector<TouchEvent> PhysicsWorld::takeTouchEvents() {
     return out;
 }
 
-std::vector<uint64_t> PhysicsWorld::touchingParts(uint64_t partId) const { return impl_->queryTouching(partId); }
+std::vector<uint64_t> PhysicsWorld::touchingParts(uint64_t partId) const {
+    impl_->processDirty();
+    return impl_->queryTouching(partId);
+}
 
 std::vector<uint64_t> PhysicsWorld::takeFallenParts() {
     std::vector<uint64_t> out;

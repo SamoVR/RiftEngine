@@ -109,7 +109,12 @@ void Scene::destroyRecursive(Instance* instance) {
 
 void Scene::destroy(Instance* instance) {
     if (!instance || instance->isService() || instance->scene != this) return;
+    // Like Roblox, Destroy sets Parent to nil first (ChildRemoved fires).
+    Instance* oldParent = instance->parent;
     detachFromParent(instance);
+    if (oldParent) {
+        for (SceneObserver* o : std::vector<SceneObserver*>(observers_)) o->onParentChanged(*instance, oldParent);
+    }
     destroyRecursive(instance);
     ++revision_;
 }

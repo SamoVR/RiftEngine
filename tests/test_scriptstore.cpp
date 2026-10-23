@@ -9,6 +9,7 @@
 #include <thread>
 
 namespace fs = std::filesystem;
+using rift::ScriptStore;
 
 namespace {
     void writeText(const fs::path& p, const std::string& t) {

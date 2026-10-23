@@ -7,6 +7,8 @@
 
 namespace fs = std::filesystem;
 
+namespace rift {
+
 void ScriptStore::reset(const std::string& sceneDir) {
     root_ = sceneDir;
     entries_.clear();
@@ -195,3 +197,5 @@ std::vector<std::string> ScriptStore::paths() const {
     for (const auto& [path, e] : entries_) out.push_back(path);
     return out;
 }
+
+} // namespace rift

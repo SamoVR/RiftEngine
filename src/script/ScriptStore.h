@@ -16,6 +16,8 @@
 //    scene folder, no "..". Anything else is rejected.
 //
 // No OpenGL / ImGui dependency, so it is unit-tested on its own.
+namespace rift {
+
 class ScriptStore {
 public:
     struct Entry {
@@ -74,3 +76,5 @@ private:
     static bool readFile(const std::filesystem::path& p, std::string& out);
     static bool writeFile(const std::filesystem::path& p, const std::string& text);
 };
+
+} // namespace rift
