@@ -55,15 +55,27 @@ struct Inst { uint64_t id = 0; }; // id 0 = workspace
 
 struct SignalState {
     struct Conn {
-        uint64_t id;
-        sol::protected_function fn;
-        bool once;
+        uint64_t id = 0;
+        // MUST be a main-thread reference. A plain sol::protected_function
+        // remembers the coroutine that called :Connect(); once that script
+        // finished, Lua collected the coroutine and the next copy/destroy of
+        // the handler dereferenced freed memory (the crash a few seconds after Play).
+        sol::main_protected_function fn;
+        bool once = false;
+        bool connected = true;
         std::string label; // script that connected it (for error messages)
     };
-    std::vector<Conn> conns;
+    // shared_ptr: fire() snapshots the list every frame, and copying the
+    // pointers is free while copying Lua references costs a registry ref each.
+    std::vector<std::shared_ptr<Conn>> conns;
     std::vector<lua_State*> waiters; // threads parked in :Wait()
     uint64_t nextId = 1;
     bool hasListeners() const { return !conns.empty() || !waiters.empty(); }
+    void disconnect(uint64_t id) {
+        for (auto it = conns.begin(); it != conns.end(); ++it) {
+            if ((*it)->id == id) { (*it)->connected = false; conns.erase(it); return; }
+        }
+    }
 };
 struct Signal { std::shared_ptr<SignalState> s; };
 struct Connection { std::weak_ptr<SignalState> s; uint64_t id = 0; };
@@ -415,7 +427,7 @@ struct LuaRuntime::Impl {
     }
 
     // Starts `fn(args...)` as a new coroutine and runs it until its first yield.
-    void spawn(const sol::protected_function& fn, const std::string& label, const std::function<int(lua_State*)>& pushArgs) {
+    void spawn(const sol::main_protected_function& fn, const std::string& label, const std::function<int(lua_State*)>& pushArgs) {
         lua_State* T = newThread(label);
         fn.push(T);
         const int n = pushArgs ? pushArgs(T) : 0;
@@ -445,12 +457,11 @@ struct LuaRuntime::Impl {
             const int n = pushArgs(T);
             resume(T, n);
         }
-        const std::vector<SignalState::Conn> snapshot = s.conns; // handlers may connect/disconnect
-        for (const SignalState::Conn& c : snapshot) {
-            const bool stillConnected = std::any_of(s.conns.begin(), s.conns.end(), [&](const SignalState::Conn& x) { return x.id == c.id; });
-            if (!stillConnected) continue;
-            if (c.once) s.conns.erase(std::remove_if(s.conns.begin(), s.conns.end(), [&](const SignalState::Conn& x) { return x.id == c.id; }), s.conns.end());
-            spawn(c.fn, c.label, pushArgs);
+        const std::vector<std::shared_ptr<SignalState::Conn>> snapshot = s.conns; // handlers may connect/disconnect
+        for (const auto& c : snapshot) {
+            if (!c->connected) continue; // disconnected by an earlier handler in this same fire
+            if (c->once) s.disconnect(c->id);
+            spawn(c->fn, c->label, pushArgs);
         }
     }
 
@@ -632,27 +643,25 @@ void LuaRuntime::Impl::buildApi() {
     // ------------------------------------------------------------ signals
     lua.new_usertype<Connection>("RBXScriptConnection", sol::no_constructor,
         "Disconnect", [](Connection& c) {
-            if (auto s = c.s.lock()) {
-                s->conns.erase(std::remove_if(s->conns.begin(), s->conns.end(), [&](const SignalState::Conn& x) { return x.id == c.id; }), s->conns.end());
-            }
+            if (auto s = c.s.lock()) s->disconnect(c.id);
         },
         "Connected", sol::property([](Connection& c) {
             auto s = c.s.lock();
-            return s && std::any_of(s->conns.begin(), s->conns.end(), [&](const SignalState::Conn& x) { return x.id == c.id; });
+            return s && std::any_of(s->conns.begin(), s->conns.end(), [&](const auto& x) { return x->id == c.id; });
         }));
 
-    auto connect = [this](Signal& sig, sol::protected_function fn, bool once, sol::this_state ts) {
-        SignalState::Conn c;
-        c.id = sig.s->nextId++;
-        c.fn = std::move(fn);
-        c.once = once;
-        c.label = labelOf(ts.L);
-        sig.s->conns.push_back(std::move(c));
-        return Connection{ sig.s, sig.s->conns.back().id };
+    auto connect = [this](Signal& sig, sol::main_protected_function fn, bool once, sol::this_state ts) {
+        auto c = std::make_shared<SignalState::Conn>();
+        c->id = sig.s->nextId++;
+        c->fn = std::move(fn);
+        c->once = once;
+        c->label = labelOf(ts.L);
+        sig.s->conns.push_back(c);
+        return Connection{ sig.s, c->id };
     };
     lua.new_usertype<Signal>("RBXScriptSignal", sol::no_constructor,
-        "Connect", [connect](Signal& sig, sol::protected_function fn, sol::this_state ts) { return connect(sig, std::move(fn), false, ts); },
-        "Once", [connect](Signal& sig, sol::protected_function fn, sol::this_state ts) { return connect(sig, std::move(fn), true, ts); },
+        "Connect", [connect](Signal& sig, sol::main_protected_function fn, sol::this_state ts) { return connect(sig, std::move(fn), false, ts); },
+        "Once", [connect](Signal& sig, sol::main_protected_function fn, sol::this_state ts) { return connect(sig, std::move(fn), true, ts); },
         "Wait", sol::yielding([](Signal& sig, sol::this_state ts) { sig.s->waiters.push_back(ts.L); }));
 
     // ------------------------------------------------------------ Instance
