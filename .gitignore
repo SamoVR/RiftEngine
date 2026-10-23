@@ -1,1 +1,37 @@
+# Build output
+/build/
+x64/
+Win32/
+Debug/
+Release/
+*.obj
+*.pdb
+*.ilk
+*.idb
+*.ipdb
+*.iobj
+*.tlog
+*.lastbuildstate
+*.recipe
+*.res
+*.aps
+*.exp
+*.log
+*.dt.d.json
+*.dt.module.json*
+
+# IDE / tools
 .vs/
+.vscode/
+.claude/
+*.vcxproj.user
+*.suo
+*.user
+*.VC.db
+*.VC.opendb
+ipch/
+
+# Per-user runtime files (live in %APPDATA%\RIFT for installed builds)
+imgui.ini
+settings.json
+*_log.txt
