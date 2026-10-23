@@ -13,6 +13,7 @@
 
 #include <cstdint>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace rift {
@@ -36,6 +37,7 @@ struct PropertyInfo {
     uint32_t flags = PF_Default;
     float minValue = 0.0f, maxValue = 0.0f;  // equal = unbounded
     float step = 0.0f;                       // drag speed hint for the editor (0 = auto)
+    std::string enumType;              // Lua enum type ("Material"); empty if not an enum
     std::vector<std::string> enumNames;
     std::string tooltip;
 
@@ -47,7 +49,7 @@ struct PropertyInfo {
     PropertyInfo& speed(float s) { step = s; return *this; }
     PropertyInfo& tip(const char* t) { tooltip = t; return *this; }
     PropertyInfo& flagsSet(uint32_t f) { flags = f; return *this; }
-    PropertyInfo& enums(std::vector<std::string> names) { enumNames = std::move(names); return *this; }
+    PropertyInfo& enums(const char* typeName); // see allEnums()
 };
 
 struct ClassInfo {
@@ -57,6 +59,7 @@ struct ClassInfo {
     bool creatable = true;   // Instance.new and the Insert menu
     bool service = false;
     std::vector<PropertyInfo> props; // display order
+    std::unordered_map<std::string, int> byName; // name -> index into props
 
     const PropertyInfo* find(const std::string& propName) const;
     int indexOf(const std::string& propName) const; // -1 if absent

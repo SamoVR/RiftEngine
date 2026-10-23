@@ -27,11 +27,15 @@ class Scene;
 
 enum class ClassId : uint8_t {
     // Services: exactly one of each per scene, always at the root.
-    Workspace, Lighting, ReplicatedStorage, ScriptService, StarterGui, StarterPlayer, SoundService,
+    Workspace, Players, Lighting, ReplicatedStorage, ScriptService, StarterGui, StarterPlayer, SoundService,
     // World
     Part, SpawnLocation, MeshPart, Model, Folder,
     PointLight, SpotLight,
     Sound,
+    Humanoid,
+    Player,
+    // Values (data holders, e.g. leaderstats)
+    IntValue, NumberValue, StringValue, BoolValue, Vector3Value, Color3Value,
     // Code
     Script, ModuleScript,
     // 2D GUI
@@ -118,8 +122,18 @@ struct Instance {
     float fogStart = 120.0f;
     float fogEnd = 600.0f;
     float exposure = 1.0f;
-    float walkSpeed = 8.0f;               // StarterPlayer
+    float walkSpeed = 8.0f;               // StarterPlayer, Humanoid
     float jumpPower = 12.0f;
+    float health = 100.0f;                // Humanoid
+    float maxHealth = 100.0f;
+    glm::vec3 moveDirection{ 0.0f };      // Humanoid (runtime): where the character is walking
+    bool jump = false;                    // Humanoid (runtime): set to make it jump
+
+    // Value objects (IntValue.Value, ...). StringValue uses `text`, Color3Value `color`.
+    int intValue = 0;
+    float numberValue = 0.0f;
+    bool boolValue = false;
+    glm::vec3 vector3Value{ 0.0f };
     CameraMode cameraMode = CameraMode::ThirdPerson;
     float cameraMaxZoom = 40.0f;
 
@@ -152,6 +166,7 @@ struct Instance {
     bool isGui() const;           // GUI element (ScreenGui or a GuiObject)
     bool isGuiObject() const;     // drawable GUI element (not ScreenGui)
     bool isLight() const;
+    bool isValueObject() const;   // IntValue, NumberValue, ...
 
     // Transforms. Only position and rotation are inherited down the tree
     // ("frame"); `size` scales the part itself and never its children, so a

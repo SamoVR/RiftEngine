@@ -88,9 +88,9 @@ void addTransform(std::vector<PropertyInfo>& p, bool withSize, const char* sizeN
 }
 
 void addPartAppearance(std::vector<PropertyInfo>& p, bool withShape) {
-    if (withShape) p.push_back(field<&Instance::shape>("Shape", "Appearance").enums(kPartTypes));
+    if (withShape) p.push_back(field<&Instance::shape>("Shape", "Appearance").enums("PartType"));
     p.push_back(field<&Instance::color>("Color", "Appearance"));
-    p.push_back(field<&Instance::material>("Material", "Appearance").enums(kMaterials).tip("Surface look: Neon glows, Glass is see-through and shiny, Metal is reflective."));
+    p.push_back(field<&Instance::material>("Material", "Appearance").enums("Material").tip("Surface look: Neon glows, Glass is see-through and shiny, Metal is reflective."));
     p.push_back(field<&Instance::transparency>("Transparency", "Appearance").range(0.0f, 1.0f).speed(0.01f));
     p.push_back(field<&Instance::reflectance>("Reflectance", "Appearance").range(0.0f, 1.0f).speed(0.01f));
     p.push_back(field<&Instance::texture>("Texture", "Appearance").tip("Image drawn on every face (multiplied by Color)."));
@@ -127,8 +127,8 @@ void addText(std::vector<PropertyInfo>& p) {
     p.push_back(field<&Instance::text>("Text", "Text"));
     p.push_back(field<&Instance::textColor>("TextColor3", "Text"));
     p.push_back(field<&Instance::textSize>("TextSize", "Text").range(4.0f, 200.0f));
-    p.push_back(field<&Instance::textXAlignment>("TextXAlignment", "Text").enums(kTextX));
-    p.push_back(field<&Instance::textYAlignment>("TextYAlignment", "Text").enums(kTextY));
+    p.push_back(field<&Instance::textXAlignment>("TextXAlignment", "Text").enums("TextXAlignment"));
+    p.push_back(field<&Instance::textYAlignment>("TextYAlignment", "Text").enums("TextYAlignment"));
     p.push_back(field<&Instance::textWrapped>("TextWrapped", "Text"));
 }
 
@@ -136,7 +136,7 @@ void addImage(std::vector<PropertyInfo>& p) {
     p.push_back(field<&Instance::texture>("Image", "Image"));
     p.push_back(field<&Instance::imageColor>("ImageColor3", "Image"));
     p.push_back(field<&Instance::imageTransparency>("ImageTransparency", "Image").range(0.0f, 1.0f).speed(0.01f));
-    p.push_back(field<&Instance::scaleType>("ScaleType", "Image").enums(kScaleTypes));
+    p.push_back(field<&Instance::scaleType>("ScaleType", "Image").enums("ScaleType"));
 }
 
 std::vector<ClassInfo> buildClasses() {
@@ -173,6 +173,7 @@ std::vector<ClassInfo> buildClasses() {
         c.props.push_back(field<&Instance::fogStart>("FogStart", "Fog").range(0.0f, 100000.0f));
         c.props.push_back(field<&Instance::fogEnd>("FogEnd", "Fog").range(0.0f, 100000.0f));
     }
+    def(ClassId::Players, "Players", "The players in the running game (empty while editing).", false);
     def(ClassId::ReplicatedStorage, "ReplicatedStorage", "Storage for things that are not in the world, e.g. templates that scripts Clone().", false);
     def(ClassId::ScriptService, "ScriptService", "Scripts that run for the whole game (not attached to a part).", false);
     def(ClassId::StarterGui, "StarterGui", "ScreenGuis here are shown on screen when the game runs.", false);
@@ -181,7 +182,7 @@ std::vector<ClassInfo> buildClasses() {
         c.props.push_back(field<&Instance::walkSpeed>("WalkSpeed", "Character").range(0.0f, 200.0f));
         c.props.push_back(field<&Instance::jumpPower>("JumpPower", "Character").range(0.0f, 200.0f));
         c.props.push_back(field<&Instance::color>("CharacterColor", "Character"));
-        c.props.push_back(field<&Instance::cameraMode>("CameraMode", "Camera").enums(kCameraModes));
+        c.props.push_back(field<&Instance::cameraMode>("CameraMode", "Camera").enums("CameraMode"));
         c.props.push_back(field<&Instance::cameraMaxZoom>("CameraMaxZoomDistance", "Camera").range(1.0f, 1000.0f));
     }
     {
@@ -244,6 +245,35 @@ std::vector<ClassInfo> buildClasses() {
         c.props.push_back(field<&Instance::rollOffDistance>("RollOffMaxDistance", "Sound").range(1.0f, 10000.0f));
     }
 
+    {
+        ClassInfo& c = def(ClassId::Humanoid, "Humanoid", "Makes a model a character: health, walking and jumping.", true);
+        c.props.push_back(field<&Instance::health>("Health", "Health").range(0.0f, 1e9f).tip("At 0 the character dies (Died fires) and respawns."));
+        c.props.push_back(field<&Instance::maxHealth>("MaxHealth", "Health").range(0.0f, 1e9f));
+        c.props.push_back(field<&Instance::walkSpeed>("WalkSpeed", "Movement").range(0.0f, 500.0f));
+        c.props.push_back(field<&Instance::jumpPower>("JumpPower", "Movement").range(0.0f, 500.0f));
+        c.props.push_back(field<&Instance::moveDirection>("MoveDirection", "Movement").flagsSet(PF_ScriptRead | PF_Runtime));
+        c.props.push_back(field<&Instance::jump>("Jump", "Movement").flagsSet(PF_ScriptRead | PF_ScriptWrite | PF_Runtime));
+    }
+
+    {
+        ClassInfo& c = def(ClassId::Player, "Player", "A player in the running game (created by the engine).", false);
+        c.props.front().flags = PF_ScriptRead | PF_Editor | PF_ReadOnlyUI;
+    }
+
+    // ------------------------------------------------------------ values
+    def(ClassId::IntValue, "IntValue", "Holds a whole number. In a player's leaderstats folder it is shown on the leaderboard.", true)
+        .props.push_back(field<&Instance::intValue>("Value", "Data"));
+    def(ClassId::NumberValue, "NumberValue", "Holds a number.", true)
+        .props.push_back(field<&Instance::numberValue>("Value", "Data"));
+    def(ClassId::StringValue, "StringValue", "Holds text.", true)
+        .props.push_back(field<&Instance::text>("Value", "Data"));
+    def(ClassId::BoolValue, "BoolValue", "Holds true or false.", true)
+        .props.push_back(field<&Instance::boolValue>("Value", "Data"));
+    def(ClassId::Vector3Value, "Vector3Value", "Holds a Vector3.", true)
+        .props.push_back(field<&Instance::vector3Value>("Value", "Data"));
+    def(ClassId::Color3Value, "Color3Value", "Holds a Color3.", true)
+        .props.push_back(field<&Instance::color>("Value", "Data"));
+
     // ------------------------------------------------------------ code
     {
         ClassInfo& c = def(ClassId::Script, "Script", "Lua code that runs while the game plays. Inside a part, script.Parent is that part.", true);
@@ -288,8 +318,11 @@ std::vector<ClassInfo> buildClasses() {
 
     // Every class can carry Archivable.
     for (ClassInfo& c : classes) {
-        if (c.service) continue;
+        if (c.service || c.id == ClassId::Player) continue;
         c.props.push_back(field<&Instance::archivable>("Archivable", "Data").tip("Off: not saved with the scene and not copied by Clone()."));
+    }
+    for (ClassInfo& c : classes) {
+        for (size_t i = 0; i < c.props.size(); ++i) c.byName.emplace(c.props[i].name, static_cast<int>(i));
     }
     return classes;
 }
@@ -314,14 +347,20 @@ struct DefaultCache {
 
 } // namespace
 
+PropertyInfo& PropertyInfo::enums(const char* typeName) {
+    enumType = typeName;
+    enumNames = enumNamesFor(typeName);
+    return *this;
+}
+
 const PropertyInfo* ClassInfo::find(const std::string& propName) const {
-    for (const PropertyInfo& p : props) if (p.name == propName) return &p;
-    return nullptr;
+    auto it = byName.find(propName);
+    return it == byName.end() ? nullptr : &props[static_cast<size_t>(it->second)];
 }
 
 int ClassInfo::indexOf(const std::string& propName) const {
-    for (size_t i = 0; i < props.size(); ++i) if (props[i].name == propName) return static_cast<int>(i);
-    return -1;
+    auto it = byName.find(propName);
+    return it == byName.end() ? -1 : it->second;
 }
 
 const ClassInfo& classInfo(ClassId cls) { return classes()[static_cast<int>(cls)]; }
@@ -348,6 +387,12 @@ void applyClassDefaults(Instance& i) {
             break;
         case ClassId::SoundService:
             i.volume = 1.0f;
+            break;
+        case ClassId::Player:
+            i.archivable = false; // never saved
+            break;
+        case ClassId::Color3Value:
+            i.color = { 1.0f, 1.0f, 1.0f };
             break;
         case ClassId::SpawnLocation:
             i.size = { 4.0f, 0.4f, 4.0f };

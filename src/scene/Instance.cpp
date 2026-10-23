@@ -24,6 +24,7 @@ bool Instance::isScript() const { return cls == ClassId::Script || cls == ClassI
 bool Instance::isGui() const { return cls >= ClassId::ScreenGui && cls <= ClassId::ImageButton; }
 bool Instance::isGuiObject() const { return cls > ClassId::ScreenGui && cls <= ClassId::ImageButton; }
 bool Instance::isLight() const { return cls == ClassId::PointLight || cls == ClassId::SpotLight; }
+bool Instance::isValueObject() const { return cls >= ClassId::IntValue && cls <= ClassId::Color3Value; }
 
 glm::mat4 Instance::localFrame() const {
     if (!hasTransform()) return glm::mat4(1.0f);
