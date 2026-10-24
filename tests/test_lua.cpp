@@ -463,3 +463,27 @@ TEST_CASE("every Lua example in the docs compiles") {
     }
     CHECK(blocks > 15);
 }
+
+TEST_CASE("every example scene loads and runs without script errors") {
+    const fs::path examples = Paths::engineData().parent_path() / "examples";
+    int scenes = 0;
+    for (const auto& entry : fs::recursive_directory_iterator(examples)) {
+        if (entry.path().filename() != "scene.json") continue;
+        ++scenes;
+        INFO(entry.path().string());
+        Scene scene;
+        const SceneIO::LoadResult r = SceneIO::loadScene(scene, entry.path());
+        REQUIRE_MESSAGE(r.ok, r.error);
+        ScriptStore store;
+        store.reset(Paths::toUtf8(entry.path().parent_path()));
+        Input input;
+        GameSession session(scene, store, input, GameSession::Options{});
+        session.start();
+        for (int i = 0; i < 60; ++i) {
+            input.newFrame();
+            session.update(1.0f / 60.0f, ViewportInput{});
+        }
+        for (const auto& line : session.logLines()) CHECK_MESSAGE(line.level != LogLevel::Error, line.text);
+    }
+    CHECK(scenes >= 2);
+}
