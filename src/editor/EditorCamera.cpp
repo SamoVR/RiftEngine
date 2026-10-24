@@ -72,7 +72,7 @@ bool EditorCamera::update(float dt, const Input& input, const ViewInput& view, f
 
     if (looking_ || orbiting_) {
         yaw_ += delta.x * sensitivity;
-        pitch_ = std::clamp(pitch_ - delta.y * sensitivity, -89.0f, 89.0f);
+        pitch_ = std::clamp(pitch_ - delta.y * sensitivity * (invertY ? -1.0f : 1.0f), -89.0f, 89.0f);
         framing_ = false;
         if (orbiting_) position_ = orbitPivot_ - forward() * glm::length(orbitPivot_ - position_);
     }

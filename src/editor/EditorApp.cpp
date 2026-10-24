@@ -18,14 +18,16 @@
 #include "IconsFontAwesome6.h"
 
 #include <algorithm>
+#include <chrono>
 #include <stdexcept>
+#include <thread>
 
 namespace rift {
 
 namespace fs = std::filesystem;
 
 namespace {
-    constexpr int kLayoutVersion = 3; // bump to reset everyone's panel layout after big changes
+    constexpr int kLayoutVersion = 4; // bump to reset everyone's panel layout after big changes
 
     EditorApp* appOf(GLFWwindow* w) { return static_cast<EditorApp*>(glfwGetWindowUserPointer(w)); }
 }
@@ -124,6 +126,8 @@ bool EditorApp::init() {
     io.IniFilename = iniPath_.c_str();
     ImGui_ImplGlfw_InitForOpenGL(window_, true);
     ImGui_ImplOpenGL3_Init("#version 330");
+    theme::setAccent(settings_.accent);
+    theme::setTooltipsEnabled(settings_.showTooltips);
     theme::apply(dpiScale_ * settings_.uiScale);
     appliedScale_ = dpiScale_ * settings_.uiScale;
 
@@ -136,6 +140,7 @@ bool EditorApp::init() {
     editor_ = std::make_unique<Editor>(settings_, input_, audio_.get());
     logo_ = std::make_unique<Texture>(Paths::toUtf8(Paths::icon("rift.png")));
     if (settings_.discordPresence) presence_.init(settings_.discordClientId);
+    if (settings_.checkForUpdates) updater_.check(settings_.includePrereleases);
 
     glfwShowWindow(window_);
     return true;
@@ -204,6 +209,15 @@ int EditorApp::run(const std::string& startupPath) {
         const float dt = static_cast<float>(std::min(now - last, 0.1));
         last = now;
         frame(dt);
+
+        // Frame pacing: the limit from Preferences (without V-Sync), and a slow
+        // pace while another window is active (never while the game runs).
+        double target = 0.0;
+        if (!settings_.vsync && settings_.fpsLimit > 0) target = 1.0 / settings_.fpsLimit;
+        const bool background = !glfwGetWindowAttrib(window_, GLFW_FOCUSED) && !editor_->playing() && !updater_.busy();
+        const double spent = glfwGetTime() - now;
+        if (settings_.throttleInBackground && background && spent < 1.0 / 15.0) glfwWaitEventsTimeout(1.0 / 15.0 - spent);
+        else if (target > 0.0 && spent < target) std::this_thread::sleep_for(std::chrono::duration<double>(target - spent));
     }
     shutdown();
     return 0;
@@ -231,6 +245,9 @@ void EditorApp::frame(float dt) {
     handleShortcuts();
     handleDroppedFiles();
     editor_->update(dt);
+    // A newer RIFT was found: say so once (unless the user skipped that version).
+    if (updater_.takeNewsFlag() && settings_.skippedVersion != updater_.release().version)
+        editor_->notify("RIFT " + updater_.release().version + " is available: Help > Check for Updates", NoticeLevel::Info);
     if (GameSession* s = editor_->session()) s->update(dt, viewport_.gameInput(*editor_));
 
     UiContext ui{ *editor_, *renderer_, window_, dt };
@@ -259,6 +276,11 @@ void EditorApp::frame(float dt) {
         if (settings_.showProperties) properties_.draw(ui, &settings_.showProperties);
         if (settings_.showOutput) output_.draw(ui, &settings_.showOutput);
         if (settings_.showAssets) assets_.draw(ui, &settings_.showAssets);
+        if (settings_.showSourceControl) {
+            // First shown (no saved layout for it): a tab next to the Explorer.
+            if (ImGuiWindow* w = ImGui::FindWindowByName("###Explorer")) ImGui::SetNextWindowDockID(w->DockId, ImGuiCond_FirstUseEver);
+            sourceControl_.draw(ui, &settings_.showSourceControl);
+        }
     } else {
         drawWelcome(dockspace);
     }
@@ -297,11 +319,14 @@ void EditorApp::buildDefaultLayout(ImGuiID dockspace) {
     ImGuiID bottom = ImGui::DockBuilderSplitNode(center, ImGuiDir_Down, 0.27f, nullptr, &center);
     ImGui::DockBuilderDockWindow("###Viewport", center);
     ImGui::DockBuilderDockWindow("###Explorer", right);
+    ImGui::DockBuilderDockWindow("###SourceControl", right);
     ImGui::DockBuilderDockWindow("###Properties", rightBottom);
     ImGui::DockBuilderDockWindow("###Output", bottom);
     ImGui::DockBuilderDockWindow("###Assets", bottom);
     ImGui::DockBuilderFinish(dockspace);
-    settings_.showExplorer = settings_.showProperties = settings_.showOutput = settings_.showAssets = true;
+    settings_.showExplorer = settings_.showProperties = settings_.showOutput = settings_.showAssets = settings_.showSourceControl = true;
+    // The Explorer is the tab in front.
+    if (ImGuiWindow* w = ImGui::FindWindowByName("###Explorer")) ImGui::FocusWindow(w);
 }
 
 // ============================================================================
@@ -339,7 +364,7 @@ void EditorApp::handleShortcuts() {
     if (key(ImGuiMod_Ctrl | ImGuiKey_V)) e.paste();
     if (key(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_V)) e.paste(true);
     if (key(ImGuiMod_Ctrl | ImGuiKey_D)) e.duplicateSelection();
-    if (key(ImGuiKey_Delete)) e.deleteSelection();
+    if (key(ImGuiKey_Delete)) e.requestDelete();
     if (key(ImGuiMod_Ctrl | ImGuiKey_A)) e.selectAll();
     if (key(ImGuiMod_Ctrl | ImGuiKey_G)) e.groupSelection();
     if (key(ImGuiMod_Ctrl | ImGuiKey_U)) e.ungroupSelection();
@@ -465,7 +490,7 @@ void EditorApp::drawMenuBar() {
         if (ImGui::MenuItem(ICON_FA_PASTE "  Paste", "Ctrl+V", false, e.canPaste())) e.paste();
         if (ImGui::MenuItem(ICON_FA_PASTE "  Paste Into", "Ctrl+Shift+V", false, e.canPaste() && any)) e.paste(true);
         if (ImGui::MenuItem(ICON_FA_CLONE "  Duplicate", "Ctrl+D", false, any)) e.duplicateSelection();
-        if (ImGui::MenuItem(ICON_FA_TRASH_CAN "  Delete", "Del", false, any)) e.deleteSelection();
+        if (ImGui::MenuItem(ICON_FA_TRASH_CAN "  Delete", "Del", false, any)) e.requestDelete();
         ImGui::Separator();
         if (ImGui::MenuItem(ICON_FA_OBJECT_GROUP "  Group", "Ctrl+G", false, any)) e.groupSelection();
         if (ImGui::MenuItem(ICON_FA_OBJECT_UNGROUP "  Ungroup", "Ctrl+U", false, any)) e.ungroupSelection();
@@ -482,6 +507,7 @@ void EditorApp::drawMenuBar() {
         ImGui::MenuItem(ICON_FA_SLIDERS "  Properties", nullptr, &settings_.showProperties);
         ImGui::MenuItem(ICON_FA_TERMINAL "  Output", nullptr, &settings_.showOutput);
         ImGui::MenuItem(ICON_FA_FOLDER_OPEN "  Assets", nullptr, &settings_.showAssets);
+        ImGui::MenuItem(ICON_FA_CODE_BRANCH "  Source Control", nullptr, &settings_.showSourceControl);
         ImGui::Separator();
         ImGui::MenuItem(ICON_FA_TABLE_CELLS "  Grid", nullptr, &settings_.showGrid);
         ImGui::MenuItem(ICON_FA_DESKTOP "  GUI While Editing", nullptr, &settings_.showGui);
@@ -509,13 +535,17 @@ void EditorApp::drawMenuBar() {
     }
 
     if (ImGui::BeginMenu("Help")) {
-        if (ImGui::MenuItem(ICON_FA_BOOK "  Scripting Reference")) {
-            std::error_code ec;
-            const fs::path doc = Paths::engineData().parent_path() / "docs" / "SCRIPTING.md";
-            if (fs::exists(doc, ec)) Platform::openWithShell(Paths::toUtf8(doc));
-            else Platform::openWithShell("https://github.com/SamoVR/RiftEngine/blob/main/docs/SCRIPTING.md");
-        }
+        if (ImGui::MenuItem(ICON_FA_BOOK_OPEN "  Editor Guide")) Platform::openWithShell(std::string(RIFT_DOCS_URL) + "GUIDE.md");
+        if (ImGui::MenuItem(ICON_FA_BOOK "  Scripting Reference")) Platform::openWithShell(std::string(RIFT_DOCS_URL) + "SCRIPTING.md");
         if (ImGui::MenuItem(ICON_FA_KEYBOARD "  Keyboard Shortcuts")) showShortcuts_ = true;
+        ImGui::Separator();
+        const bool update = updater_.state() == Updater::State::Available || updater_.state() == Updater::State::Ready;
+        if (ImGui::MenuItem(update ? ICON_FA_GIFT "  Update Available..." : ICON_FA_CIRCLE_ARROW_UP "  Check for Updates...")) {
+            showUpdate_ = true;
+            if (!update && !updater_.busy()) updater_.check(settings_.includePrereleases);
+        }
+        if (ImGui::MenuItem(ICON_FA_GLOBE "  RIFT Website")) Platform::openWithShell(RIFT_WEBSITE);
+        if (ImGui::MenuItem(ICON_FA_BUG "  Report a Problem")) Platform::openWithShell(std::string("https://github.com/") + RIFT_GITHUB_REPO + "/issues");
         if (ImGui::MenuItem(ICON_FA_FILE_LINES "  Open Log File")) Platform::revealInExplorer(Log::filePath());
         ImGui::Separator();
         ImGui::MenuItem(ICON_FA_FLASK "  ImGui Demo", nullptr, &showImGuiDemo_);
@@ -661,11 +691,21 @@ void EditorApp::drawStatusBar() {
             ImGui::TextDisabled("Ready");
         }
     }
-    // Right: counts and version
+    // Right: update badge, counts and version
     char right[128];
     std::snprintf(right, sizeof(right), "%d objects   RIFT %s", e.hasScene() ? static_cast<int>(e.scene().size()) : 0, RIFT_VERSION_STRING);
-    const float w = ImGui::CalcTextSize(right).x;
+    const bool update = updater_.state() == Updater::State::Available || updater_.state() == Updater::State::Ready;
+    const std::string badge = update ? ICON_FA_GIFT "  Update to " + updater_.release().version : std::string();
+    const float badgeWidth = update ? ImGui::CalcTextSize(badge.c_str()).x + ImGui::GetStyle().ItemSpacing.x * 2.0f : 0.0f;
+    const float w = ImGui::CalcTextSize(right).x + badgeWidth;
     ImGui::SameLine(std::max(ImGui::GetCursorPosX() + 16.0f, ImGui::GetWindowWidth() - w - ImGui::GetStyle().WindowPadding.x));
+    if (update) {
+        ImGui::PushStyleColor(ImGuiCol_Text, theme::color::success);
+        if (ImGui::Selectable(badge.c_str(), false, 0, ImVec2(ImGui::CalcTextSize(badge.c_str()).x, 0.0f))) showUpdate_ = true;
+        ImGui::PopStyleColor();
+        theme::tooltip("A newer RIFT is available. Click to see what's new.");
+        ImGui::SameLine();
+    }
     ImGui::TextDisabled("%s", right);
     ImGui::End();
 }

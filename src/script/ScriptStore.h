@@ -71,13 +71,14 @@ public:
     std::vector<std::string> pollExternalChanges(std::vector<std::string>* conflicts = nullptr);
 
     std::vector<std::string> paths() const;
+    // Where a script's file is on disk.
+    std::filesystem::path diskPath(const std::string& relPath) const;
 
 private:
     std::string root_;
     std::string projectRoot_;
     std::map<std::string, Entry> entries_;
 
-    std::filesystem::path diskPath(const std::string& relPath) const;
     static bool readFile(const std::filesystem::path& p, std::string& out);
     static bool writeFile(const std::filesystem::path& p, const std::string& text);
 };

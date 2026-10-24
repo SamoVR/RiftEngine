@@ -42,6 +42,7 @@ public:
     void ray(const glm::vec2& pixel, const glm::vec2& size, glm::vec3& origin, glm::vec3& direction) const;
 
     float fieldOfView = 70.0f;
+    bool invertY = false; // mouse up looks down
 
 private:
     glm::vec3 position_{ 24.0f, 18.0f, 24.0f };

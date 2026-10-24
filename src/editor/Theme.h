@@ -28,9 +28,10 @@ float scale();
 
 // ---- palette
 namespace color {
-    inline const ImVec4 accent{ 0.545f, 0.361f, 0.965f, 1.0f };       // #8B5CF6
-    inline const ImVec4 accentHover{ 0.616f, 0.455f, 0.973f, 1.0f };
-    inline const ImVec4 accentActive{ 0.486f, 0.302f, 0.859f, 1.0f };
+    // The accent follows Preferences > Appearance (setAccent).
+    inline ImVec4 accent{ 0.545f, 0.361f, 0.965f, 1.0f };       // #8B5CF6
+    inline ImVec4 accentHover{ 0.616f, 0.455f, 0.973f, 1.0f };
+    inline ImVec4 accentActive{ 0.486f, 0.302f, 0.859f, 1.0f };
     inline const ImVec4 text{ 0.894f, 0.894f, 0.914f, 1.0f };
     inline const ImVec4 textDim{ 0.553f, 0.561f, 0.600f, 1.0f };
     inline const ImVec4 success{ 0.243f, 0.812f, 0.557f, 1.0f };
@@ -44,6 +45,15 @@ namespace color {
     inline const ImVec4 border{ 0.173f, 0.180f, 0.208f, 1.0f };
 }
 ImU32 u32(const ImVec4& c, float alphaScale = 1.0f);
+
+// Accent colour presets (Violet, Blue, Teal, Green, Orange, Pink, Red).
+int accentCount();
+const char* accentName(int index);
+ImVec4 accentColor(int index);
+// Switches the accent and restyles (at the current scale).
+void setAccent(int index);
+// Hover tooltips on / off (Preferences).
+void setTooltipsEnabled(bool enabled);
 
 // ---- instance classes
 const char* classIcon(ClassId cls);

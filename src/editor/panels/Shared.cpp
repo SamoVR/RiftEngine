@@ -4,6 +4,7 @@
 #include "editor/Templates.h"
 #include "editor/Theme.h"
 #include "core/Paths.h"
+#include "platform/Platform.h"
 #include "render/ModelLoader.h"
 
 #include "IconsFontAwesome6.h"
@@ -45,6 +46,21 @@ namespace {
         editor.insert(cls, shape);
         return true;
     }
+}
+
+void openInExternalEditor(Editor& editor, const std::string& scriptPath) {
+    ScriptStore& store = editor.scripts();
+    if (const ScriptStore::Entry* entry = store.find(scriptPath); entry && entry->dirty) store.save(scriptPath);
+    const std::string file = Paths::toUtf8(store.diskPath(scriptPath));
+    const std::string& program = editor.settings().externalEditor;
+    bool ok = false;
+    if (!program.empty()) ok = Platform::launch(program, { file });
+    else {
+        // Windows' choice for .lua; without one, Notepad.
+        ok = Platform::launch(file, {});
+        if (!ok) ok = Platform::launch("notepad.exe", { file });
+    }
+    if (!ok) editor.notify("Could not open " + scriptPath + " in the external editor (Preferences > Scripts)", NoticeLevel::Error);
 }
 
 void drawSideSwitch(Editor& editor, float height) {

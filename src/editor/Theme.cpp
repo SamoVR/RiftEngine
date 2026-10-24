@@ -13,6 +13,19 @@ namespace {
     Fonts g_fonts;
     float g_scale = 1.0f;
     bool g_fontsLoaded = false;
+    bool g_tooltips = true;
+
+    struct Accent { const char* name; ImVec4 color; };
+    const Accent kAccents[] = {
+        { "Violet", { 0.545f, 0.361f, 0.965f, 1.0f } },
+        { "Blue", { 0.231f, 0.510f, 0.965f, 1.0f } },
+        { "Teal", { 0.078f, 0.722f, 0.651f, 1.0f } },
+        { "Green", { 0.133f, 0.773f, 0.369f, 1.0f } },
+        { "Orange", { 0.976f, 0.451f, 0.086f, 1.0f } },
+        { "Pink", { 0.925f, 0.282f, 0.600f, 1.0f } },
+        { "Red", { 0.937f, 0.267f, 0.267f, 1.0f } },
+    };
+    constexpr int kAccentCount = static_cast<int>(sizeof(kAccents) / sizeof(kAccents[0]));
 
     void loadFonts() {
         ImGuiIO& io = ImGui::GetIO();
@@ -56,6 +69,23 @@ namespace {
 
 Fonts& fonts() { return g_fonts; }
 float scale() { return g_scale; }
+
+int accentCount() { return kAccentCount; }
+const char* accentName(int index) { return kAccents[std::clamp(index, 0, kAccentCount - 1)].name; }
+ImVec4 accentColor(int index) { return kAccents[std::clamp(index, 0, kAccentCount - 1)].color; }
+
+void setAccent(int index) {
+    const ImVec4 c = accentColor(index);
+    auto mix = [](const ImVec4& a, float t, float target) {
+        return ImVec4(a.x + (target - a.x) * t, a.y + (target - a.y) * t, a.z + (target - a.z) * t, 1.0f);
+    };
+    color::accent = c;
+    color::accentHover = mix(c, 0.18f, 1.0f);  // a little lighter
+    color::accentActive = mix(c, 0.15f, 0.0f); // a little darker
+    if (g_fontsLoaded) apply(g_scale);
+}
+
+void setTooltipsEnabled(bool enabled) { g_tooltips = enabled; }
 
 ImU32 u32(const ImVec4& c, float alphaScale) { return ImGui::GetColorU32(ImVec4(c.x, c.y, c.z, c.w * alphaScale)); }
 
@@ -254,7 +284,7 @@ bool menuItem(const char* icon, const ImVec4& iconColor, const char* label, cons
 }
 
 void tooltip(const char* text) {
-    if (text && *text && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled)) {
+    if (g_tooltips && text && *text && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled)) {
         ImGui::SetNextWindowSizeConstraints(ImVec2(0, 0), ImVec2(ImGui::GetFontSize() * 26.0f, FLT_MAX));
         ImGui::BeginTooltip();
         ImGui::PushTextWrapPos(ImGui::GetFontSize() * 25.0f);

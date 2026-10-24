@@ -68,6 +68,9 @@ public:
     bool saveProjectSettings();
     // Moves the project's scenes to another folder inside it (saves first).
     bool changeScenesFolder(const std::string& folder, bool moveExisting);
+    // Reads the project and the open scene again from disk, dropping what is
+    // in memory (after a git pull or branch switch changed the files).
+    bool reloadFromDisk();
 
     // ---- scenes
     bool openScene(const std::filesystem::path& sceneFile);
@@ -75,6 +78,8 @@ public:
     bool saveSceneAs(const std::string& name);         // to <project>/scenes/<name>/scene.json
     bool newScene(const std::string& name);            // creates, saves and opens it
     bool hasScene() const { return !scenePath_.empty(); }
+    uint64_t saveCount() const { return saveCount_; }  // goes up with every save
+    bool thumbnailRequest = false; // the viewport saves the project's thumbnail (set by saveScene)
     const std::filesystem::path& scenePath() const { return scenePath_; }
     std::string sceneName() const;
     bool isDirty() const;
@@ -126,6 +131,9 @@ public:
     // Creates `cls` under `parent` and lets `setup` fill it in: one undo step, selected.
     Instance* insertWith(ClassId cls, Instance* parent, const std::function<void(Instance&)>& setup, const std::string& label = "");
     void deleteSelection();
+    // Delete, or ask first (Preferences > General); the UI shows the question.
+    void requestDelete();
+    bool deleteRequested = false;
     void duplicateSelection();
     void copySelection();
     void cutSelection();
@@ -194,6 +202,7 @@ private:
     std::deque<OutputLine> output_;
     uint64_t outputCounter_ = 0;
     uint64_t lastSessionLog_ = 0;
+    uint64_t saveCount_ = 0;
     int logListener_ = 0;
 
     struct Preview { std::string prop; std::vector<SetPropertyCommand::Change> changes; };

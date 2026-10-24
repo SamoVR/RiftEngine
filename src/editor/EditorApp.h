@@ -6,12 +6,14 @@
 //
 #include "editor/Editor.h"
 #include "editor/EditorSettings.h"
+#include "editor/Updater.h"
 #include "editor/panels/Panels.h"
 #include "platform/Input.h"
 #include "platform/RichPresence.h"
 #include "project/Project.h"
 
 #include <imgui.h>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -51,6 +53,8 @@ private:
     OutputPanel output_;
     ScriptEditorPanel scripts_;
     AssetBrowserPanel assets_;
+    SourceControlPanel sourceControl_;
+    Updater updater_;
 
     std::string iniPath_;
     float dpiScale_ = 1.0f;
@@ -61,8 +65,25 @@ private:
     std::vector<std::string> droppedFiles_;
     float presenceTimer_ = 0.0f;
 
+    // Home screen (no project open)
+    int homePage_ = 0;                 // 0 projects, 1 learn
+    char homeSearch_[128] = {};
+    int homeSort_ = 0;                 // 0 last opened, 1 name
+    struct Thumbnail { std::unique_ptr<Texture> texture; long long stamp = 0; };
+    std::map<std::string, Thumbnail> thumbnails_; // project folder -> its .rift/thumbnail.png
+    float thumbnailTimer_ = 0.0f;
+    Texture* thumbnailFor(const std::string& projectFolder);
+
     // Dialogs
     bool showPreferences_ = false;
+    int preferencesPage_ = 0;
+    bool showUpdate_ = false;
+    bool showExample_ = false;
+    std::filesystem::path exampleSource_;
+    char exampleName_[64] = {};
+    std::string exampleFolder_;
+    std::string scenesFolderDraft_;
+    bool scenesFolderMove_ = true;
     bool showProjectSettings_ = false;
     bool showAbout_ = false;
     bool showShortcuts_ = false;
@@ -93,6 +114,11 @@ private:
     void buildDefaultLayout(ImGuiID dockspace);
     void drawWelcome(ImGuiID dockspace); // keeps the (hidden) dock layout alive
     void drawDialogs();
+    void drawPreferences();
+    void drawProjectSettings();
+    void drawUpdateDialog();
+    void drawHomeProjects(float width);
+    void drawHomeLearn(float width);
     void drawNotices();
     void updateTitle();
     void updatePresence(float dt);

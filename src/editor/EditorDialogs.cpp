@@ -80,6 +80,7 @@ namespace {
 }
 
 std::string EditorApp::defaultProjectsFolder() const {
+    if (!settings_.projectsFolder.empty()) return settings_.projectsFolder; // Preferences > Projects
     const std::string docs = Platform::documentsFolder();
     const fs::path base = docs.empty() ? Paths::userData() : Paths::fromUtf8(docs);
     return Paths::toUtf8(base / "RIFT Projects");
@@ -105,21 +106,16 @@ void EditorApp::openNewProject() {
 }
 
 void EditorApp::openExample(const fs::path& folder) {
-    // Examples are copied first, so the originals stay untouched.
+    // Examples are copied first (the originals stay untouched): ask where to.
+    exampleSource_ = folder;
+    exampleFolder_ = defaultProjectsFolder();
+    std::string name = Paths::toUtf8(folder.filename());
     std::error_code ec;
-    const fs::path base = Paths::fromUtf8(defaultProjectsFolder());
-    fs::create_directories(base, ec);
-    fs::path target = base / folder.filename();
-    if (fs::exists(target / "project.json", ec)) {
-        editor_->requestDiscard([this, target] { editor_->openProject(target); });
-        return;
-    }
-    fs::copy(folder, target, fs::copy_options::recursive, ec);
-    if (ec) {
-        editor_->notify("Could not copy the example: " + ec.message(), NoticeLevel::Error);
-        return;
-    }
-    editor_->requestDiscard([this, target] { editor_->openProject(target); });
+    // A free name: DemoObby, DemoObby 2, ...
+    for (int n = 2; fs::exists(Paths::fromUtf8(exampleFolder_) / Paths::fromUtf8(name), ec) && n < 100; ++n)
+        name = Paths::toUtf8(folder.filename()) + " " + std::to_string(n);
+    std::strncpy(exampleName_, name.c_str(), sizeof(exampleName_) - 1);
+    showExample_ = true;
 }
 
 void EditorApp::openSceneNameDialog(bool saveAs) {
@@ -173,100 +169,6 @@ void EditorApp::runInPlayer() {
 }
 
 // ============================================================================
-//  Welcome screen (no project open)
-// ============================================================================
-void EditorApp::drawWelcome(ImGuiID dockspace) {
-    ImGuiViewport* vp = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(vp->WorkPos);
-    ImGui::SetNextWindowSize(vp->WorkSize);
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, theme::color::bgDark);
-    ImGui::Begin("##welcome", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoDocking);
-    ImGui::PopStyleColor();
-    // The panels' dock layout must stay alive while it is not shown.
-    ImGui::DockSpace(dockspace, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_KeepAliveOnly);
-
-    const float fs_ = ImGui::GetFontSize();
-    const float width = std::min(vp->WorkSize.x - fs_ * 4.0f, fs_ * 58.0f);
-    const float left = (vp->WorkSize.x - width) * 0.5f;
-    ImGui::SetCursorPos(ImVec2(left, std::max(fs_ * 2.0f, vp->WorkSize.y * 0.12f)));
-    ImGui::BeginGroup();
-
-    // ---- header
-    if (logo_ && logo_->isValid()) {
-        ImGui::Image(static_cast<ImTextureID>(logo_->id()), ImVec2(fs_ * 4.2f, fs_ * 4.2f), ImVec2(0, 1), ImVec2(1, 0));
-        ImGui::SameLine(0.0f, fs_);
-    }
-    ImGui::BeginGroup();
-    theme::pushHeading(2.6f);
-    ImGui::TextUnformatted("RIFT");
-    theme::pop();
-    ImGui::TextDisabled("Game engine %s  -  build Roblox-style games with Lua", RIFT_VERSION_STRING);
-    ImGui::EndGroup();
-    ImGui::Dummy(ImVec2(0.0f, fs_ * 1.5f));
-
-    // ---- left: actions, right: recent projects
-    const float column = (width - fs_ * 2.0f) * 0.42f;
-    ImGui::BeginGroup();
-    theme::heading("Start", column);
-    if (card("new", ICON_FA_FOLDER_PLUS, theme::color::accentHover, "New Project", "Empty, baseplate or obby template", column)) openNewProject();
-    ImGui::Dummy(ImVec2(0.0f, fs_ * 0.3f));
-    if (card("open", ICON_FA_FOLDER_OPEN, theme::color::warning, "Open Project", "A folder with a project.json", column)) openProjectDialog();
-    ImGui::Dummy(ImVec2(0.0f, fs_ * 0.3f));
-    // Examples shipped next to the engine's data folder.
-    std::error_code ec;
-    const fs::path examples = Paths::engineData().parent_path() / "examples";
-    if (fs::is_directory(examples, ec)) {
-        ImGui::Dummy(ImVec2(0.0f, fs_ * 0.6f));
-        theme::heading("Examples", column);
-        for (const auto& item : fs::directory_iterator(examples, ec)) {
-            if (!fs::exists(item.path() / "project.json", ec)) continue;
-            const std::string name = Paths::toUtf8(item.path().filename());
-            if (card(name.c_str(), ICON_FA_GAMEPAD, theme::color::success, name.c_str(), "Opens a copy in your projects folder", column)) openExample(item.path());
-            ImGui::Dummy(ImVec2(0.0f, fs_ * 0.3f));
-        }
-    }
-    ImGui::EndGroup();
-
-    ImGui::SameLine(0.0f, fs_ * 2.0f);
-    ImGui::BeginGroup();
-    const float recentWidth = width - column - fs_ * 2.0f;
-    theme::heading("Recent projects", recentWidth);
-    ImGui::BeginChild("##recent", ImVec2(recentWidth, std::max(fs_ * 12.0f, vp->WorkSize.y * 0.5f)));
-    std::string remove;
-    fs::path openNow; // opened after the loop: opening reorders the recent list
-    for (const std::string& path : settings_.recentProjects) {
-        const fs::path p = Paths::fromUtf8(path);
-        const bool exists = fs::exists(p / "project.json", ec);
-        ImGui::PushID(path.c_str());
-        const ImVec2 pos = ImGui::GetCursorScreenPos();
-        const float h = fs_ * 2.9f;
-        ImGui::BeginDisabled(!exists);
-        if (ImGui::Selectable("##row", false, ImGuiSelectableFlags_AllowOverlap, ImVec2(recentWidth - fs_ * 2.5f, h)))
-            openNow = p;
-        ImGui::EndDisabled();
-        ImDrawList* draw = ImGui::GetWindowDrawList();
-        draw->AddText(ImGui::GetFont(), fs_ * 1.3f, ImVec2(pos.x + fs_ * 0.5f, pos.y + (h - fs_ * 1.3f) * 0.5f), theme::u32(exists ? theme::color::warning : theme::color::textDim), ICON_FA_FOLDER);
-        const std::string name = Paths::toUtf8(p.filename()) + (exists ? "" : "  (missing)");
-        draw->AddText(theme::fonts().medium, fs_, ImVec2(pos.x + fs_ * 2.6f, pos.y + h * 0.5f - fs_ * 1.05f), theme::u32(exists ? theme::color::text : theme::color::textDim), name.c_str());
-        draw->AddText(ImGui::GetFont(), fs_ * 0.85f, ImVec2(pos.x + fs_ * 2.6f, pos.y + h * 0.5f + fs_ * 0.05f), theme::u32(theme::color::textDim), path.c_str());
-        ImGui::SameLine(recentWidth - fs_ * 2.2f);
-        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (h - ImGui::GetFrameHeight()) * 0.5f);
-        if (theme::iconButton(ICON_FA_XMARK, "Remove from the list")) remove = path;
-        ImGui::PopID();
-    }
-    if (settings_.recentProjects.empty()) ImGui::TextDisabled("Projects you open show up here.");
-    ImGui::EndChild();
-    ImGui::EndGroup();
-    if (!remove.empty()) {
-        settings_.recentProjects.erase(std::remove(settings_.recentProjects.begin(), settings_.recentProjects.end(), remove), settings_.recentProjects.end());
-        settings_.save();
-    }
-    if (!openNow.empty()) editor_->openProject(openNow);
-    ImGui::EndGroup();
-    ImGui::End();
-}
-
-// ============================================================================
 //  Dialogs
 // ============================================================================
 void EditorApp::drawDialogs() {
@@ -301,6 +203,29 @@ void EditorApp::drawDialogs() {
         ImGui::EndPopup();
     }
 
+    // ---- delete (when Preferences ask for a confirmation)
+    if (e.deleteRequested && !ImGui::IsPopupOpen("Delete?")) ImGui::OpenPopup("Delete?");
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    if (ImGui::BeginPopupModal("Delete?", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings)) {
+        const size_t n = e.selection().size();
+        const Instance* one = n == 1 ? e.scene().find(e.primary()) : nullptr;
+        if (one) ImGui::Text("Delete %s?", one->name.c_str());
+        else ImGui::Text("Delete %d objects?", static_cast<int>(n));
+        ImGui::TextDisabled(e.playing() ? "Only in the running game." : "Undo (Ctrl+Z) brings it back.");
+        ImGui::Spacing();
+        if (ImGui::Button(ICON_FA_TRASH_CAN "  Delete", ImVec2(buttonWidth(), 0.0f)) || ImGui::IsKeyPressed(ImGuiKey_Enter)) {
+            e.deleteRequested = false;
+            e.deleteSelection();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(buttonWidth(), 0.0f)) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+            e.deleteRequested = false;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+
     // ---- new project
     if (showNewProject_) {
         ImGui::OpenPopup("New project");
@@ -327,6 +252,8 @@ void EditorApp::drawDialogs() {
         if (card("t1", ICON_FA_TABLE_CELLS_LARGE, theme::color::accentHover, "Baseplate", "A big floor, ready to build on", w, newProjectTemplate_ == 1)) newProjectTemplate_ = 1;
         if (card("t2", ICON_FA_PERSON_RUNNING, theme::color::success, "Obby", "A small obstacle course with scripts", w, newProjectTemplate_ == 2)) newProjectTemplate_ = 2;
         ImGui::Spacing();
+        ImGui::Checkbox("Track changes with Git (version control)", &settings_.gitInitNewProjects);
+        theme::tooltip("Makes the project a git repository with a first commit, so every version can be restored and backed up to GitHub.");
         const bool ok = validName(newProjectName_) && !newProjectFolder_.empty();
         if (!validName(newProjectName_) && newProjectName_[0]) ImGui::TextColored(theme::color::error, "The name cannot contain \\ / : * ? \" < > |");
         else ImGui::TextDisabled("%s", Paths::toUtf8(Paths::fromUtf8(newProjectFolder_) / Paths::fromUtf8(newProjectName_)).c_str());
@@ -339,6 +266,60 @@ void EditorApp::drawDialogs() {
             const std::string name = newProjectName_;
             ImGui::CloseCurrentPopup();
             e.requestDiscard([&e, parent, name, t] { e.createProject(parent, name, t); });
+        }
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(buttonWidth(), 0.0f)) || ImGui::IsKeyPressed(ImGuiKey_Escape)) ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+
+    // ---- open an example (copy it first)
+    if (showExample_) {
+        ImGui::OpenPopup("Open example");
+        showExample_ = false;
+    }
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    if (ImGui::BeginPopupModal("Open example", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings)) {
+        const float w = fs_ * 30.0f;
+        ImGui::PushTextWrapPos(w);
+        ImGui::TextDisabled("Examples open as a copy, so you can change anything and the original stays as it is.");
+        ImGui::PopTextWrapPos();
+        ImGui::Spacing();
+        ImGui::TextUnformatted("Name of the copy");
+        ImGui::SetNextItemWidth(w);
+        if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
+        ImGui::InputText("##exampleName", exampleName_, sizeof(exampleName_));
+        ImGui::TextUnformatted("Location");
+        ImGui::SetNextItemWidth(w - ImGui::GetFrameHeight() - ImGui::GetStyle().ItemInnerSpacing.x);
+        ImGui::InputText("##exampleFolder", &exampleFolder_);
+        ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
+        if (ImGui::Button(ICON_FA_FOLDER_OPEN "##pickExample", ImVec2(ImGui::GetFrameHeight(), 0.0f))) {
+            const std::string picked = Platform::pickFolderDialog("Where should the copy go?", exampleFolder_);
+            if (!picked.empty()) exampleFolder_ = picked;
+        }
+        std::error_code ec;
+        const fs::path target = Paths::fromUtf8(exampleFolder_) / Paths::fromUtf8(exampleName_);
+        const bool taken = validName(exampleName_) && fs::exists(target, ec);
+        const bool ok = validName(exampleName_) && !exampleFolder_.empty() && !taken;
+        if (taken) ImGui::TextColored(theme::color::error, "That folder already exists");
+        else ImGui::TextDisabled("%s", Paths::toUtf8(target).c_str());
+        ImGui::Spacing();
+        ImGui::BeginDisabled(!ok);
+        if (ImGui::Button(ICON_FA_COPY "  Copy and open", ImVec2(buttonWidth() * 1.3f, 0.0f)) || (ok && ImGui::IsKeyPressed(ImGuiKey_Enter))) {
+            fs::create_directories(target.parent_path(), ec);
+            fs::copy(exampleSource_, target, fs::copy_options::recursive, ec);
+            ImGui::CloseCurrentPopup();
+            if (ec) {
+                e.notify("Could not copy the example: " + ec.message(), NoticeLevel::Error);
+            } else {
+                // The copy is its own game: give it the folder's name.
+                Project copy;
+                if (copy.load(target)) {
+                    copy.settings().name = exampleName_;
+                    copy.save();
+                }
+                e.requestDiscard([&e, target] { e.openProject(target); });
+            }
         }
         ImGui::EndDisabled();
         ImGui::SameLine();
@@ -361,7 +342,7 @@ void EditorApp::drawDialogs() {
         const bool exists = e.hasProject() && fs::exists(e.project().scenesFolder() / Paths::fromUtf8(sceneName_), ec);
         const bool ok = validName(sceneName_) && !exists;
         if (exists) ImGui::TextColored(theme::color::error, "A scene with that name exists");
-        else ImGui::TextDisabled("scenes/%s/scene.json", sceneName_);
+        else ImGui::TextDisabled("%s/%s/scene.json", e.hasProject() ? e.project().settings().scenesFolder.c_str() : "scenes", sceneName_);
         ImGui::BeginDisabled(!ok);
         if (ImGui::Button(sceneNameIsSaveAs_ ? ICON_FA_FLOPPY_DISK "  Save" : ICON_FA_PLUS "  Create", ImVec2(buttonWidth(), 0.0f)) || (ok && enter)) {
             const std::string name = sceneName_;
@@ -375,92 +356,9 @@ void EditorApp::drawDialogs() {
         ImGui::EndPopup();
     }
 
-    // ---- preferences
-    if (showPreferences_) {
-        ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-        if (ImGui::Begin(ICON_FA_SLIDERS "  Preferences###Preferences", &showPreferences_, ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_AlwaysAutoResize)) {
-            EditorSettings& s = settings_;
-            ImGui::PushItemWidth(fs_ * 14.0f);
-            if (ImGui::BeginTabBar("##prefs")) {
-                if (ImGui::BeginTabItem("General")) {
-                    ImGui::SliderFloat("Interface size", &s.uiScale, 0.75f, 2.0f, "%.2fx");
-                    theme::tooltip("Scales the whole editor (on top of the Windows display scaling).");
-                    ImGui::SliderFloat("Script text size", &s.scriptFontSize, 10.0f, 28.0f, "%.0f px");
-                    ImGui::Checkbox("Reopen the last project on start", &s.reopenLastProject);
-                    ImGui::SliderInt("Autosave every", &s.autosaveMinutes, 0, 30, s.autosaveMinutes == 0 ? "off" : "%d min");
-                    theme::tooltip("Autosaves go to scene.autosave.json next to the scene; the scene itself is only written when you save.");
-                    if (ImGui::Checkbox("Show RIFT in Discord", &s.discordPresence)) {
-                        if (s.discordPresence) presence_.init(s.discordClientId);
-                        else presence_.shutdown();
-                    }
-                    ImGui::EndTabItem();
-                }
-                if (ImGui::BeginTabItem("Viewport")) {
-                    ImGui::Checkbox("Grid", &s.showGrid);
-                    ImGui::DragFloat("Grid step", &s.gridStep, 0.05f, 0.1f, 64.0f, "%.2f studs");
-                    ImGui::Checkbox("Shadows", &s.shadows);
-                    ImGui::Checkbox("Wireframe", &s.wireframe);
-                    ImGui::Checkbox("Statistics", &s.showStats);
-                    if (ImGui::Checkbox("V-Sync", &s.vsync)) glfwSwapInterval(s.vsync ? 1 : 0);
-                    ImGui::SliderFloat("Camera speed", &s.cameraSpeed, 2.0f, 200.0f, "%.0f studs/s", ImGuiSliderFlags_Logarithmic);
-                    ImGui::SliderFloat("Mouse sensitivity", &s.mouseSensitivity, 0.05f, 1.0f, "%.2f");
-                    ImGui::EndTabItem();
-                }
-                if (ImGui::BeginTabItem("Snapping")) {
-                    ImGui::Checkbox("Snap while moving, rotating and resizing", &s.snap);
-                    ImGui::DragFloat("Move step", &s.snapMove, 0.05f, 0.01f, 64.0f, "%.2f studs");
-                    ImGui::DragFloat("Rotate step", &s.snapRotate, 0.5f, 1.0f, 180.0f, "%.0f degrees");
-                    ImGui::DragFloat("Resize step", &s.snapScale, 0.05f, 0.01f, 64.0f, "%.2f studs");
-                    ImGui::EndTabItem();
-                }
-                ImGui::EndTabBar();
-            }
-            ImGui::PopItemWidth();
-        }
-        ImGui::End();
-        if (!showPreferences_) settings_.save();
-    }
-
-    // ---- project settings
-    if (showProjectSettings_ && e.hasProject()) {
-        ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-        ImGui::SetNextWindowSize(ImVec2(fs_ * 32.0f, 0.0f), ImGuiCond_Appearing);
-        if (ImGui::Begin(ICON_FA_GEAR "  Project Settings###ProjectSettings", &showProjectSettings_, ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_AlwaysAutoResize)) {
-            ProjectSettings& p = projectDraft_;
-            ImGui::SeparatorText("Game");
-            ImGui::InputText("Name", &p.name);
-            ImGui::InputText("Version", &p.version);
-            ImGui::InputText("Author", &p.author);
-            if (ImGui::BeginCombo("Start scene", p.startScene.c_str())) {
-                for (const fs::path& s : e.project().scenes()) {
-                    std::error_code ec;
-                    std::string rel = Paths::toUtf8(fs::relative(s, e.project().root(), ec));
-                    std::replace(rel.begin(), rel.end(), '\\', '/');
-                    if (ImGui::Selectable(rel.c_str(), rel == p.startScene)) p.startScene = rel;
-                }
-                ImGui::EndCombo();
-            }
-            ImGui::InputText("Icon (png)", &p.icon);
-            ImGui::SeparatorText("Window");
-            ImGui::InputInt("Width", &p.windowWidth, 16, 128);
-            ImGui::InputInt("Height", &p.windowHeight, 16, 128);
-            p.windowWidth = std::clamp(p.windowWidth, 320, 7680);
-            p.windowHeight = std::clamp(p.windowHeight, 240, 4320);
-            ImGui::Checkbox("Fullscreen", &p.fullscreen);
-            ImGui::SameLine();
-            ImGui::Checkbox("Resizable", &p.resizable);
-            ImGui::SameLine();
-            ImGui::Checkbox("V-Sync", &p.vsync);
-            ImGui::Spacing();
-            if (ImGui::Button(ICON_FA_FLOPPY_DISK "  Save", ImVec2(buttonWidth(), 0.0f))) {
-                e.project().settings() = p;
-                if (e.saveProjectSettings()) showProjectSettings_ = false;
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("Cancel", ImVec2(buttonWidth(), 0.0f))) showProjectSettings_ = false;
-        }
-        ImGui::End();
-    }
+    drawPreferences();
+    drawProjectSettings();
+    drawUpdateDialog();
 
     // ---- build game
     if (showBuild_) {

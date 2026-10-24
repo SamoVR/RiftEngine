@@ -2,6 +2,7 @@
 #include "editor/Theme.h"
 #include "core/TransformUtil.h"
 #include "render/Picking.h"
+#include "render/ImageWrite.h"
 #include "render/Renderer.h"
 #include "game/GuiSystem.h"
 #include "platform/Input.h"
@@ -154,8 +155,12 @@ void ViewportPanel::draw(UiContext& ui) {
     rs.shadows = settings.shadows;
     for (uint64_t id : editor.selection()) rs.selected.insert(id);
     rs.hovered = editView ? hoveredId_ : 0;
-    framebuffer_.resize(static_cast<int>(size_.x), static_cast<int>(size_.y), 4);
+    framebuffer_.resize(static_cast<int>(size_.x), static_cast<int>(size_.y), settings.msaa);
     ui.renderer.render(editor.scene(), camera, rs, framebuffer_);
+    if (editor.thumbnailRequest) {
+        editor.thumbnailRequest = false;
+        if (!editor.playing()) saveThumbnail(editor);
+    }
     ImGui::Image(static_cast<ImTextureID>(framebuffer_.texture()), ImVec2(size_.x, size_.y), ImVec2(0, 1), ImVec2(1, 0));
     handleDrop(ui);
 
@@ -184,6 +189,43 @@ void ViewportPanel::draw(UiContext& ui) {
     drawOverlays(ui, view, proj);
     handleSelection(ui, view, proj, editGui.get());
     ImGui::End();
+}
+
+void ViewportPanel::saveThumbnail(Editor& editor) {
+    if (!editor.hasProject()) return;
+    const int w = static_cast<int>(size_.x), h = static_cast<int>(size_.y);
+    if (w < 16 || h < 16) return;
+    std::vector<unsigned char> pixels(static_cast<size_t>(w) * static_cast<size_t>(h) * 4);
+    glBindTexture(GL_TEXTURE_2D, framebuffer_.texture());
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    // The middle 16:9 of the view, box-filtered down to 480 x 270, rows flipped
+    // (OpenGL's first row is the bottom one).
+    constexpr int outW = 480, outH = 270;
+    int cw = w, ch = h;
+    if (cw * 9 > ch * 16) cw = ch * 16 / 9; else ch = cw * 9 / 16;
+    const int x0 = (w - cw) / 2, y0 = (h - ch) / 2;
+    std::vector<unsigned char> out(static_cast<size_t>(outW) * outH * 4);
+    for (int oy = 0; oy < outH; ++oy) {
+        for (int ox = 0; ox < outW; ++ox) {
+            const int sx0 = x0 + ox * cw / outW, sx1 = std::max(sx0 + 1, x0 + (ox + 1) * cw / outW);
+            const int sy0 = y0 + oy * ch / outH, sy1 = std::max(sy0 + 1, y0 + (oy + 1) * ch / outH);
+            unsigned sum[3] = { 0, 0, 0 }, n = 0;
+            for (int sy = sy0; sy < sy1; ++sy) {
+                for (int sx = sx0; sx < sx1; ++sx) {
+                    const unsigned char* p = &pixels[(static_cast<size_t>(sy) * w + sx) * 4];
+                    sum[0] += p[0]; sum[1] += p[1]; sum[2] += p[2];
+                    ++n;
+                }
+            }
+            unsigned char* q = &out[(static_cast<size_t>(outH - 1 - oy) * outW + ox) * 4];
+            for (int c = 0; c < 3; ++c) q[c] = static_cast<unsigned char>(sum[c] / std::max(n, 1u));
+            q[3] = 255;
+        }
+    }
+    writePng(editor.project().root() / ".rift" / "thumbnail.png", outW, outH, out.data());
 }
 
 void ViewportPanel::drawGizmo(UiContext& ui, const glm::mat4& view, const glm::mat4& proj) {
@@ -438,7 +480,7 @@ void ViewportPanel::drawOverlays(UiContext& ui, const glm::mat4& view, const glm
         ImGui::SetNextItemWidth(ImGui::GetFontSize() * 10.0f);
         ImGui::SliderFloat("Speed", &settings.cameraSpeed, 2.0f, 200.0f, "%.0f studs/s", ImGuiSliderFlags_Logarithmic);
         ImGui::SetNextItemWidth(ImGui::GetFontSize() * 10.0f);
-        ImGui::SliderFloat("Field of view", &editor.camera().fieldOfView, 30.0f, 110.0f, "%.0f deg");
+        ImGui::SliderFloat("Field of view", &settings.fieldOfView, 30.0f, 110.0f, "%.0f deg");
         ImGui::SetNextItemWidth(ImGui::GetFontSize() * 10.0f);
         ImGui::DragFloat("Grid step", &settings.gridStep, 0.05f, 0.1f, 64.0f, "%.2f");
         ImGui::EndPopup();

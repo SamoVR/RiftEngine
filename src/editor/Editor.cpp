@@ -6,6 +6,7 @@
 #include "core/Paths.h"
 #include "core/TransformUtil.h"
 #include "platform/Input.h"
+#include "project/Git.h"
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <algorithm>
@@ -19,8 +20,6 @@ namespace rift {
 namespace fs = std::filesystem;
 
 namespace {
-    constexpr size_t kMaxOutput = 3000;
-
     // Every instance in the subtree of `root` (root included).
     void collect(Instance& root, std::vector<Instance*>& out) {
         out.push_back(&root);
@@ -81,15 +80,24 @@ Editor::~Editor() {
 void Editor::update(float dt) {
     for (Notice& n : notices_) n.time += dt;
     while (!notices_.empty() && notices_.front().time > 6.0f) notices_.pop_front();
+    camera_.fieldOfView = settings_.fieldOfView;
+    camera_.invertY = settings_.invertMouseY;
 
     if (session_) {
         // Copy the game's new output lines.
         const auto& lines = session_->logLines();
         const uint64_t total = session_->logCounter();
         const uint64_t fresh = std::min<uint64_t>(total - lastSessionLog_, lines.size());
-        for (size_t k = lines.size() - fresh; k < lines.size(); ++k)
+        bool error = false;
+        for (size_t k = lines.size() - fresh; k < lines.size(); ++k) {
             addOutput(lines[k].level, lines[k].text, lines[k].script, lines[k].side == NetworkSide::Client ? "Client" : "Server");
+            error |= lines[k].level == LogLevel::Error;
+        }
         lastSessionLog_ = total;
+        if (error && settings_.pauseOnError && !session_->paused()) {
+            session_->setPaused(true);
+            notify("Paused on a script error (Preferences > Playing)", NoticeLevel::Warning);
+        }
         return;
     }
 
@@ -120,7 +128,7 @@ void Editor::update(float dt) {
 void Editor::addOutput(LogLevel level, const std::string& text, uint64_t script, const std::string& source) {
     output_.push_back({ text, level, session_ ? session_->time() : 0.0, script, source });
     ++outputCounter_;
-    while (output_.size() > kMaxOutput) output_.pop_front();
+    while (output_.size() > static_cast<size_t>(std::max(settings_.outputMaxLines, 100))) output_.pop_front();
 }
 
 void Editor::notify(const std::string& text, NoticeLevel level) {
@@ -170,7 +178,35 @@ bool Editor::createProject(const fs::path& parent, const std::string& name, Proj
         notify("Cannot create project: " + error, NoticeLevel::Error);
         return false;
     }
+    // Version control from the start (Preferences > Source Control).
+    if (settings_.gitInitNewProjects) {
+        const Git git(settings_.gitPath);
+        if (git.available()) {
+            std::string gitError;
+            if (!git.init(folder, &gitError)) addOutput(LogLevel::Warning, "git: " + gitError, 0, "Git");
+            else addOutput(LogLevel::Info, "Created a git repository for the project", 0, "Git");
+        }
+    }
     return openProject(folder);
+}
+
+bool Editor::reloadFromDisk() {
+    if (!project_.isOpen()) return false;
+    stop();
+    const fs::path scene = scenePath_;
+    Project p;
+    std::string error;
+    if (p.load(project_.root(), &error)) project_ = p;
+    std::error_code ec;
+    if (!scene.empty() && fs::exists(scene, ec)) return openScene(scene);
+    // The scene does not exist here (another branch): the start scene, or any.
+    fs::path start = project_.startScenePath();
+    if (!fs::exists(start, ec)) {
+        const auto scenes = project_.scenes();
+        start = scenes.empty() ? fs::path() : scenes.front();
+    }
+    if (!start.empty()) return openScene(start);
+    return newScene("Main");
 }
 
 void Editor::closeProject() {
@@ -302,6 +338,8 @@ bool Editor::saveScene() {
     fs::path autosave = scenePath_;
     autosave.replace_filename("scene.autosave.json");
     fs::remove(autosave, ec);
+    ++saveCount_;
+    thumbnailRequest = project_.isOpen();
     notify("Saved " + sceneName(), NoticeLevel::Success);
     return true;
 }
@@ -321,6 +359,7 @@ bool Editor::saveSceneAs(const std::string& name) {
     if (!SceneIO::saveScene(*scene_, file, &error)) { notify("Save failed: " + error, NoticeLevel::Error); return false; }
     scenePath_ = fs::absolute(file);
     history_.markSaved();
+    ++saveCount_;
     notify("Saved as " + name, NoticeLevel::Success);
     return true;
 }
@@ -415,6 +454,12 @@ void Editor::execute(std::unique_ptr<Command> command) {
 void Editor::record(std::unique_ptr<Command> command) {
     if (session_) return;
     history_.record(std::move(command));
+}
+
+void Editor::requestDelete() {
+    if (selection_.empty()) return;
+    if (settings_.confirmDelete) deleteRequested = true;
+    else deleteSelection();
 }
 
 void Editor::undo() {
@@ -924,6 +969,8 @@ void Editor::openScript(uint64_t scriptId, int line) {
 void Editor::play() {
     if (session_ || !hasScene()) return;
     commitPreview();
+    if (settings_.saveBeforePlay && isDirty()) saveScene();
+    if (settings_.clearOutputOnPlay) output_.clear();
     GameSession::Options options;
     options.audio = audio_;
     options.isStudio = true;

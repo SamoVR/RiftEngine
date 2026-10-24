@@ -12,11 +12,13 @@
 //
 #include "editor/Editor.h"
 #include "game/GameSession.h"
+#include "project/Git.h"
 #include "render/Framebuffer.h"
 
 #include <imgui.h>
 #include <filesystem>
 #include <functional>
+#include <future>
 #include <memory>
 #include <string>
 #include <vector>
@@ -42,6 +44,10 @@ inline constexpr const char* kInstancesPayload = "RIFT_INSTANCES"; // uint64_t i
 
 // The Insert menu's items (main menu, Explorer context menu, toolbar).
 void drawInsertMenuItems(Editor& editor);
+
+// Saves the script file and opens it in the external editor from Preferences
+// (or the program Windows uses for .lua files).
+void openInExternalEditor(Editor& editor, const std::string& scriptPath);
 
 // While playing: the Client / Server switch (which world the editor shows).
 // `height` 0 = a normal frame height. Draws nothing while editing.
@@ -99,10 +105,54 @@ private:
     float fpsTimer_ = 0.0f, fps_ = 0.0f;
     int frames_ = 0;
 
+    // Writes <project>/.rift/thumbnail.png from the last rendered frame (the home screen shows it).
+    void saveThumbnail(Editor& editor);
     void handleSelection(UiContext& ui, const glm::mat4& view, const glm::mat4& proj, const GuiSystem* gui);
     void drawGizmo(UiContext& ui, const glm::mat4& view, const glm::mat4& proj);
     void handleDrop(UiContext& ui);
     void drawOverlays(UiContext& ui, const glm::mat4& view, const glm::mat4& proj);
+};
+
+// ---------------------------------------------------------------------------
+// Git for the open project: changes, commit, history, branches, push / pull.
+// git runs on a worker thread; the panel shows a spinner meanwhile.
+class SourceControlPanel {
+public:
+    ~SourceControlPanel();
+    void draw(UiContext& ui, bool* open);
+    void refresh() { refreshTimer_ = 0.0f; }
+
+    struct Result {
+        bool ok = true;
+        std::string output;
+        GitStatus status;
+        bool reload = false; // files of the open project changed: reload the scene
+    };
+
+private:
+    std::future<Result> job_;
+    std::string jobLabel_;
+    GitStatus status_;
+    bool haveStatus_ = false;
+    std::filesystem::path root_;  // the project status_ is for
+    std::string gitPath_;         // Preferences value the git below was found with
+    std::string gitExe_;
+    float refreshTimer_ = 0.0f;
+    uint64_t seenSaves_ = 0;
+    std::string message_;
+    std::string lastLabel_, lastOutput_;
+    bool lastOk_ = true;
+    std::string remoteDraft_, branchDraft_, nameDraft_, emailDraft_;
+    bool identityGlobal_ = true;
+    GitChange discardTarget_;
+    bool openDiscard_ = false, openRemote_ = false, openBranch_ = false;
+
+    void start(UiContext& ui, const std::string& label, std::function<Result(const Git&, const std::filesystem::path&)> work, bool saveFirst);
+    void poll(UiContext& ui);
+    void drawHeader(UiContext& ui);
+    void drawChanges(UiContext& ui);
+    void drawHistory(UiContext& ui);
+    void drawPopups(UiContext& ui);
 };
 
 // ---------------------------------------------------------------------------

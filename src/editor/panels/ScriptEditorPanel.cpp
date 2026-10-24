@@ -234,6 +234,8 @@ bool ScriptEditorPanel::drawDoc(UiContext& ui, Doc& doc, ImGuiID dockId) {
     ImGui::SameLine();
     if (doc.scriptId && theme::iconButton(ICON_FA_CROSSHAIRS, "Select the script in the Explorer")) editor.select(doc.scriptId);
     ImGui::SameLine();
+    if (theme::iconButton(ICON_FA_UP_RIGHT_FROM_SQUARE, "Open in the external editor (Preferences > Scripts)")) openInExternalEditor(editor, doc.path);
+    ImGui::SameLine();
     ImGui::AlignTextToFramePadding();
 
     // Status: syntax error, runtime error, or OK.
@@ -289,6 +291,12 @@ bool ScriptEditorPanel::drawDoc(UiContext& ui, Doc& doc, ImGuiID dockId) {
 
     // Ctrl+S / Ctrl+F while the text has focus.
     if (windowFocused && ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_S, ImGuiInputFlags_RouteGlobal)) saveNow();
+
+    // Preferences > Scripts (cheap setters, applied every frame).
+    doc.editor.SetTabSize(settings.tabSize);
+    doc.editor.SetShowWhitespacesEnabled(settings.showWhitespace);
+    doc.editor.SetShowMiniMapEnabled(settings.showMinimap);
+    doc.editor.SetCompletePairedGlyphs(settings.autoClosePairs);
 
     // ---- the text
     ImGui::PushFont(theme::fonts().mono, settings.scriptFontSize);

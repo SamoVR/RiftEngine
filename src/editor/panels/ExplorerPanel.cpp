@@ -343,7 +343,7 @@ void ExplorerPanel::contextMenu(UiContext& ui, Instance& node) {
     if (ImGui::MenuItem(ICON_FA_PASTE "  Paste", "Ctrl+V", false, editor.canPaste())) deferred_.push_back([&editor] { editor.paste(); });
     if (ImGui::MenuItem(ICON_FA_PASTE "  Paste Into", "Ctrl+Shift+V", false, editor.canPaste())) deferred_.push_back([&editor] { editor.paste(true); });
     if (ImGui::MenuItem(ICON_FA_CLONE "  Duplicate", "Ctrl+D", false, !service)) deferred_.push_back([&editor] { editor.duplicateSelection(); });
-    if (ImGui::MenuItem(ICON_FA_TRASH_CAN "  Delete", "Del", false, !service)) deferred_.push_back([&editor] { editor.deleteSelection(); });
+    if (ImGui::MenuItem(ICON_FA_TRASH_CAN "  Delete", "Del", false, !service)) deferred_.push_back([&editor] { editor.requestDelete(); });
     ImGui::Separator();
     if (ImGui::MenuItem(ICON_FA_OBJECT_GROUP "  Group", "Ctrl+G", false, !service)) deferred_.push_back([&editor] { editor.groupSelection(); });
     if (ImGui::MenuItem(ICON_FA_OBJECT_UNGROUP "  Ungroup", "Ctrl+U", false, container)) deferred_.push_back([&editor] { editor.ungroupSelection(); });
