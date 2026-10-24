@@ -435,3 +435,31 @@ TEST_CASE("the demo obby runs its scripts without errors") {
     CHECK_MESSAGE(errors == 0, out);
     CHECK(session.character());
 }
+
+TEST_CASE("every Lua example in the docs compiles") {
+    const fs::path root = Paths::engineData().parent_path();
+    int blocks = 0;
+    for (const char* doc : { "docs/SCRIPTING.md", "docs/GUIDE.md", "README.md" }) {
+        std::ifstream in(root / doc);
+        REQUIRE_MESSAGE(in.is_open(), doc);
+        std::string line, code;
+        bool inLua = false;
+        int startLine = 0, lineNo = 0;
+        while (std::getline(in, line)) {
+            ++lineNo;
+            const size_t fence = line.find("```");
+            if (fence != std::string::npos) {
+                if (!inLua && line.compare(fence, 6, "```lua") == 0) { inLua = true; code.clear(); startLine = lineNo; continue; }
+                if (inLua) {
+                    inLua = false;
+                    ++blocks;
+                    const std::string error = LuaRuntime::checkSyntax(code, std::string(doc) + ":" + std::to_string(startLine));
+                    CHECK_MESSAGE(error.empty(), error);
+                    continue;
+                }
+            }
+            if (inLua) code += line + "\n";
+        }
+    }
+    CHECK(blocks > 15);
+}

@@ -37,11 +37,13 @@ namespace {
 
     // Just enough decimals for the value ("128", "0.5", "1.25").
     const char* formatFor(float v) {
-        const float a = std::abs(v);
-        if (std::abs(a - std::round(a)) < 1e-4f) return "%.0f";
-        if (std::abs(a * 10.0f - std::round(a * 10.0f)) < 1e-3f) return "%.1f";
-        if (std::abs(a * 100.0f - std::round(a * 100.0f)) < 1e-2f) return "%.2f";
-        return "%.3f";
+        // The fewest decimals (up to 3) that show the value as it would round to 3.
+        static const char* const formats[] = { "%.0f", "%.1f", "%.2f", "%.3f" };
+        const double a = std::abs(static_cast<double>(v));
+        double scale = 1.0;
+        for (int d = 0; d < 3; ++d, scale *= 10.0)
+            if (std::abs(a - std::round(a * scale) / scale) < 0.0005) return formats[d];
+        return formats[3];
     }
 
     float dragSpeed(const PropertyInfo& p) {

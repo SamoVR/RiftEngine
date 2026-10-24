@@ -3,7 +3,7 @@
 // SceneIO.h -- scene files and instance snapshots as JSON.
 //
 // Scene file (format 4), one instance per line, parents before children:
-//   { "format": 4, "rift": "0.9.0", "instances": [
+//   { "format": 4, "rift": "1.0.0", "instances": [
 //       {"id":"..","class":"Workspace","props":{"Gravity":40}},
 //       {"id":"..","class":"Part","name":"Floor","parent":"<id>","props":{"Size":[64,1,64]}},
 //       ... ] }
