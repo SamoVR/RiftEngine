@@ -52,6 +52,13 @@ struct Fixture {
         return s;
     }
 
+    // A LocalScript in StarterPlayerScripts: runs on the client (copied into PlayerScripts).
+    Instance* localScript(const std::string& source, const std::string& name = "") {
+        Instance* folder = nullptr;
+        for (Instance* c : scene.starterPlayer().children) if (c->cls == ClassId::StarterPlayerScripts) folder = c;
+        return script(source, folder, ClassId::LocalScript, name);
+    }
+
     GameSession& start(bool character = true, fs::path dataFolder = {}) {
         GameSession::Options options;
         options.spawnCharacter = character;
@@ -188,7 +195,8 @@ TEST_CASE("events: Changed, ChildAdded, attributes, Once, Wait, Disconnect") {
 TEST_CASE("value objects pass their new value to Changed (leaderstats)") {
     Fixture f;
     f.script(R"(
-        local player = game.Players.LocalPlayer
+        local player = game.Players:GetPlayers()[1]
+        assert(player and game.Players.LocalPlayer == nil) -- no LocalPlayer on the server
         local stats = Instance.new("Folder") stats.Name = "leaderstats" stats.Parent = player
         local coins = Instance.new("IntValue") coins.Name = "Coins" coins.Parent = stats
         coins.Changed:Connect(function(v) print("coins now", v) end)
@@ -351,7 +359,8 @@ TEST_CASE("kill bricks work with the Roblox Humanoid pattern, and the player res
             if humanoid then humanoid.Health = 0 end
         end)
     )", brick);
-    f.script(R"(
+    // The player's own view of it: a LocalScript.
+    f.localScript(R"(
         game.Players.LocalPlayer.CharacterAdded:Connect(function(char) print("character added", char.Name) end)
         local humanoid = game.Players.LocalPlayer.Character:WaitForChild("Humanoid")
         humanoid.Died:Connect(function() print("died") end)
@@ -372,7 +381,8 @@ TEST_CASE("GUI buttons fire Activated") {
     button->name = "Play";
     button->guiPosition = { 0.5f, -50.0f, 0.5f, -20.0f };
     button->guiSize = { 0.0f, 100.0f, 0.0f, 40.0f };
-    f.script("game.StarterGui.ScreenGui.Play.Activated:Connect(function() print('clicked') end)");
+    // GUI input is the client's: a LocalScript inside the ScreenGui (copied into PlayerGui).
+    f.script("script.Parent.Play.Activated:Connect(function() print('clicked') end)", gui, ClassId::LocalScript);
     GameSession& s = f.start(false);
     ViewportInput view;
     view.size = { 1000, 600 };
@@ -486,4 +496,141 @@ TEST_CASE("every example scene loads and runs without script errors") {
         for (const auto& line : session.logLines()) CHECK_MESSAGE(line.level != LogLevel::Error, line.text);
     }
     CHECK(scenes >= 2);
+}
+
+TEST_CASE("stopping after touches, deaths and destroyed objects is clean") {
+    // Plays DemoObby, puts the character on every scripted part (coin, kill
+    // brick, jump pad, finish), lets the handlers run, then tears the session
+    // down the way Stop does. Run several times to catch order-dependent bugs.
+    const fs::path file = Paths::engineData().parent_path() / "examples/DemoObby/scenes/DemoObby/scene.json";
+    Scene scene;
+    REQUIRE(SceneIO::loadScene(scene, file).ok);
+    ScriptStore store;
+    store.reset(Paths::toUtf8(file.parent_path()));
+    for (int round = 0; round < 3; ++round) {
+        Input input;
+        auto session = std::make_unique<GameSession>(scene, store, input, GameSession::Options{});
+        session->start();
+        ViewportInput view;
+        auto step = [&](int frames) {
+            for (int i = 0; i < frames; ++i) {
+                input.newFrame();
+                session->update(1.0f / 60.0f, view);
+            }
+        };
+        step(30);
+        for (const char* target : { "Coin", "JumpPad", "KillBrick", "Finish" }) {
+            Instance* part = session->scene().workspace().findFirstChild(target);
+            Instance* root = session->rootPart();
+            if (!part || !root) { step(200); continue; } // dead: wait for the respawn
+            root->setWorldFrame(part->worldPosition() + glm::vec3(0.0f, 1.5f, 0.0f), glm::vec3(0.0f));
+            if (const PropertyInfo* p = findProperty(root->cls, "Position")) session->scene().notifyPropertyChanged(*root, *p);
+            step(20 + round * 15);
+        }
+        // Stop at different moments: mid-respawn, mid-tween, right after a touch.
+        step(round * 7);
+        session.reset();
+    }
+    CHECK(scene.workspace().findFirstChild("Coin")); // the edited scene is untouched
+}
+
+TEST_CASE("the client gets the server's world, the server never sees the client's") {
+    Fixture f;
+    Instance* secret = f.scene.create(ClassId::Folder, f.scene.service(ClassId::ServerStorage));
+    secret->name = "Secret";
+    f.script(R"(
+        local p = Instance.new("Part")
+        p.Name = "Built"
+        p.Anchored = true
+        p.Parent = workspace
+        task.wait(0.2)
+        p.Color = Color3.fromRGB(0, 255, 0)
+        print("server sees client part:", workspace:FindFirstChild("ClientOnly") ~= nil)
+    )");
+    f.localScript(R"(
+        local built = workspace:WaitForChild("Built")
+        print("client sees", built.Name, #game:GetService("ServerStorage"):GetChildren())
+        local mine = Instance.new("Part")
+        mine.Name = "ClientOnly"
+        mine.Parent = workspace
+        built:GetPropertyChangedSignal("Color"):Wait()
+        print("client color", built.Color.G == 1)
+    )");
+    GameSession& s = f.start(false);
+    f.run(0.5f);
+    CHECK_MESSAGE(f.logged("client sees Built 0"), f.dump());
+    CHECK_MESSAGE(f.logged("client color true"), f.dump());
+    CHECK_MESSAGE(f.logged("server sees client part: false"), f.dump());
+    CHECK(s.scene(NetworkSide::Client).workspace().findFirstChild("ClientOnly"));
+    CHECK_FALSE(s.scene(NetworkSide::Server).workspace().findFirstChild("ClientOnly"));
+    CHECK(f.errors() == 0);
+}
+
+TEST_CASE("RemoteEvent and RemoteFunction carry values both ways") {
+    Fixture f;
+    Instance* ping = f.scene.create(ClassId::RemoteEvent, f.scene.service(ClassId::ReplicatedStorage));
+    ping->name = "Ping";
+    Instance* ask = f.scene.create(ClassId::RemoteFunction, f.scene.service(ClassId::ReplicatedStorage));
+    ask->name = "Ask";
+    f.script(R"(
+        local rs = game:GetService("ReplicatedStorage")
+        rs.Ping.OnServerEvent:Connect(function(player, n, t)
+            print("server got", player:IsA("Player"), n, t.x, t.list[2], t.where == workspace)
+            rs.Ping:FireClient(player, "pong", Vector3.new(1, 2, 3))
+        end)
+        rs.Ask.OnServerInvoke = function(player, n)
+            task.wait(0.1) -- handlers may yield
+            return n * 2, "ok"
+        end
+    )");
+    f.localScript(R"(
+        local rs = game:GetService("ReplicatedStorage")
+        local ping = rs:WaitForChild("Ping")
+        ping.OnClientEvent:Connect(function(msg, v) print("client got", msg, v.Y) end)
+        ping:FireServer(5, { x = "hi", list = { 1, 2 }, where = workspace })
+        local a, b = rs.Ask:InvokeServer(21)
+        print("invoke", a, b)
+        local ok, err = pcall(function() ping:FireClient(game.Players.LocalPlayer) end)
+        print("client FireClient fails:", not ok)
+    )");
+    f.start(false);
+    f.run(0.5f);
+    CHECK_MESSAGE(f.logged("server got true 5 hi 2 true"), f.dump());
+    CHECK_MESSAGE(f.logged("client got pong 2"), f.dump());
+    CHECK_MESSAGE(f.logged("invoke 42 ok"), f.dump());
+    CHECK_MESSAGE(f.logged("client FireClient fails: true"), f.dump());
+    CHECK(f.errors() == 0);
+}
+
+TEST_CASE("client-only services fail clearly in a server Script") {
+    Fixture f;
+    f.script(R"(
+        local ok, err = pcall(function() return game:GetService("RunService"):BindToRenderStep("x", 0, function() end) end)
+        print("render step:", ok, err)
+    )");
+    f.localScript(R"(
+        local ok = pcall(function() return game:GetService("DataStoreService") end)
+        print("datastore on client:", ok)
+    )");
+    f.start(false);
+    f.run(0.1f);
+    CHECK_MESSAGE(f.logged("LocalScript"), f.dump());
+    CHECK_MESSAGE(f.logged("datastore on client: false"), f.dump());
+}
+
+TEST_CASE("LocalScripts in StarterCharacterScripts run in each new character") {
+    Fixture f;
+    Instance* folder = nullptr;
+    for (Instance* c : f.scene.starterPlayer().children) if (c->cls == ClassId::StarterCharacterScripts) folder = c;
+    REQUIRE(folder);
+    f.script("print('character script in', script.Parent.Name)", folder, ClassId::LocalScript);
+    GameSession& s = f.start(true);
+    f.run(0.2f);
+    CHECK_MESSAGE(f.logged("character script in"), f.dump());
+    // The character carries a copy, the template stays in StarterPlayer.
+    Instance* character = s.scene(NetworkSide::Client).find(s.characterId());
+    REQUIRE(character);
+    bool carried = false;
+    for (const Instance* c : character->children) carried |= c->cls == ClassId::LocalScript;
+    CHECK(carried);
 }

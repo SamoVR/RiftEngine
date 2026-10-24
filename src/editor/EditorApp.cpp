@@ -500,7 +500,7 @@ void EditorApp::drawMenuBar() {
 
     if (ImGui::BeginMenu("Game", scene)) {
         if (ImGui::MenuItem(ICON_FA_PLAY "  Play", "F5", false, !e.playing())) play();
-        if (ImGui::MenuItem(ICON_FA_PAUSE "  Pause", "F6", e.playing() && e.session()->paused(), e.playing())) e.session()->setPaused(!e.session()->paused());
+        if (ImGui::MenuItem(ICON_FA_PAUSE "  Pause", "F6", e.playing() && e.session()->paused(), e.playing()) && e.playing()) e.session()->setPaused(!e.session()->paused());
         if (ImGui::MenuItem(ICON_FA_STOP "  Stop", "Shift+F5", false, e.playing())) e.stop();
         ImGui::Separator();
         if (ImGui::MenuItem(ICON_FA_UP_RIGHT_FROM_SQUARE "  Run in Player", "Ctrl+F5", false, !e.playing())) runInPlayer();
@@ -594,7 +594,8 @@ void EditorApp::drawToolbar() {
     ImGui::EndDisabled();
 
     // Play controls in the middle
-    const float playWidth = button * 3.0f + ImGui::CalcTextSize("Play").x + style.FramePadding.x * 4.0f;
+    float playWidth = button * 3.0f + ImGui::CalcTextSize("Play").x + style.FramePadding.x * 4.0f;
+    if (e.playing()) playWidth += ImGui::CalcTextSize(ICON_FA_LAPTOP "  Client" ICON_FA_SERVER "  Server").x + style.FramePadding.x * 4.0f + style.ItemSpacing.x;
     ImGui::SameLine(std::max(ImGui::GetCursorPosX() + style.ItemSpacing.x, (ImGui::GetWindowWidth() - playWidth) * 0.5f));
     if (!e.playing()) {
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.16f, 0.55f, 0.35f, 1.0f));
@@ -610,9 +611,14 @@ void EditorApp::drawToolbar() {
         if (ImGui::Button(ICON_FA_STOP "  Stop", ImVec2(0.0f, button))) e.stop();
         ImGui::PopStyleColor(2);
         theme::tooltip("Stop (Shift+F5). Changes made while playing are thrown away.");
-        ImGui::SameLine(0.0f, 2.0f);
-        const bool paused = e.session()->paused();
-        if (theme::iconButton(paused ? ICON_FA_PLAY : ICON_FA_PAUSE, paused ? "Resume (F6)" : "Pause (F6)", paused, button)) e.session()->setPaused(!paused);
+        // The Stop button above may have ended the session this very frame.
+        if (GameSession* session = e.session()) {
+            ImGui::SameLine(0.0f, 2.0f);
+            const bool paused = session->paused();
+            if (theme::iconButton(paused ? ICON_FA_PLAY : ICON_FA_PAUSE, paused ? "Resume (F6)" : "Pause (F6)", paused, button)) session->setPaused(!paused);
+            ImGui::SameLine();
+            drawSideSwitch(e, button);
+        }
     }
 
     // Scene name on the right

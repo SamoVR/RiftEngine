@@ -174,9 +174,10 @@ std::vector<ClassInfo> buildClasses() {
         c.props.push_back(field<&Instance::fogEnd>("FogEnd", "Fog").range(0.0f, 100000.0f));
     }
     def(ClassId::Players, "Players", "The players in the running game (empty while editing).", false);
-    def(ClassId::ReplicatedStorage, "ReplicatedStorage", "Storage for things that are not in the world, e.g. templates that scripts Clone().", false);
-    def(ClassId::ScriptService, "ScriptService", "Scripts that run for the whole game (not attached to a part).", false);
-    def(ClassId::StarterGui, "StarterGui", "ScreenGuis here are shown on screen when the game runs.", false);
+    def(ClassId::ReplicatedStorage, "ReplicatedStorage", "Shared by the server and the client: modules, RemoteEvents, templates that scripts Clone(). Scripts here do not run.", false);
+    def(ClassId::ServerStorage, "ServerStorage", "Server-only storage: never sent to the client. Scripts here do not run.", false);
+    def(ClassId::ScriptService, "ScriptService", "Server scripts that run for the whole game (Roblox: ServerScriptService). Never sent to the client.", false);
+    def(ClassId::StarterGui, "StarterGui", "Copied into each player's PlayerGui when the game starts (and on respawn): ScreenGuis and the LocalScripts that drive them.", false);
     {
         ClassInfo& c = def(ClassId::StarterPlayer, "StarterPlayer", "Player character and camera settings.", false);
         c.props.push_back(field<&Instance::walkSpeed>("WalkSpeed", "Character").range(0.0f, 200.0f));
@@ -259,6 +260,11 @@ std::vector<ClassInfo> buildClasses() {
         ClassInfo& c = def(ClassId::Player, "Player", "A player in the running game (created by the engine).", false);
         c.props.front().flags = PF_ScriptRead | PF_Editor | PF_ReadOnlyUI;
     }
+    def(ClassId::PlayerGui, "PlayerGui", "The player's on-screen GUI: copies of StarterGui (in the running game).", false);
+    def(ClassId::PlayerScripts, "PlayerScripts", "Client-only: copies of StarterPlayerScripts (in the running game).", false);
+    def(ClassId::Backpack, "Backpack", "The player's inventory (in the running game).", false);
+    def(ClassId::StarterPlayerScripts, "StarterPlayerScripts", "LocalScripts here run on the client once, when the player joins.", false);
+    def(ClassId::StarterCharacterScripts, "StarterCharacterScripts", "Copied into every new character: LocalScripts run on the client, Scripts on the server.", false);
 
     // ------------------------------------------------------------ values
     def(ClassId::IntValue, "IntValue", "Holds a whole number. In a player's leaderstats folder it is shown on the leaderboard.", true)
@@ -281,15 +287,27 @@ std::vector<ClassInfo> buildClasses() {
         c.props.push_back(field<&Instance::source>("Source", "Behavior").flagsSet(PF_Serialize | PF_Editor | PF_ReadOnlyUI | PF_ScriptRead).tip("The .lua file, relative to the scene folder."));
     }
     {
+        ClassInfo& c = def(ClassId::LocalScript, "LocalScript", "Lua code that runs on the client: input, camera, GUI. Runs inside PlayerGui, PlayerScripts, the character or StarterPlayerScripts.", true);
+        c.props.push_back(field<&Instance::enabled>("Enabled", "Behavior").tip("A disabled script does not run when the game starts."));
+        c.props.push_back(field<&Instance::source>("Source", "Behavior").flagsSet(PF_Serialize | PF_Editor | PF_ReadOnlyUI | PF_ScriptRead).tip("The .lua file, relative to the scene folder."));
+    }
+    {
         ClassInfo& c = def(ClassId::ModuleScript, "ModuleScript", "Lua code that returns a value; load it with require(module).", true);
         c.props.push_back(field<&Instance::source>("Source", "Behavior").flagsSet(PF_Serialize | PF_Editor | PF_ReadOnlyUI | PF_ScriptRead));
     }
+
+    // ------------------------------------------------------------ communication
+    def(ClassId::RemoteEvent, "RemoteEvent", "Sends messages between the client and the server: FireServer / OnServerEvent, FireClient / OnClientEvent.", true);
+    def(ClassId::RemoteFunction, "RemoteFunction", "Calls between the client and the server that return a result: InvokeServer / OnServerInvoke.", true);
+    def(ClassId::BindableEvent, "BindableEvent", "Sends messages between scripts on the same side: Fire / Event.", true);
+    def(ClassId::BindableFunction, "BindableFunction", "Calls between scripts on the same side: Invoke / OnInvoke.", true);
 
     // ------------------------------------------------------------ GUI
     {
         ClassInfo& c = def(ClassId::ScreenGui, "ScreenGui", "A layer of 2D interface drawn over the game (put it in StarterGui).", true);
         c.props.push_back(field<&Instance::enabled>("Enabled", "Behavior"));
         c.props.push_back(field<&Instance::displayOrder>("DisplayOrder", "Behavior").range(-1000.0f, 1000.0f).tip("Higher values are drawn on top of other ScreenGuis."));
+        c.props.push_back(field<&Instance::resetOnSpawn>("ResetOnSpawn", "Behavior").tip("On: the player gets a fresh copy every time the character respawns."));
     }
     {
         ClassInfo& c = def(ClassId::Frame, "Frame", "A rectangle; holds other GUI elements.", true);

@@ -156,7 +156,9 @@ namespace rift {
 
 struct LuaRuntime::Impl : public SceneObserver {
     GameSession& session;
-    Scene& scene;
+    NetworkSide side;
+    Scene& scene;          // this side's world
+    GameCamera serverCamera; // workspace.CurrentCamera on the server (the client uses the session's)
 
     // NOTE: everything that holds Lua references is declared AFTER `lua`, so
     // it is destroyed before the state is closed.
@@ -219,10 +221,24 @@ struct LuaRuntime::Impl : public SceneObserver {
     std::unordered_map<std::string, uint64_t> renderBindings; // RunService:BindToRenderStep name -> connection id
     std::unordered_map<uint64_t, uint64_t> primaryParts; // Model id -> part id
 
-    explicit Impl(GameSession& s);
+    // ---- remotes and bindables
+    // OnServerInvoke / OnClientInvoke / OnInvoke callbacks, by (instance, name).
+    std::unordered_map<lua::SignalKey, sol::main_protected_function, lua::SignalKeyHash> callbacks;
+    std::unordered_map<uint64_t, lua_State*> pendingCalls; // InvokeServer / InvokeClient waiting for the answer
+    sol::main_protected_function remoteRunner;              // runs a RemoteFunction handler and replies
+    uint64_t nextCall = 1;
+
+    Impl(GameSession& s, NetworkSide side);
     ~Impl() override;
 
     lua_State* L() { return lua.lua_state(); }
+    bool isClient() const { return side == NetworkSide::Client; }
+    const char* sideName() const { return isClient() ? "client" : "server"; }
+    // Fails with a clear message when an API is used on the wrong side.
+    void requireSide(NetworkSide wanted, const char* what) const;
+    Instance* localPlayer() const;     // this side's Player (nil on the server, like Roblox)
+    Instance* localCharacter() const;  // the character as this side sees it
+    GameCamera& cam();                 // workspace.CurrentCamera
 
     // ---- errors / output
     [[noreturn]] static void fail(const std::string& message) { throw std::runtime_error(message); }
@@ -279,6 +295,13 @@ struct LuaRuntime::Impl : public SceneObserver {
     std::string dataStorePath(const std::string& name) const;
     nlohmann::json& dataStore(const std::string& name);
     void saveDataStore(const std::string& name);
+
+    // ---- remotes (LuaServices.cpp)
+    RemoteValue toRemote(const sol::object& o, int depth = 0);
+    sol::object fromRemote(const RemoteValue& v);
+    int pushRemoteArgs(lua_State* T, const std::vector<RemoteValue>& args);
+    void handleRemote(const RemoteMessage& m);
+    void reply(uint64_t call, NetworkSide to, bool ok, std::string error, std::vector<RemoteValue> results);
 
     // ---- SceneObserver
     void onInstanceAdded(Instance& i) override;

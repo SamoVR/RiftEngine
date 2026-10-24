@@ -79,6 +79,12 @@ void ExplorerPanel::draw(UiContext& ui, bool* open) {
     }
 
     // ---- toolbar
+    if (editor.playing()) {
+        drawSideSwitch(editor);
+        ImGui::SameLine();
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextDisabled(editor.viewSide == NetworkSide::Client ? "what the player's computer has" : "the server's world");
+    }
     const float buttonWidth = ImGui::GetFrameHeight();
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - buttonWidth - ImGui::GetStyle().ItemSpacing.x);
     ImGui::InputTextWithHint("##search", ICON_FA_MAGNIFYING_GLASS "  Search (name or class)", filter_, sizeof(filter_));
@@ -113,7 +119,11 @@ void ExplorerPanel::draw(UiContext& ui, bool* open) {
     ImGui::InvisibleButton("##empty", ImVec2(std::max(rest.x, 1.0f), std::max(rest.y, ImGui::GetFrameHeight())));
     if (ImGui::IsItemClicked(ImGuiMouseButton_Left)) editor.clearSelection();
     if (editor.hasScene() && ImGui::BeginDragDropTarget()) {
-        if (const ImGuiPayload* p = ImGui::AcceptDragDropPayload(kInstancesPayload)) editor.reparent(payloadIds(p), scene.workspace().id);
+        if (const ImGuiPayload* p = ImGui::AcceptDragDropPayload(kInstancesPayload)) {
+            const std::vector<uint64_t> ids = payloadIds(p);
+            const uint64_t target = scene.workspace().id;
+            deferred_.push_back([&editor, ids, target] { editor.reparent(ids, target); });
+        }
         ImGui::EndDragDropTarget();
     }
     if (editor.hasScene() && ImGui::BeginPopupContextItem("##emptyMenu")) {
@@ -129,6 +139,10 @@ void ExplorerPanel::draw(UiContext& ui, bool* open) {
     ImGui::PopStyleVar();
     ImGui::PopStyleColor();
     ImGui::End();
+
+    std::vector<std::function<void()>> actions;
+    actions.swap(deferred_);
+    for (auto& action : actions) action();
 }
 
 void ExplorerPanel::drawFiltered(UiContext& ui) {
@@ -292,12 +306,15 @@ void ExplorerPanel::dropTarget(UiContext& ui, Instance& node) {
         else draw->AddRect(min, max, color, 4.0f, 0, 1.5f);
         if (p->IsDelivery()) {
             const std::vector<uint64_t> ids = payloadIds(p);
-            if (zone == 1) editor.reparent(ids, node.id);
-            else editor.reparent(ids, node.parent->id, editor.scene().siblingIndex(&node) + (zone == 2 ? 1 : 0));
+            const uint64_t parent = zone == 1 ? node.id : node.parent->id;
+            const size_t index = zone == 1 ? Scene::npos : editor.scene().siblingIndex(&node) + (zone == 2 ? 1 : 0);
+            deferred_.push_back([&editor, ids, parent, index] { editor.reparent(ids, parent, index); });
         }
     }
     if (const ImGuiPayload* p = ImGui::AcceptDragDropPayload(kAssetPayload)) {
-        dropAsset(editor, std::string(static_cast<const char*>(p->Data)), &node);
+        const std::string path(static_cast<const char*>(p->Data));
+        const uint64_t target = node.id;
+        deferred_.push_back([&editor, path, target] { dropAsset(editor, path, editor.scene().find(target)); });
     }
     ImGui::EndDragDropTarget();
 }
@@ -321,15 +338,15 @@ void ExplorerPanel::contextMenu(UiContext& ui, Instance& node) {
     if (ImGui::MenuItem(ICON_FA_I_CURSOR "  Rename", "F2", false, !service)) beginRename(node.id);
     if (ImGui::MenuItem(ICON_FA_EXPAND "  Zoom To", "F", false, !service)) editor.focusSelection();
     ImGui::Separator();
-    if (ImGui::MenuItem(ICON_FA_SCISSORS "  Cut", "Ctrl+X", false, !service)) editor.cutSelection();
+    if (ImGui::MenuItem(ICON_FA_SCISSORS "  Cut", "Ctrl+X", false, !service)) deferred_.push_back([&editor] { editor.cutSelection(); });
     if (ImGui::MenuItem(ICON_FA_COPY "  Copy", "Ctrl+C", false, !service)) editor.copySelection();
-    if (ImGui::MenuItem(ICON_FA_PASTE "  Paste", "Ctrl+V", false, editor.canPaste())) editor.paste();
-    if (ImGui::MenuItem(ICON_FA_PASTE "  Paste Into", "Ctrl+Shift+V", false, editor.canPaste())) editor.paste(true);
-    if (ImGui::MenuItem(ICON_FA_CLONE "  Duplicate", "Ctrl+D", false, !service)) editor.duplicateSelection();
-    if (ImGui::MenuItem(ICON_FA_TRASH_CAN "  Delete", "Del", false, !service)) editor.deleteSelection();
+    if (ImGui::MenuItem(ICON_FA_PASTE "  Paste", "Ctrl+V", false, editor.canPaste())) deferred_.push_back([&editor] { editor.paste(); });
+    if (ImGui::MenuItem(ICON_FA_PASTE "  Paste Into", "Ctrl+Shift+V", false, editor.canPaste())) deferred_.push_back([&editor] { editor.paste(true); });
+    if (ImGui::MenuItem(ICON_FA_CLONE "  Duplicate", "Ctrl+D", false, !service)) deferred_.push_back([&editor] { editor.duplicateSelection(); });
+    if (ImGui::MenuItem(ICON_FA_TRASH_CAN "  Delete", "Del", false, !service)) deferred_.push_back([&editor] { editor.deleteSelection(); });
     ImGui::Separator();
-    if (ImGui::MenuItem(ICON_FA_OBJECT_GROUP "  Group", "Ctrl+G", false, !service)) editor.groupSelection();
-    if (ImGui::MenuItem(ICON_FA_OBJECT_UNGROUP "  Ungroup", "Ctrl+U", false, container)) editor.ungroupSelection();
+    if (ImGui::MenuItem(ICON_FA_OBJECT_GROUP "  Group", "Ctrl+G", false, !service)) deferred_.push_back([&editor] { editor.groupSelection(); });
+    if (ImGui::MenuItem(ICON_FA_OBJECT_UNGROUP "  Ungroup", "Ctrl+U", false, container)) deferred_.push_back([&editor] { editor.ungroupSelection(); });
     if (ImGui::MenuItem(ICON_FA_LIST_CHECK "  Select Children", nullptr, false, !node.children.empty())) {
         std::vector<uint64_t> ids;
         for (Instance* c : node.children) ids.push_back(c->id);

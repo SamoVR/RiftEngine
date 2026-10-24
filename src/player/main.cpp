@@ -5,6 +5,7 @@
 #ifdef _WIN32
 #include <Windows.h>
 #include <shellapi.h>
+#include <ole2.h>
 #endif
 
 #include "player/PlayerApp.h"
@@ -33,6 +34,9 @@ namespace {
     }
 
     int runGame(const std::string& argument) {
+#ifdef _WIN32
+        OleInitialize(nullptr); // single-threaded COM before the audio library (see the editor's main)
+#endif
         const std::filesystem::path folder = rift::findGameFolder(Paths::fromUtf8(argument));
         const std::string name = gameName(folder);
         Paths::setUserDataFolderName("RIFT Games/" + rift::executableName(name));
@@ -47,6 +51,9 @@ namespace {
             Platform::messageBox(name, std::string("The game could not start.\n\n") + e.what() + "\n\nLog: " + Log::filePath(), Platform::MessageType::Error);
         }
         Log::shutdown();
+#ifdef _WIN32
+        OleUninitialize();
+#endif
         return result;
     }
 }

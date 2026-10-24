@@ -15,6 +15,7 @@ struct EditorSettings {
     std::vector<std::string> recentProjects; // most recent first
     std::string lastProject;
     bool reopenLastProject = true;
+    std::string projectsFolder;            // where new projects go ("" = Documents\RIFT Projects)
 
     // Window (restored on the next start)
     int windowX = -1, windowY = -1;  // -1: centred

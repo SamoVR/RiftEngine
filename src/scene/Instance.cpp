@@ -19,7 +19,12 @@ bool Instance::hasTransform() const {
     return isBasePart() || cls == ClassId::Model || isLight();
 }
 
-bool Instance::isScript() const { return cls == ClassId::Script || cls == ClassId::ModuleScript; }
+bool Instance::isScript() const { return cls == ClassId::Script || cls == ClassId::LocalScript || cls == ClassId::ModuleScript; }
+bool Instance::isRemote() const { return cls >= ClassId::RemoteEvent && cls <= ClassId::BindableFunction; }
+bool Instance::isFixedContainer() const {
+    return cls == ClassId::StarterPlayerScripts || cls == ClassId::StarterCharacterScripts || cls == ClassId::PlayerGui
+        || cls == ClassId::PlayerScripts || cls == ClassId::Backpack;
+}
 
 bool Instance::isGui() const { return cls >= ClassId::ScreenGui && cls <= ClassId::ImageButton; }
 bool Instance::isGuiObject() const { return cls > ClassId::ScreenGui && cls <= ClassId::ImageButton; }

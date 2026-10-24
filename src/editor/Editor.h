@@ -66,6 +66,8 @@ public:
     bool hasProject() const { return project_.isOpen(); }
     Project& project() { return project_; }
     bool saveProjectSettings();
+    // Moves the project's scenes to another folder inside it (saves first).
+    bool changeScenesFolder(const std::string& folder, bool moveExisting);
 
     // ---- scenes
     bool openScene(const std::filesystem::path& sceneFile);
@@ -80,7 +82,9 @@ public:
     void requestDiscard(std::function<void()> action);
     std::function<void()> pendingDiscard;              // set while the "Save changes?" dialog is open
 
-    Scene& scene() { return session_ ? session_->scene() : *scene_; }
+    // The scene being shown: the edited one, or while playing the server's or
+    // the client's world (viewSide, the Client / Server switch).
+    Scene& scene() { return session_ ? session_->scene(viewSide) : *scene_; }
     Scene& editScene() { return *scene_; }
     ScriptStore& scripts() { return scripts_; }
     EditorSettings& settings() { return settings_; }
@@ -102,6 +106,11 @@ public:
 
     // ---- tools
     Tool tool = Tool::Move;
+    NetworkSide viewSide = NetworkSide::Client; // which world the editor shows while playing
+    void setViewSide(NetworkSide side);
+    // Playing and looking at the server: the editor camera, selection and gizmos
+    // work (on the server's world) and the game gets no input.
+    bool serverView() const { return session_ && viewSide == NetworkSide::Server; }
 
     // ---- undoable edits
     CommandHistory& history() { return history_; }

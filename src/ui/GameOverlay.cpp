@@ -36,7 +36,7 @@ namespace {
 }
 
 void drawGameGui(GameSession& session, TextureCache& textures, ImDrawList* draw, const glm::vec2& origin, const OverlayFonts& fonts) {
-    drawGui(session.scene(), session.gui(), textures, draw, origin, fonts);
+    drawGui(session.clientScene(), session.gui(), textures, draw, origin, fonts);
 }
 
 void drawGui(const Scene& scene, const GuiSystem& gui, TextureCache& textures, ImDrawList* draw, const glm::vec2& origin, const OverlayFonts& fonts) {
@@ -98,7 +98,8 @@ void drawGameHud(GameSession& session, ImDrawList* draw, const glm::vec2& origin
     const float base = ImGui::GetFontSize();
 
     // ---- leaderboard (top right): the local player's leaderstats
-    if (Instance* player = session.player()) {
+    // What the client sees: its copy of the player (leaderstats replicate from the server).
+    if (Instance* player = session.clientScene().find(session.playerId())) {
         if (Instance* stats = player->findFirstChild("leaderstats")) {
             std::vector<const Instance*> values;
             for (const Instance* v : stats->children) if (v->isValueObject() && v->cls != ClassId::Vector3Value && v->cls != ClassId::Color3Value) values.push_back(v);
@@ -137,7 +138,7 @@ void drawGameHud(GameSession& session, ImDrawList* draw, const glm::vec2& origin
     }
 
     // ---- respawn notice
-    if (!session.character() && session.outcome() == GameSession::Outcome::None) {
+    if (!session.characterId() && session.outcome() == GameSession::Outcome::None) {
         const char* text = "Respawning...";
         const ImVec2 t = bold->CalcTextSizeA(base * 1.4f, FLT_MAX, 0.0f, text);
         draw->AddText(bold, base * 1.4f, ImVec2(origin.x + (size.x - t.x) * 0.5f, origin.y + size.y * 0.7f), IM_COL32(255, 255, 255, 220), text);

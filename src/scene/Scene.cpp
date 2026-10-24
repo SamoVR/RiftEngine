@@ -14,6 +14,7 @@ Scene::Scene() {
         services_[i] = service.get();
         instances_.emplace(service->id, std::move(service));
     }
+    ensureDefaults();
 }
 
 Scene::~Scene() = default;
@@ -69,8 +70,8 @@ Instance* Scene::create(ClassId cls, Instance* parent, uint64_t id) {
     return raw;
 }
 
-Instance* Scene::cloneSubtree(const Instance& source, bool keepIds) {
-    if (source.isService() || !source.archivable) return nullptr;
+Instance* Scene::cloneSubtree(const Instance& source, bool keepIds, bool includeAll) {
+    if (source.isService() || (!source.archivable && !includeAll)) return nullptr;
     std::function<Instance*(const Instance&)> copyNode = [&](const Instance& src) -> Instance* {
         auto c = std::make_unique<Instance>(src);
         c->parent = nullptr;
@@ -78,7 +79,7 @@ Instance* Scene::cloneSubtree(const Instance& source, bool keepIds) {
         c->id = keepIds ? src.id : 0;
         Instance* raw = adopt(std::move(c));
         for (const Instance* child : src.children) {
-            if (!child->archivable) continue;
+            if (!child->archivable && !includeAll) continue;
             if (Instance* childCopy = copyNode(*child)) {
                 childCopy->parent = raw;
                 raw->children.push_back(childCopy);
@@ -87,6 +88,18 @@ Instance* Scene::cloneSubtree(const Instance& source, bool keepIds) {
         return raw;
     };
     return copyNode(source);
+}
+
+void Scene::ensureDefaults() {
+    Instance& starter = starterPlayer();
+    for (ClassId cls : { ClassId::StarterPlayerScripts, ClassId::StarterCharacterScripts }) {
+        bool found = false;
+        for (Instance* c : starter.children) found |= c->cls == cls;
+        if (!found) {
+            Instance* container = create(cls, &starter);
+            container->name = className(cls);
+        }
+    }
 }
 
 void Scene::detachFromParent(Instance* instance) {
@@ -252,6 +265,11 @@ void Scene::setAttribute(Instance& instance, const std::string& name, const Valu
     instance.setAttribute(name, value);
     ++revision_;
     for (SceneObserver* o : std::vector<SceneObserver*>(observers_)) o->onAttributeChanged(instance, name);
+}
+
+void Scene::notifyTagsChanged(Instance& instance) {
+    ++revision_;
+    for (SceneObserver* o : std::vector<SceneObserver*>(observers_)) o->onTagsChanged(instance);
 }
 
 void Scene::notifyPropertyChanged(Instance& instance, const PropertyInfo& prop) {

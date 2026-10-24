@@ -34,6 +34,8 @@ public:
     };
 
     explicit GuiSystem(Scene& scene) : scene_(scene) {}
+    // The instance whose ScreenGuis are shown (PlayerGui); 0 = StarterGui.
+    void setRoot(uint64_t id) { root_ = id; }
 
     // Recomputes every visible element's rectangle for a view of `size` pixels.
     void layout(const glm::vec2& viewSize);
@@ -53,6 +55,7 @@ public:
 private:
     Scene& scene_;
     std::vector<Item> items_;
+    uint64_t root_ = 0;
     uint64_t hovered_ = 0, pressed_ = 0;
     bool overGui_ = false;
     bool wasDown_ = false;

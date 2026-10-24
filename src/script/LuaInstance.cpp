@@ -22,7 +22,8 @@ bool isA(const Instance& i, const std::string& cls) {
     if (cls == "BasePart") return i.isBasePart();
     if (cls == "PVInstance") return i.hasTransform() || i.cls == ClassId::Workspace;
     if (cls == "Model") return i.cls == ClassId::Model || i.cls == ClassId::Workspace;
-    if (cls == "LuaSourceContainer" || cls == "BaseScript") return i.isScript() && (cls == "LuaSourceContainer" || i.cls == ClassId::Script);
+    if (cls == "LuaSourceContainer") return i.isScript();
+    if (cls == "BaseScript") return i.cls == ClassId::Script || i.cls == ClassId::LocalScript;
     if (cls == "GuiObject") return i.isGuiObject();
     if (cls == "GuiButton") return i.cls == ClassId::TextButton || i.cls == ClassId::ImageButton;
     if (cls == "GuiBase2d") return i.isGui();
@@ -45,6 +46,8 @@ bool hasEvent(const Instance& i, const std::string& name) {
     }
     if (i.isGuiObject()) return name == "MouseEnter" || name == "MouseLeave";
     if (i.cls == ClassId::Player) return name == "CharacterAdded" || name == "CharacterRemoving";
+    if (i.cls == ClassId::RemoteEvent) return name == "OnServerEvent" || name == "OnClientEvent";
+    if (i.cls == ClassId::BindableEvent) return name == "Event";
     return false;
 }
 
@@ -76,6 +79,13 @@ bool methodApplies(const std::string& name, const Instance& i) {
         { "MoveTo", [](const Instance& x) { return x.hasTransform() || x.cls == ClassId::Humanoid; } },
         { "GetBoundingBox", [](const Instance& x) { return x.cls == ClassId::Model || x.isBasePart(); } },
         { "GetExtentsSize", [](const Instance& x) { return x.cls == ClassId::Model; } },
+        { "FireServer", [](const Instance& x) { return x.cls == ClassId::RemoteEvent; } },
+        { "FireClient", [](const Instance& x) { return x.cls == ClassId::RemoteEvent; } },
+        { "FireAllClients", [](const Instance& x) { return x.cls == ClassId::RemoteEvent; } },
+        { "InvokeServer", [](const Instance& x) { return x.cls == ClassId::RemoteFunction; } },
+        { "InvokeClient", [](const Instance& x) { return x.cls == ClassId::RemoteFunction; } },
+        { "Fire", [](const Instance& x) { return x.cls == ClassId::BindableEvent; } },
+        { "Invoke", [](const Instance& x) { return x.cls == ClassId::BindableFunction; } },
     };
     auto it = only.find(name);
     return it == only.end() || it->second(i);
@@ -225,6 +235,7 @@ void LuaRuntime::Impl::registerInstance() {
         Instance* i = need(h);
         if (i->hasTag(tag)) return;
         i->addTag(tag);
+        scene.notifyTagsChanged(*i);
         auto it = tagAdded.find(tag);
         const uint64_t id = i->id;
         if (it != tagAdded.end()) queue(it->second, [this, id](lua_State* T) { return pushInstance(T, id); });
@@ -233,6 +244,7 @@ void LuaRuntime::Impl::registerInstance() {
         Instance* i = need(h);
         if (!i->hasTag(tag)) return;
         i->removeTag(tag);
+        scene.notifyTagsChanged(*i);
         auto it = tagRemoved.find(tag);
         const uint64_t id = i->id;
         if (it != tagRemoved.end()) queue(it->second, [this, id](lua_State* T) { return pushInstance(T, id); });
@@ -326,13 +338,23 @@ void LuaRuntime::Impl::registerInstance() {
     m["Stop"] = [this](const Inst& h) { Instance* i = need(h); if (i->cls != ClassId::Sound) fail(memberError("Stop", *i)); session.stopSound(*i); };
     m["Pause"] = [this](const Inst& h) { Instance* i = need(h); if (i->cls != ClassId::Sound) fail(memberError("Pause", *i)); session.pauseSound(*i, true); };
     m["Resume"] = [this](const Inst& h) { Instance* i = need(h); if (i->cls != ClassId::Sound) fail(memberError("Resume", *i)); session.pauseSound(*i, false); };
-    m["LoadCharacter"] = [this](const Inst& h) { Instance* i = need(h); if (i->cls != ClassId::Player) fail(memberError("LoadCharacter", *i)); session.loadCharacter(); };
+    m["LoadCharacter"] = [this](const Inst& h) {
+        Instance* i = need(h);
+        if (i->cls != ClassId::Player) fail(memberError("LoadCharacter", *i));
+        requireSide(NetworkSide::Server, "LoadCharacter");
+        session.loadCharacter();
+    };
     m["Kick"] = [this](const Inst& h, sol::optional<std::string> message) {
         Instance* i = need(h);
         if (i->cls != ClassId::Player) fail(memberError("Kick", *i));
         session.finish(false, message.value_or("You were kicked from the game"));
     };
-    m["GetMouse"] = [this](const Inst& h) { Instance* i = need(h); if (i->cls != ClassId::Player) fail(memberError("GetMouse", *i)); return Mouse{}; };
+    m["GetMouse"] = [this](const Inst& h) {
+        Instance* i = need(h);
+        if (i->cls != ClassId::Player) fail(memberError("GetMouse", *i));
+        requireSide(NetworkSide::Client, "GetMouse");
+        return Mouse{};
+    };
     m["GetPlayers"] = [this](const Inst& h) {
         Instance* i = need(h);
         if (i->cls != ClassId::Players) fail(memberError("GetPlayers", *i));
@@ -343,8 +365,8 @@ void LuaRuntime::Impl::registerInstance() {
     m["GetPlayerFromCharacter"] = [this](const Inst& h, sol::object character) -> sol::object {
         need(h);
         if (!character.is<Inst>()) return nil();
-        Instance* c = session.character();
-        return c && c->id == character.as<Inst>().id ? instanceOrNil(session.player()) : nil();
+        const uint64_t c = session.characterId();
+        return c && c == character.as<Inst>().id ? instanceOrNil(scene.find(session.playerId())) : nil();
     };
     m["Raycast"] = [this](const Inst& h, const Vector3L& origin, const Vector3L& direction, sol::optional<RaycastParams> params) -> sol::object {
         Instance* i = need(h);
@@ -385,6 +407,108 @@ void LuaRuntime::Impl::registerInstance() {
         }
         return toTable(parts);
     };
+    // ---- remotes and bindables
+    // Arguments are copied (RemoteValue) like Roblox: tables become new
+    // tables, Instances travel by id, functions are dropped.
+    auto argsFrom = [this](sol::variadic_args va, size_t skip) {
+        std::vector<RemoteValue> args;
+        size_t k = 0;
+        for (auto a : va) {
+            if (k++ < skip) continue;
+            args.push_back(toRemote(sol::object(a)));
+        }
+        return args;
+    };
+    m["FireServer"] = [this, argsFrom](const Inst& h, sol::variadic_args va) {
+        Instance* i = need(h);
+        requireSide(NetworkSide::Client, "FireServer");
+        RemoteMessage msg;
+        msg.kind = RemoteMessage::Kind::Event;
+        msg.to = NetworkSide::Server;
+        msg.remote = i->id;
+        msg.args = argsFrom(va, 0);
+        session.postRemote(std::move(msg));
+    };
+    m["FireClient"] = [this, argsFrom](const Inst& h, const Inst& player, sol::variadic_args va) {
+        Instance* i = need(h);
+        requireSide(NetworkSide::Server, "FireClient");
+        if (need(player)->cls != ClassId::Player) fail("FireClient expects a Player as its first argument");
+        RemoteMessage msg;
+        msg.kind = RemoteMessage::Kind::Event;
+        msg.to = NetworkSide::Client;
+        msg.remote = i->id;
+        msg.args = argsFrom(va, 0);
+        session.postRemote(std::move(msg));
+    };
+    m["FireAllClients"] = [this, argsFrom](const Inst& h, sol::variadic_args va) {
+        Instance* i = need(h);
+        requireSide(NetworkSide::Server, "FireAllClients");
+        RemoteMessage msg;
+        msg.kind = RemoteMessage::Kind::Event;
+        msg.to = NetworkSide::Client;
+        msg.remote = i->id;
+        msg.args = argsFrom(va, 0);
+        session.postRemote(std::move(msg));
+    };
+    m["Fire"] = [this, argsFrom](const Inst& h, sol::variadic_args va) {
+        Instance* i = need(h);
+        auto args = std::make_shared<std::vector<RemoteValue>>(argsFrom(va, 0));
+        queueInstanceEvent(i->id, "Event", [this, args](lua_State* T) { return pushRemoteArgs(T, *args); });
+    };
+    // Invocations yield until the other side answers; they are Lua wrappers
+    // around a yielding C++ call that returns (ok, results...).
+    auto startInvoke = sol::yielding([this, argsFrom](const std::string& method, const Inst& h, sol::variadic_args va, sol::this_state ts) {
+        Instance* i = need(h);
+        requireSide(method == "InvokeServer" ? NetworkSide::Client : NetworkSide::Server, method.c_str());
+        RemoteMessage msg;
+        msg.kind = RemoteMessage::Kind::Invoke;
+        msg.remote = i->id;
+        if (isClient()) {
+            msg.to = NetworkSide::Server;
+            msg.args = argsFrom(va, 0);
+        } else {
+            sol::object player = va.size() > 0 ? sol::object(va[0]) : sol::object();
+            if (!player.is<Inst>() || need(player.as<Inst>())->cls != ClassId::Player) fail("InvokeClient expects a Player as its first argument");
+            msg.to = NetworkSide::Client;
+            msg.args = argsFrom(va, 1);
+        }
+        msg.call = nextCall++;
+        pendingCalls[msg.call] = ts.L;
+        session.postRemote(std::move(msg));
+    });
+    lua["__rift_invoke"] = startInvoke;
+    sol::protected_function makeInvoke = lua.safe_script(R"LUA(
+        local start = __rift_invoke
+        return function(method)
+            return function(self, ...)
+                local r = table.pack(start(method, self, ...))
+                if not r[1] then error(r[2], 2) end
+                return table.unpack(r, 2, r.n)
+            end
+        end
+    )LUA");
+    lua["__rift_invoke"] = sol::lua_nil;
+    m["InvokeServer"] = sol::function(makeInvoke("InvokeServer"));
+    m["InvokeClient"] = sol::function(makeInvoke("InvokeClient"));
+    sol::protected_function makeBindableInvoke = lua.safe_script(R"LUA(
+        return function(callback)
+            return function(self, ...)
+                local fn = callback(self)
+                if not fn then error("OnInvoke is not set for " .. self:GetFullName(), 2) end
+                return fn(...)
+            end
+        end
+    )LUA");
+    // Through set_function: a lambda passed straight to a Lua call would be bound like a member function.
+    lua.set_function("__rift_onInvoke", [this](const Inst& h) -> sol::object {
+        auto it = callbacks.find(SignalKey{ need(h)->id, "OnInvoke" });
+        if (it == callbacks.end()) return nil();
+        return sol::make_object(lua, it->second);
+    });
+    sol::function onInvoke = lua["__rift_onInvoke"];
+    lua["__rift_onInvoke"] = sol::lua_nil;
+    m["Invoke"] = sol::function(makeBindableInvoke(onInvoke));
+
     sol::table methods = m;
 
     // ------------------------------------------------------------ the type
@@ -392,7 +516,7 @@ void LuaRuntime::Impl::registerInstance() {
         "new", sol::factories([this](const std::string& cls, sol::optional<sol::object> parent) -> sol::object {
             const ClassInfo* info = classByName(cls);
             if (!info || !info->creatable) fail("Unable to create an Instance of type \"" + cls + "\"");
-            if (info->id == ClassId::Script || info->id == ClassId::ModuleScript) {
+            if (info->id == ClassId::Script || info->id == ClassId::LocalScript || info->id == ClassId::ModuleScript) {
                 fail("Scripts are created in the editor (Insert > Script); clone one from ReplicatedStorage instead");
             }
             Instance* i = scene.create(info->id);
@@ -440,12 +564,16 @@ void LuaRuntime::Impl::registerInstance() {
                 return instanceOrNil(root);
             }
             if (i->cls == ClassId::Player) {
-                if (name == "Character") return instanceOrNil(session.character());
+                if (name == "Character") return instanceOrNil(localCharacter());
                 if (name == "UserId") return sol::make_object(lua, 1);
                 if (name == "DisplayName") return sol::make_object(lua, i->name);
-                if (name == "PlayerGui") return instanceOrNil(scene.service(ClassId::StarterGui));
             }
-            if (i->cls == ClassId::Players && name == "LocalPlayer") return instanceOrNil(session.player());
+            // Players.LocalPlayer is nil on the server, like Roblox.
+            if (i->cls == ClassId::Players && name == "LocalPlayer") return instanceOrNil(localPlayer());
+            if ((i->cls == ClassId::RemoteFunction && (name == "OnServerInvoke" || name == "OnClientInvoke"))
+                || (i->cls == ClassId::BindableFunction && name == "OnInvoke")) {
+                fail(name + " is a callback member of " + classInfo(i->cls).name + "; you can only set it");
+            }
             if (i->cls == ClassId::Workspace && name == "CurrentCamera") return sol::make_object(lua, Camera{});
             if (i->cls == ClassId::Sound) {
                 if (name == "IsPlaying") return sol::make_object(lua, session.soundPlaying(*i));
@@ -488,6 +616,16 @@ void LuaRuntime::Impl::registerInstance() {
             if (name == "AssemblyAngularVelocity" && i->isBasePart()) {
                 if (!value.is<Vector3L>()) fail("AssemblyAngularVelocity must be a Vector3");
                 scene.setProperty(*i, "AngularVelocity", glm::degrees(value.as<Vector3L>().v));
+                return;
+            }
+            const bool remoteCallback = (i->cls == ClassId::RemoteFunction && (name == "OnServerInvoke" || name == "OnClientInvoke"))
+                || (i->cls == ClassId::BindableFunction && name == "OnInvoke");
+            if (remoteCallback) {
+                if (name == "OnServerInvoke") requireSide(NetworkSide::Server, "OnServerInvoke");
+                if (name == "OnClientInvoke") requireSide(NetworkSide::Client, "OnClientInvoke");
+                if (value.get_type() == sol::type::lua_nil) callbacks.erase(SignalKey{ i->id, name });
+                else if (value.get_type() == sol::type::function) callbacks[SignalKey{ i->id, name }] = sol::main_protected_function(value);
+                else fail(name + " must be a function");
                 return;
             }
             if (name == "PrimaryPart" && i->cls == ClassId::Model) {

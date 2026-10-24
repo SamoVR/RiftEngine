@@ -290,8 +290,12 @@ LoadResult loadFormat3(Scene& scene, const json& j) {
 LoadResult sceneFromJson(Scene& scene, const json& j) {
     if (!j.is_object()) return { false, "not a scene file (expected a JSON object)" };
     const int format = j.value("format", 0);
-    if (format == 4) return loadFormat4(scene, j);
-    if (format == 3) return loadFormat3(scene, j);
+    if (format == 3 || format == 4) {
+        scene.clear(); // the file replaces everything, the default containers included
+        LoadResult r = format == 4 ? loadFormat4(scene, j) : loadFormat3(scene, j);
+        if (r.ok) scene.ensureDefaults(); // older files predate StarterPlayerScripts & co.
+        return r;
+    }
     if (format > 4) return { false, "this scene was saved by a newer version of RIFT (format " + std::to_string(format) + ")" };
     return { false, "unsupported scene format " + std::to_string(format) };
 }

@@ -47,6 +47,28 @@ namespace {
     }
 }
 
+void drawSideSwitch(Editor& editor, float height) {
+    if (!editor.playing()) return;
+    const float h = height > 0.0f ? height : ImGui::GetFrameHeight();
+    struct Option { NetworkSide side; const char* label; const char* tip; ImVec4 color; };
+    const Option options[2] = {
+        { NetworkSide::Client, ICON_FA_LAPTOP "  Client", "The player's view: you control the game, LocalScripts and the GUI run here.", { 0.20f, 0.48f, 0.85f, 1.0f } },
+        { NetworkSide::Server, ICON_FA_SERVER "  Server", "The server's world: fly around with the editor camera, select and move things.\nChanges replicate to the client. Scripts run here.", { 0.16f, 0.58f, 0.36f, 1.0f } },
+    };
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
+    for (int k = 0; k < 2; ++k) {
+        const Option& o = options[k];
+        const bool active = editor.viewSide == o.side;
+        if (k) ImGui::SameLine();
+        ImGui::PushStyleColor(ImGuiCol_Button, active ? o.color : ImGui::GetStyleColorVec4(ImGuiCol_FrameBg));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, active ? o.color : ImGui::GetStyleColorVec4(ImGuiCol_FrameBgHovered));
+        if (ImGui::Button(o.label, ImVec2(0.0f, h)) && !active) editor.setViewSide(o.side);
+        ImGui::PopStyleColor(2);
+        theme::tooltip(o.tip);
+    }
+    ImGui::PopStyleVar();
+}
+
 void drawInsertMenuItems(Editor& editor) {
     if (!editor.hasScene()) {
         ImGui::TextDisabled("Open a scene first");
@@ -78,7 +100,20 @@ void drawInsertMenuItems(Editor& editor) {
 
     ImGui::SeparatorText("Code");
     classItem(editor, ClassId::Script, "Script");
+    theme::tooltip("Runs on the server: game rules, data, anything every player shares.");
+    classItem(editor, ClassId::LocalScript, "LocalScript");
+    theme::tooltip("Runs on the client: input, camera and GUI. Lives in StarterPlayerScripts, StarterGui or StarterCharacterScripts.");
     classItem(editor, ClassId::ModuleScript, "ModuleScript");
+    if (ImGui::BeginMenu(ICON_FA_TOWER_BROADCAST "  Communication")) {
+        classItem(editor, ClassId::RemoteEvent, "RemoteEvent");
+        theme::tooltip("Client <-> server messages: FireServer / OnServerEvent, FireClient / OnClientEvent.");
+        classItem(editor, ClassId::RemoteFunction, "RemoteFunction");
+        theme::tooltip("Client <-> server calls with a result: InvokeServer / OnServerInvoke.");
+        classItem(editor, ClassId::BindableEvent, "BindableEvent");
+        theme::tooltip("Messages between scripts on the same side.");
+        classItem(editor, ClassId::BindableFunction, "BindableFunction");
+        ImGui::EndMenu();
+    }
 
     ImGui::SeparatorText("More");
     if (ImGui::BeginMenu(ICON_FA_DESKTOP "  GUI")) {

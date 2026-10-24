@@ -6,6 +6,7 @@
 
 #include <nlohmann/json.hpp>
 #include <algorithm>
+#include <cstring>
 #include <fstream>
 
 namespace rift {
@@ -35,6 +36,8 @@ bool Project::load(const fs::path& folder, std::string* error) {
     get("author", s.author);
     get("startScene", s.startScene);
     get("icon", s.icon);
+    get("scenesFolder", s.scenesFolder);
+    if (!isValidScenesFolder(s.scenesFolder)) s.scenesFolder = "scenes";
     if (j.contains("window") && j["window"].is_object()) {
         const auto& w = j["window"];
         s.windowWidth = std::clamp(w.value("width", s.windowWidth), 320, 7680);
@@ -56,6 +59,7 @@ bool Project::save(std::string* error) const {
     if (!settings_.author.empty()) j["author"] = settings_.author;
     j["startScene"] = settings_.startScene;
     if (!settings_.icon.empty()) j["icon"] = settings_.icon;
+    if (settings_.scenesFolder != "scenes") j["scenesFolder"] = settings_.scenesFolder;
     j["window"] = { { "width", settings_.windowWidth }, { "height", settings_.windowHeight },
                     { "fullscreen", settings_.fullscreen }, { "resizable", settings_.resizable }, { "vsync", settings_.vsync } };
     std::ofstream out(root_ / "project.json", std::ios::trunc);
@@ -67,6 +71,62 @@ bool Project::save(std::string* error) const {
 void Project::close() {
     root_.clear();
     settings_ = {};
+}
+
+fs::path Project::scenesFolder() const {
+    return root_ / Paths::fromUtf8(isValidScenesFolder(settings_.scenesFolder) ? settings_.scenesFolder : std::string("scenes"));
+}
+
+bool Project::isValidScenesFolder(const std::string& folder) {
+    if (folder.empty() || folder.size() > 200) return false;
+    const fs::path p = Paths::fromUtf8(folder);
+    if (p.is_absolute() || p.has_root_name() || p.has_root_directory()) return false;
+    for (const auto& part : p) {
+        const std::string s = Paths::toUtf8(part);
+        if (s == ".." || s == ".") return false;
+        for (char c : s) if (c && std::strchr(":*?\"<>|", c)) return false;
+    }
+    // Not into the folders that hold other things.
+    const std::string first = Paths::toUtf8(*p.begin());
+    return first != "assets" && first != "scripts" && first != "Builds" && first != ".git";
+}
+
+bool Project::changeScenesFolder(const std::string& folderIn, bool moveExisting, std::string* error) {
+    std::string folder = folderIn;
+    std::replace(folder.begin(), folder.end(), '\\', '/');
+    while (!folder.empty() && folder.back() == '/') folder.pop_back();
+    if (!isValidScenesFolder(folder)) {
+        if (error) *error = "the scenes folder must be a folder inside the project (not assets, scripts or Builds)";
+        return false;
+    }
+    const fs::path oldFolder = scenesFolder();
+    const std::string oldRel = settings_.scenesFolder;
+    const fs::path newFolder = root_ / Paths::fromUtf8(folder);
+    std::error_code ec;
+    if (fs::equivalent(oldFolder, newFolder, ec)) return true;
+    fs::create_directories(newFolder, ec);
+    if (ec) { if (error) *error = "cannot create " + Paths::toUtf8(newFolder) + ": " + ec.message(); return false; }
+    if (moveExisting && fs::is_directory(oldFolder, ec)) {
+        // Check every move first, so nothing moves if one would fail.
+        std::vector<fs::path> items;
+        for (const auto& entry : fs::directory_iterator(oldFolder, ec)) {
+            if (fs::exists(newFolder / entry.path().filename(), ec)) {
+                if (error) *error = Paths::toUtf8(entry.path().filename()) + " already exists in " + folder;
+                return false;
+            }
+            items.push_back(entry.path());
+        }
+        for (const fs::path& item : items) {
+            fs::rename(item, newFolder / item.filename(), ec);
+            if (ec) { if (error) *error = "could not move " + Paths::toUtf8(item.filename()) + ": " + ec.message(); return false; }
+        }
+        // The start scene moved too.
+        const std::string prefix = oldRel + "/";
+        if (settings_.startScene.rfind(prefix, 0) == 0) settings_.startScene = folder + "/" + settings_.startScene.substr(prefix.size());
+        if (fs::is_empty(oldFolder, ec)) fs::remove(oldFolder, ec);
+    }
+    settings_.scenesFolder = folder;
+    return save(error);
 }
 
 std::vector<fs::path> Project::scenes() const {

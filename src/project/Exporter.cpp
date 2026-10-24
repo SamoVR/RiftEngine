@@ -83,8 +83,8 @@ ExportResult exportGame(const Project& project, const ExportOptions& o) {
     const fs::path out = fs::absolute(o.outputFolder);
     const fs::path root = fs::absolute(project.root());
     // The build must not land inside what it copies (or contain the project).
-    for (const char* sub : { "scenes", "assets", "scripts" }) {
-        if (inside(out, root / sub) || fs::equivalent(out, root / sub, ec)) { r.error = "The build folder cannot be inside the project's " + std::string(sub) + " folder"; return r; }
+    for (const fs::path& sub : { project.scenesFolder(), root / "assets", root / "scripts" }) {
+        if (inside(out, sub) || fs::equivalent(out, sub, ec)) { r.error = "The build folder cannot be inside the project's " + Paths::toUtf8(sub.filename()) + " folder"; return r; }
     }
     if (fs::equivalent(out, root, ec) || inside(root, out)) { r.error = "The build folder cannot be the project folder itself"; return r; }
 
@@ -120,7 +120,8 @@ ExportResult exportGame(const Project& project, const ExportOptions& o) {
     // The game itself.
     const fs::path game = out / "game";
     if (!copy.copyFile(root / "project.json", game / "project.json")) return r;
-    if (!copy.copyTree(root / "scenes", game / "scenes", notAutosave)) return r;
+    const std::string scenes = project.settings().scenesFolder;
+    if (!copy.copyTree(project.scenesFolder(), game / Paths::fromUtf8(scenes), notAutosave)) return r;
     if (!copy.copyTree(root / "assets", game / "assets")) return r;
     if (!copy.copyTree(root / "scripts", game / "scripts")) return r;
 

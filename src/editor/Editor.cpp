@@ -87,7 +87,8 @@ void Editor::update(float dt) {
         const auto& lines = session_->logLines();
         const uint64_t total = session_->logCounter();
         const uint64_t fresh = std::min<uint64_t>(total - lastSessionLog_, lines.size());
-        for (size_t k = lines.size() - fresh; k < lines.size(); ++k) addOutput(lines[k].level, lines[k].text, lines[k].script, "Game");
+        for (size_t k = lines.size() - fresh; k < lines.size(); ++k)
+            addOutput(lines[k].level, lines[k].text, lines[k].script, lines[k].side == NetworkSide::Client ? "Client" : "Server");
         lastSessionLog_ = total;
         return;
     }
@@ -180,6 +181,26 @@ void Editor::closeProject() {
     scripts_.reset(std::string());
     scripts_.setProjectRoot(std::string());
     resetSceneState();
+}
+
+bool Editor::changeScenesFolder(const std::string& folder, bool moveExisting) {
+    stop();
+    if (isDirty() && !saveScene()) return false;
+    std::error_code ec;
+    // Where the open scene is, relative to the scenes folder (to reopen it after a move).
+    fs::path rel;
+    if (hasScene()) {
+        rel = fs::relative(scenePath_, project_.scenesFolder(), ec);
+        if (ec || rel.empty() || *rel.begin() == "..") rel.clear();
+    }
+    std::string error;
+    if (!project_.changeScenesFolder(folder, moveExisting, &error)) {
+        notify("Cannot change the scenes folder: " + error, NoticeLevel::Error);
+        return false;
+    }
+    if (moveExisting && !rel.empty()) openScene(project_.scenesFolder() / rel);
+    notify("Scenes folder is now " + project_.settings().scenesFolder, NoticeLevel::Success);
+    return true;
 }
 
 bool Editor::saveProjectSettings() {
@@ -369,7 +390,7 @@ std::vector<Instance*> Editor::selectedInstances() {
 std::vector<Instance*> Editor::selectionRoots() {
     std::vector<Instance*> out;
     for (Instance* i : selectedInstances()) {
-        if (i->isService() || i->cls == ClassId::Player) continue;
+        if (i->isService() || i->isFixedContainer() || i->cls == ClassId::Player) continue;
         bool ancestor = false;
         for (Instance* a = i->parent; a && !ancestor; a = a->parent) ancestor = isSelected(a->id);
         if (!ancestor) out.push_back(i);
@@ -459,11 +480,21 @@ Instance* Editor::insert(ClassId cls, PartShape shape) {
     Instance* selected = selection_.empty() ? nullptr : s.find(primary());
     Instance* i = nullptr;
 
-    if (cls == ClassId::Script || cls == ClassId::ModuleScript) {
-        // Inside the selected object; scene-wide scripts go to ScriptService.
-        Instance* target = selected && !selected->isService() ? selected : (cls == ClassId::Script ? s.service(ClassId::ScriptService) : s.service(ClassId::ReplicatedStorage));
-        if (selected && selected->isService()) target = selected;
-        i = createScript(nullptr, cls, cls == ClassId::Script ? "Script" : "ModuleScript", cls == ClassId::Script ? newScriptSource() : newModuleSource());
+    if (cls == ClassId::Script || cls == ClassId::LocalScript || cls == ClassId::ModuleScript) {
+        // Inside the selected object. Without one: Scripts go to ScriptService,
+        // LocalScripts to StarterPlayerScripts, modules to ReplicatedStorage.
+        Instance* target = selected;
+        if (!target) {
+            if (cls == ClassId::Script) target = s.service(ClassId::ScriptService);
+            else if (cls == ClassId::ModuleScript) target = s.service(ClassId::ReplicatedStorage);
+            else {
+                s.ensureDefaults();
+                for (Instance* c : s.starterPlayer().children) if (c->cls == ClassId::StarterPlayerScripts) target = c;
+            }
+        }
+        const char* name = cls == ClassId::Script ? "Script" : cls == ClassId::LocalScript ? "LocalScript" : "ModuleScript";
+        const char* source = cls == ClassId::Script ? newScriptSource() : cls == ClassId::LocalScript ? newLocalScriptSource() : newModuleSource();
+        i = createScript(nullptr, cls, name, source);
         parent = target;
     } else if (cls == ClassId::ScreenGui) {
         i = s.create(cls);
@@ -489,6 +520,10 @@ Instance* Editor::insert(ClassId cls, PartShape shape) {
         else if (cls == ClassId::Sound) parent = s.service(ClassId::SoundService);
         else placeAt(*i, parent, placementPoint(glm::vec3(1.0f)) + glm::vec3(0.0f, 3.0f, 0.0f));
         if (cls == ClassId::SpotLight && selected && selected->isBasePart()) i->rotation = { -90.0f, 0.0f, 0.0f }; // shine down
+    } else if (cls >= ClassId::RemoteEvent && cls <= ClassId::BindableFunction) {
+        // Remotes live where both sides can see them.
+        i = s.create(cls);
+        parent = selected && (selected->cls == ClassId::Folder || selected->isService()) ? selected : s.service(ClassId::ReplicatedStorage);
     } else if (cls == ClassId::Humanoid || (cls >= ClassId::IntValue && cls <= ClassId::Color3Value)) {
         i = s.create(cls);
         if (selected && !selected->isService()) parent = selected;
@@ -509,7 +544,7 @@ Instance* Editor::insert(ClassId cls, PartShape shape) {
     auto cmd = commitNew(s, i, parent, "Insert " + classInfo(cls).name);
     execute(std::move(cmd));
     selection_ = { id };
-    if (cls == ClassId::Script || cls == ClassId::ModuleScript) openScript(id);
+    if (cls == ClassId::Script || cls == ClassId::LocalScript || cls == ClassId::ModuleScript) openScript(id);
     return s.find(id);
 }
 
@@ -896,8 +931,23 @@ void Editor::play() {
     options.dataStoreFolder = Paths::userData() / "datastores" / Paths::fromUtf8(gameName);
     session_ = std::make_unique<GameSession>(*scene_, scripts_, input_, options);
     lastSessionLog_ = 0;
+    viewSide = NetworkSide::Client;
     addOutput(LogLevel::Info, "Game started", 0, "Game");
     session_->start();
+}
+
+void Editor::setViewSide(NetworkSide side) {
+    if (!session_ || side == viewSide) return;
+    commitPreview();
+    if (side == NetworkSide::Server) {
+        // Start where the player's camera is, like Studio does.
+        const GameCamera& cam = session_->camera();
+        camera_.lookAt(cam.position, cam.position + cam.lookVector() * 10.0f);
+    }
+    viewSide = side;
+    // Objects only one side has (the character's LocalScripts, server-only storage) drop out.
+    selection_.erase(std::remove_if(selection_.begin(), selection_.end(), [this](uint64_t id) { return !scene().find(id); }), selection_.end());
+    notify(side == NetworkSide::Server ? "Viewing the server" : "Viewing the client");
 }
 
 void Editor::stop() {

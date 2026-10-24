@@ -14,7 +14,8 @@ namespace {
 
 void GuiSystem::layout(const glm::vec2& viewSize) {
     items_.clear();
-    Instance* starterGui = scene_.service(ClassId::StarterGui);
+    // The player's PlayerGui while playing; StarterGui for the editor's preview.
+    Instance* starterGui = root_ ? scene_.find(root_) : scene_.service(ClassId::StarterGui);
     if (!starterGui) return;
 
     struct Sortable { Item item; int order; int z; size_t sequence; };

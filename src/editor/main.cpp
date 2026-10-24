@@ -7,6 +7,7 @@
 #ifdef _WIN32
 #include <Windows.h> // before GLEW (via the editor headers), which would define APIENTRY itself
 #include <shellapi.h>
+#include <ole2.h>
 #include <DbgHelp.h>
 #endif
 
@@ -45,6 +46,12 @@ namespace {
 #endif
 
     int runApplication(const std::string& startupPath) {
+#ifdef _WIN32
+        // COM must be single-threaded on this thread before anything else touches
+        // it: the native file / folder dialogs deadlock in a multithreaded
+        // apartment, and the audio library would otherwise make it one.
+        OleInitialize(nullptr);
+#endif
         Paths::setUserDataFolderName("RIFT");
         Log::init("editor");
         LOG_INFO("Main", std::string("RIFT Editor ") + RIFT_VERSION_STRING + " starting");
@@ -62,6 +69,9 @@ namespace {
         }
         LOG_INFO("Main", "RIFT Editor closed");
         Log::shutdown();
+#ifdef _WIN32
+        OleUninitialize();
+#endif
         return result;
     }
 }

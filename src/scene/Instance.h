@@ -27,17 +27,20 @@ class Scene;
 
 enum class ClassId : uint8_t {
     // Services: exactly one of each per scene, always at the root.
-    Workspace, Players, Lighting, ReplicatedStorage, ScriptService, StarterGui, StarterPlayer, SoundService,
+    Workspace, Players, Lighting, ReplicatedStorage, ServerStorage, ScriptService, StarterGui, StarterPlayer, SoundService,
     // World
     Part, SpawnLocation, MeshPart, Model, Folder,
     PointLight, SpotLight,
     Sound,
     Humanoid,
-    Player,
+    // Players and their containers (made by the engine)
+    Player, PlayerGui, PlayerScripts, Backpack, StarterPlayerScripts, StarterCharacterScripts,
     // Values (data holders, e.g. leaderstats)
     IntValue, NumberValue, StringValue, BoolValue, Vector3Value, Color3Value,
     // Code
-    Script, ModuleScript,
+    Script, LocalScript, ModuleScript,
+    // Communication: client <-> server (Remote) and script <-> script (Bindable)
+    RemoteEvent, RemoteFunction, BindableEvent, BindableFunction,
     // 2D GUI
     ScreenGui, Frame, TextLabel, TextButton, ImageLabel, ImageButton,
     Count
@@ -144,6 +147,7 @@ struct Instance {
     float backgroundTransparency = 0.0f;
     int zIndex = 1;
     int displayOrder = 0;
+    bool resetOnSpawn = true;             // ScreenGui: copied into PlayerGui again when the character respawns
     float cornerRadius = 0.0f;
     float borderSize = 0.0f;
     Color3 borderColor{ 0.1f, 0.1f, 0.1f };
@@ -162,7 +166,11 @@ struct Instance {
     bool isService() const;
     bool isBasePart() const;      // Part, SpawnLocation, MeshPart: has geometry and physics
     bool hasTransform() const;    // anything with position/rotation (parts, models, lights)
-    bool isScript() const;        // Script or ModuleScript
+    bool isScript() const;        // Script, LocalScript or ModuleScript
+    bool isRemote() const;        // RemoteEvent, RemoteFunction, BindableEvent, BindableFunction
+    // Containers the engine keeps (StarterPlayerScripts, PlayerGui, ...): like
+    // services, they cannot be deleted, moved or duplicated in the editor.
+    bool isFixedContainer() const;
     bool isGui() const;           // GUI element (ScreenGui or a GuiObject)
     bool isGuiObject() const;     // drawable GUI element (not ScreenGui)
     bool isLight() const;

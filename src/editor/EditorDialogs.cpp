@@ -233,6 +233,7 @@ void EditorApp::drawWelcome(ImGuiID dockspace) {
     theme::heading("Recent projects", recentWidth);
     ImGui::BeginChild("##recent", ImVec2(recentWidth, std::max(fs_ * 12.0f, vp->WorkSize.y * 0.5f)));
     std::string remove;
+    fs::path openNow; // opened after the loop: opening reorders the recent list
     for (const std::string& path : settings_.recentProjects) {
         const fs::path p = Paths::fromUtf8(path);
         const bool exists = fs::exists(p / "project.json", ec);
@@ -241,7 +242,7 @@ void EditorApp::drawWelcome(ImGuiID dockspace) {
         const float h = fs_ * 2.9f;
         ImGui::BeginDisabled(!exists);
         if (ImGui::Selectable("##row", false, ImGuiSelectableFlags_AllowOverlap, ImVec2(recentWidth - fs_ * 2.5f, h)))
-            editor_->openProject(p);
+            openNow = p;
         ImGui::EndDisabled();
         ImDrawList* draw = ImGui::GetWindowDrawList();
         draw->AddText(ImGui::GetFont(), fs_ * 1.3f, ImVec2(pos.x + fs_ * 0.5f, pos.y + (h - fs_ * 1.3f) * 0.5f), theme::u32(exists ? theme::color::warning : theme::color::textDim), ICON_FA_FOLDER);
@@ -260,6 +261,7 @@ void EditorApp::drawWelcome(ImGuiID dockspace) {
         settings_.recentProjects.erase(std::remove(settings_.recentProjects.begin(), settings_.recentProjects.end(), remove), settings_.recentProjects.end());
         settings_.save();
     }
+    if (!openNow.empty()) editor_->openProject(openNow);
     ImGui::EndGroup();
     ImGui::End();
 }

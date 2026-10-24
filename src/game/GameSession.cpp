@@ -1,4 +1,5 @@
 #include "game/GameSession.h"
+#include "game/Replicator.h"
 #include "physics/PhysicsWorld.h"
 #include "script/LuaRuntime.h"
 #include "script/ScriptStore.h"
@@ -42,18 +43,38 @@ namespace {
 // ============================================================================
 //  Lifetime
 // ============================================================================
-GameSession::GameSession(const Scene& editScene, ScriptStore& scripts, Input& input, Options options)
-    : scene_(editScene.clone()), scripts_(scripts), input_(input), options_(std::move(options)), gui_(*scene_) {
-    physics_ = std::make_unique<PhysicsWorld>(*scene_);
-    lua_ = std::make_unique<LuaRuntime>(*this);
-    gui_.onEvent = [this](Instance& element, GuiEvent e) { lua_->onGuiEvent(element, e); };
+template <class F> void GameSession::forBoth(F&& f) {
+    f(*lua_);
+    f(*clientLua_);
+}
 
+GameSession::GameSession(const Scene& editScene, ScriptStore& scripts, Input& input, Options options)
+    : scene_(editScene.clone()), client_(std::make_unique<Scene>()), scripts_(scripts), input_(input), options_(std::move(options)) {
+    scene_->ensureDefaults();
+    physics_ = std::make_unique<PhysicsWorld>(*scene_);
+
+    // The player and the containers Roblox gives it.
     Instance* player = scene_->create(ClassId::Player, scene_->service(ClassId::Players));
     player->name = options_.playerName;
     playerId_ = player->id;
+    Instance* playerGui = scene_->create(ClassId::PlayerGui, player);
+    playerGui->name = "PlayerGui";
+    playerGuiId_ = playerGui->id;
+    scene_->create(ClassId::Backpack, player)->name = "Backpack";
 
-    // Start where the editor camera was looking from is the host's business;
-    // by default look at the world from a little above.
+    // The client starts as a copy of the server's world.
+    replicator_ = std::make_unique<Replicator>(*scene_, *client_);
+    replicator_->start();
+    setUpClientPlayer();
+
+    lua_ = std::make_unique<LuaRuntime>(*this, NetworkSide::Server);
+    clientLua_ = std::make_unique<LuaRuntime>(*this, NetworkSide::Client);
+    gui_ = std::make_unique<GuiSystem>(*client_);
+    gui_->setRoot(playerGuiId_);
+    gui_->onEvent = [this](Instance& element, GuiEvent e) { clientLua_->onGuiEvent(element, e); };
+
+    // Where the camera starts is the host's business; by default look at the
+    // world from a little above.
     camera_.lookAt({ 0.0f, 12.0f, 24.0f }, { 0.0f, 0.0f, 0.0f });
 }
 
@@ -62,16 +83,59 @@ GameSession::~GameSession() {
         for (auto& [id, s] : sounds_) options_.audio->stop(s.handle);
     }
     sounds_.clear();
-    lua_.reset();     // observes the scene; goes first
+    gui_.reset();
+    clientLua_.reset(); // the runtimes observe the scenes; they go first
+    lua_.reset();
+    replicator_.reset();
     physics_.reset();
+}
+
+void GameSession::setUpClientPlayer() {
+    // PlayerScripts exists only on the client: copies of StarterPlayerScripts.
+    Instance* player = client_->find(playerId_);
+    if (!player) return;
+    Instance* scriptsFolder = client_->create(ClassId::PlayerScripts, player);
+    scriptsFolder->name = "PlayerScripts";
+    for (Instance* c : std::vector<Instance*>(client_->starterPlayer().children)) {
+        if (c->cls != ClassId::StarterPlayerScripts) continue;
+        for (Instance* item : std::vector<Instance*>(c->children)) {
+            if (Instance* copy = client_->cloneSubtree(*item)) client_->setParent(copy, scriptsFolder);
+        }
+    }
+}
+
+void GameSession::fillPlayerGui(bool respawn) {
+    // StarterGui is copied into PlayerGui (on the server, so it replicates).
+    // On respawn, ScreenGuis with ResetOnSpawn off keep their old copy.
+    Instance* gui = scene_->find(playerGuiId_);
+    Instance* starter = scene_->service(ClassId::StarterGui);
+    if (!gui || !starter) return;
+    for (Instance* c : std::vector<Instance*>(gui->children)) {
+        const bool keep = respawn && c->cls == ClassId::ScreenGui && !c->resetOnSpawn;
+        if (!keep) scene_->destroy(c);
+    }
+    for (Instance* c : std::vector<Instance*>(starter->children)) {
+        if (respawn && c->cls == ClassId::ScreenGui && !c->resetOnSpawn) continue;
+        if (Instance* copy = scene_->cloneSubtree(*c)) scene_->setParent(copy, gui);
+    }
 }
 
 void GameSession::start() {
     if (started_) return;
     started_ = true;
     if (options_.spawnCharacter) spawnCharacter();
+    else fillPlayerGui(false);
     lua_->start();
-    gui_.layout(view_.size);
+    clientLua_->start();
+    gui_->layout(view_.size);
+}
+
+void GameSession::postRemote(RemoteMessage message) { remotes_.push_back(std::move(message)); }
+
+void GameSession::deliverRemotes() {
+    std::vector<RemoteMessage> batch;
+    batch.swap(remotes_);
+    for (const RemoteMessage& m : batch) (m.to == NetworkSide::Server ? *lua_ : *clientLua_).onRemoteMessage(m);
 }
 
 // ============================================================================
@@ -84,22 +148,26 @@ void GameSession::update(float dt, const ViewportInput& view) {
         messageTimer_ -= dt;
         if (messageTimer_ <= 0.0f && outcome_ == Outcome::None) message_.clear();
     }
-    gui_.layout(view.size);
+    gui_->layout(view.size);
     if (paused_ || outcome_ != Outcome::None) {
         updateCamera(0.0f);
         return;
     }
     time_ += dt;
 
-    gui_.handleMouse(view.mouse, view.hovered, view.hovered && input_.mouseDown(GLFW_MOUSE_BUTTON_LEFT));
+    gui_->handleMouse(view.mouse, view.hovered, view.hovered && input_.mouseDown(GLFW_MOUSE_BUTTON_LEFT));
+    clientLua_->beforePhysics(dt);
     lua_->beforePhysics(dt);
     updateCharacter(dt);
     physics_->step(dt);
     afterPhysics(dt);
+    replicator_->syncTransforms();
     lua_->afterPhysics(dt);
+    clientLua_->afterPhysics(dt);
+    deliverRemotes();
     updateCamera(dt);
     updateSounds();
-    gui_.layout(view.size); // scripts may have changed the GUI this frame
+    gui_->layout(view.size); // scripts may have changed the GUI this frame
 }
 
 // ============================================================================
@@ -157,6 +225,13 @@ void GameSession::spawnCharacter() {
         scene_->create(ClassId::Humanoid, model);
     }
     model->name = playerInst ? playerInst->name : "Player";
+    // StarterCharacterScripts: LocalScripts run on the client, Scripts on the server.
+    for (Instance* c : std::vector<Instance*>(starter.children)) {
+        if (c->cls != ClassId::StarterCharacterScripts) continue;
+        for (Instance* item : std::vector<Instance*>(c->children)) {
+            if (Instance* copy = scene_->cloneSubtree(*item)) scene_->setParent(copy, model);
+        }
+    }
 
     Instance* root = model->findFirstChild("HumanoidRootPart");
     Instance* hum = nullptr;
@@ -175,6 +250,9 @@ void GameSession::spawnCharacter() {
     }
     physics_->setIgnored(model->id, true); // the controller moves it, not rigid-body physics
     scene_->setParent(model, &scene_->workspace());
+    replicator_->setLocalCharacter(model->id); // the client owns its character
+    fillPlayerGui(guiFilled_);
+    guiFilled_ = true;
 
     characterId_ = model->id;
     humanoidId_ = hum->id;
@@ -187,7 +265,7 @@ void GameSession::spawnCharacter() {
 
     // Camera starts behind the new character.
     camera_.yaw = facingYaw_;
-    if (started_) lua_->onCharacterAdded(*model);
+    if (started_) forBoth([&](LuaRuntime& l) { l.onCharacterAdded(*model); });
 }
 
 void GameSession::destroyCharacter() {
@@ -196,9 +274,10 @@ void GameSession::destroyCharacter() {
         controller_ = nullptr;
     }
     if (Instance* c = character()) {
-        lua_->onCharacterRemoving(*c);
+        forBoth([&](LuaRuntime& l) { l.onCharacterRemoving(*c); });
         scene_->destroy(c);
     }
+    replicator_->setLocalCharacter(0);
     characterId_ = humanoidId_ = rootPartId_ = 0;
 }
 
@@ -270,7 +349,7 @@ void GameSession::updateCharacter(float dt) {
 }
 
 void GameSession::afterPhysics(float dt) {
-    for (const TouchEvent& e : physics_->takeTouchEvents()) lua_->onTouch(e);
+    for (const TouchEvent& e : physics_->takeTouchEvents()) forBoth([&](LuaRuntime& l) { l.onTouch(e); });
     for (uint64_t id : physics_->takeFallenParts()) {
         if (Instance* i = scene_->find(id)) scene_->destroy(i); // fell out of the world
     }
@@ -293,11 +372,11 @@ void GameSession::afterPhysics(float dt) {
     model->setWorldFrame(feet + glm::vec3(0.0f, kCharacterHeight * 0.5f, 0.0f) - rootOffset, glm::vec3(0.0f, facingYaw_, 0.0f));
     root->velocity = controller_->velocity();
 
-    if (controller_->justJumped()) lua_->onJumping(*hum);
+    if (controller_->justJumped()) forBoth([&](LuaRuntime& l) { l.onJumping(*hum); });
     const float speed = glm::length(glm::vec2(root->velocity.x, root->velocity.z));
     if (std::abs(speed - runningSpeed_) > 0.5f || (speed == 0.0f && runningSpeed_ != 0.0f)) {
         runningSpeed_ = speed < 0.05f ? 0.0f : speed;
-        lua_->onRunning(*hum, runningSpeed_);
+        forBoth([&](LuaRuntime& l) { l.onRunning(*hum, runningSpeed_); });
     }
 
     // Health and death.
@@ -305,12 +384,12 @@ void GameSession::afterPhysics(float dt) {
     if (hum->health > hum->maxHealth) hum->health = hum->maxHealth;
     if (hum->health != lastHealth_) {
         lastHealth_ = hum->health;
-        lua_->onHealthChanged(*hum, hum->health);
+        forBoth([&](LuaRuntime& l) { l.onHealthChanged(*hum, hum->health); });
     }
     if (hum->health <= 0.0f && !dead_) {
         dead_ = true;
         respawnTimer_ = kRespawnDelay;
-        lua_->onHumanoidDied(*hum);
+        forBoth([&](LuaRuntime& l) { l.onHumanoidDied(*hum); });
         controller_->setInput({});
         // Fall apart: the limbs drop (they become ordinary unanchored parts).
         physics_->destroyCharacter(controller_);
@@ -398,8 +477,8 @@ glm::vec3 GameSession::worldToScreen(const glm::vec3& world) const {
 // ============================================================================
 //  Output
 // ============================================================================
-void GameSession::log(LogLevel level, const std::string& text, uint64_t script) {
-    log_.push_back({ text, level, time_, script });
+void GameSession::log(LogLevel level, const std::string& text, uint64_t script, NetworkSide side) {
+    log_.push_back({ text, level, time_, script, side });
     ++logCounter_;
     while (log_.size() > kMaxLogLines) log_.pop_front();
     if (level != LogLevel::Info) Log::write(level, "Script", text);
@@ -423,7 +502,7 @@ void GameSession::finish(bool won, const std::string& text) {
 //  :Stop(), which set it; Playing = true in the editor means autoplay).
 // ============================================================================
 void GameSession::playSound(Instance& sound) {
-    scene_->setProperty(sound, "Playing", true);
+    if (sound.scene) sound.scene->setProperty(sound, "Playing", true); // a server sound replicates to the client
     auto it = sounds_.find(sound.id);
     if (it != sounds_.end() && options_.audio) {
         options_.audio->stop(it->second.handle); // :Play() restarts from the beginning
@@ -433,7 +512,7 @@ void GameSession::playSound(Instance& sound) {
 }
 
 void GameSession::stopSound(Instance& sound) {
-    scene_->setProperty(sound, "Playing", false);
+    if (sound.scene) sound.scene->setProperty(sound, "Playing", false);
     updateSounds();
 }
 
@@ -463,14 +542,15 @@ float GameSession::soundLength(const Instance& sound) const {
 }
 
 void GameSession::updateSounds() {
+    // The client's world is what the player hears.
     AudioSystem* audio = options_.audio;
-    const Instance* soundService = scene_->service(ClassId::SoundService);
+    const Instance* soundService = client_->service(ClassId::SoundService);
     const float master = soundService ? soundService->volume : 1.0f;
     if (audio) audio->setMasterVolume(master);
 
     // Start sounds whose Playing is on.
     std::vector<Instance*> wanted;
-    scene_->forEachInTree([&](Instance& i) { if (i.cls == ClassId::Sound && i.playing) wanted.push_back(&i); });
+    client_->forEachInTree([&](Instance& i) { if (i.cls == ClassId::Sound && i.playing) wanted.push_back(&i); });
     for (Instance* s : wanted) {
         if (sounds_.count(s->id)) continue;
         SoundState state;
@@ -488,7 +568,7 @@ void GameSession::updateSounds() {
     }
     // Update / stop / finish.
     for (auto it = sounds_.begin(); it != sounds_.end();) {
-        Instance* s = scene_->find(it->first);
+        Instance* s = client_->find(it->first);
         if (!s || !s->playing) {
             if (audio) audio->stop(it->second.handle);
             it = sounds_.erase(it);
@@ -502,14 +582,16 @@ void GameSession::updateSounds() {
             if (!it->second.paused && !audio->isPlaying(it->second.handle)) {
                 audio->stop(it->second.handle); // release the voice
                 s->playing = false;             // ended
-                lua_->onSoundEnded(*s);
+                if (Instance* server = scene_->find(s->id)) server->playing = false;
+                forBoth([&](LuaRuntime& l) { l.onSoundEnded(*s); });
                 it = sounds_.erase(it);
                 continue;
             }
         } else if (!audio || !it->second.handle) {
             // No audio device (or no file): the sound "ends" at once, so scripts waiting on Ended continue.
             s->playing = false;
-            lua_->onSoundEnded(*s);
+            if (Instance* server = scene_->find(s->id)) server->playing = false;
+            forBoth([&](LuaRuntime& l) { l.onSoundEnded(*s); });
             it = sounds_.erase(it);
             continue;
         }

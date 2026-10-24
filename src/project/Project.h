@@ -20,6 +20,7 @@ struct ProjectSettings {
     std::string version = "1.0.0";
     std::string author;
     std::string startScene = "scenes/Main/scene.json"; // relative to the project folder
+    std::string scenesFolder = "scenes";               // where scenes live, relative to the project folder
     std::string icon;                                  // assets/... png used for the game window / exe
     int windowWidth = 1280;
     int windowHeight = 720;
@@ -41,11 +42,17 @@ public:
     const ProjectSettings& settings() const { return settings_; }
 
     std::filesystem::path startScenePath() const { return root_ / settings_.startScene; }
-    std::filesystem::path scenesFolder() const { return root_ / "scenes"; }
+    std::filesystem::path scenesFolder() const;
     std::filesystem::path assetsFolder() const { return root_ / "assets"; }
     std::filesystem::path scriptsFolder() const { return root_ / "scripts"; }
-    // Every scene.json under scenes/, sorted by name.
+    // Every scene.json in the scenes folder, sorted by name.
     std::vector<std::filesystem::path> scenes() const;
+    // Points the project at another scenes folder (relative, inside the
+    // project). moveExisting moves the scene folders there and fixes the
+    // start scene. Saves project.json.
+    bool changeScenesFolder(const std::string& folder, bool moveExisting, std::string* error = nullptr);
+    // True if `folder` is a usable scenes folder: relative, inside the project, no "..".
+    static bool isValidScenesFolder(const std::string& folder);
 
     // The project folder that contains `file` (nearest parent with a
     // project.json), or empty.

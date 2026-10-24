@@ -16,6 +16,7 @@
 
 #include <imgui.h>
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -41,6 +42,10 @@ inline constexpr const char* kInstancesPayload = "RIFT_INSTANCES"; // uint64_t i
 
 // The Insert menu's items (main menu, Explorer context menu, toolbar).
 void drawInsertMenuItems(Editor& editor);
+
+// While playing: the Client / Server switch (which world the editor shows).
+// `height` 0 = a normal frame height. Draws nothing while editing.
+void drawSideSwitch(Editor& editor, float height = 0.0f);
 
 // An asset file dropped onto an instance (or onto nothing): an image becomes
 // the part's Texture / the GUI image, a sound becomes a Sound inside it, a
@@ -115,6 +120,9 @@ private:
     uint64_t revealId_ = 0;
     bool selectedHere_ = false;
     std::vector<uint64_t> visibleOrder_, lastOrder_; // rows in draw order (Shift+click ranges)
+    // Edits requested while the tree is being drawn run after it (deleting a
+    // row while iterating the rows would leave dangling pointers).
+    std::vector<std::function<void()>> deferred_;
     uint64_t rangeAnchor_ = 0;
 
     void drawNode(UiContext& ui, Instance& node, int depth);

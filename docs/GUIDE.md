@@ -98,7 +98,7 @@ The toolbar has buttons for a part and a script; the arrow next to them and the
 
 - **Parts**: Block, Sphere, Cylinder, Wedge, Corner Wedge, Spawn Location. New parts land on the surface in the middle of the view.
 - **Objects**: Model, Folder, Point Light, Spot Light, Sound, value objects.
-- **Code**: Script, ModuleScript (inside the selected object, or in ScriptService / ReplicatedStorage).
+- **Code**: Script (server), LocalScript (client), ModuleScript, and under Communication: RemoteEvent, RemoteFunction, BindableEvent, BindableFunction. Scripts go inside the selected object, or into ScriptService / StarterPlayerScripts / ReplicatedStorage; remotes into ReplicatedStorage.
 - **GUI**: ScreenGui, Frame, TextLabel, TextButton, ImageLabel, ImageButton. They go into the selected ScreenGui or Frame, or a new ScreenGui in StarterGui.
 - **Gameplay**: ready-made pieces with their scripts: Kill Brick, Spinner, Coin, Jump Pad, Moving Platform, Checkpoint, Door, Finish Line and a Leaderboard script. Their scripts are ordinary Lua: open them to see how they work.
 
@@ -160,7 +160,8 @@ scene: whatever it changes (moved parts, destroyed objects, new instances) is
 thrown away on **Stop** (Shift+F5). **Pause** (F6) freezes the game.
 
 - Click the viewport to give the game the keyboard and mouse. The character walks with W A S D, jumps with Space, and the camera turns with the right mouse button. **Esc** gives the mouse back to the editor.
-- The Explorer shows the running game, so you can inspect it and even move objects while it runs.
+- The game runs as a **server** and a **client**, like Roblox. The **Client / Server** switch in the toolbar picks which one you see. Client: the player's view, where you play. Server: the server's world with the editor camera, where you can select and move objects and watch the change reach the client.
+- The Explorer shows the world you are looking at, so it lists the client's objects (PlayerGui, PlayerScripts, whatever LocalScripts create) on the Client side and the server's on the Server side. Output lines are tagged Client or Server.
 - `print` output appears in the Output panel with the game time.
 - **Game > Run in Player** (Ctrl+F5) saves and starts the standalone player on the project, exactly as a finished game will run.
 

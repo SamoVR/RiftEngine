@@ -37,5 +37,6 @@ const PartTemplate* findTemplate(const std::string& id);
 // Source of a new, empty Script / ModuleScript.
 const char* newScriptSource();
 const char* newModuleSource();
+const char* newLocalScriptSource();
 
 } // namespace rift

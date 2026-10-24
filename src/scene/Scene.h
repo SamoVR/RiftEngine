@@ -33,6 +33,7 @@ public:
     virtual void onParentChanged(Instance&, Instance* /*oldParent*/) {}
     virtual void onPropertyChanged(Instance&, const PropertyInfo&) {}
     virtual void onAttributeChanged(Instance&, const std::string& /*name*/) {}
+    virtual void onTagsChanged(Instance&) {}
 };
 
 class Scene {
@@ -60,7 +61,11 @@ public:
     Instance* create(ClassId cls, Instance* parent = nullptr, uint64_t id = 0);
     // Copies `source` (from this or another scene) with its archivable
     // descendants, detached, with new ids (or the same ids if keepIds and free).
-    Instance* cloneSubtree(const Instance& source, bool keepIds = false);
+    // includeAll also copies non-archivable instances (replication).
+    Instance* cloneSubtree(const Instance& source, bool keepIds = false, bool includeAll = false);
+    // Adds the containers every scene has (StarterPlayerScripts and
+    // StarterCharacterScripts in StarterPlayer) if they are missing.
+    void ensureDefaults();
     // Destroys the instance and its descendants. Services cannot be destroyed.
     void destroy(Instance* instance);
     // Destroys everything except the services (and resets nothing else).
@@ -93,6 +98,8 @@ public:
     void setAttribute(Instance& instance, const std::string& name, const Value& value);
     // For code that writes fields directly (gizmo, physics) and wants listeners told.
     void notifyPropertyChanged(Instance& instance, const PropertyInfo& prop);
+    // After Instance::addTag / removeTag.
+    void notifyTagsChanged(Instance& instance);
 
     void addObserver(SceneObserver* observer);
     void removeObserver(SceneObserver* observer);

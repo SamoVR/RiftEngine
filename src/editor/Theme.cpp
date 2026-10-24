@@ -155,6 +155,7 @@ const char* classIcon(ClassId cls) {
         case ClassId::Players: return ICON_FA_USERS;
         case ClassId::Lighting: return ICON_FA_SUN;
         case ClassId::ReplicatedStorage: return ICON_FA_BOX_ARCHIVE;
+        case ClassId::ServerStorage: return ICON_FA_SERVER;
         case ClassId::ScriptService: return ICON_FA_SCROLL;
         case ClassId::StarterGui: return ICON_FA_TABLE_COLUMNS;
         case ClassId::StarterPlayer: return ICON_FA_PERSON;
@@ -169,6 +170,15 @@ const char* classIcon(ClassId cls) {
         case ClassId::Sound: return ICON_FA_VOLUME_HIGH;
         case ClassId::Humanoid: return ICON_FA_PERSON_WALKING;
         case ClassId::Player: return ICON_FA_USER;
+        case ClassId::PlayerGui: return ICON_FA_TABLE_COLUMNS;
+        case ClassId::PlayerScripts: case ClassId::StarterPlayerScripts: return ICON_FA_FILE_LINES;
+        case ClassId::StarterCharacterScripts: return ICON_FA_PERSON_RAYS;
+        case ClassId::Backpack: return ICON_FA_SUITCASE;
+        case ClassId::LocalScript: return ICON_FA_LAPTOP_CODE;
+        case ClassId::RemoteEvent: return ICON_FA_TOWER_BROADCAST;
+        case ClassId::RemoteFunction: return ICON_FA_RIGHT_LEFT;
+        case ClassId::BindableEvent: return ICON_FA_BOLT;
+        case ClassId::BindableFunction: return ICON_FA_LINK;
         case ClassId::Script: return ICON_FA_FILE_CODE;
         case ClassId::ModuleScript: return ICON_FA_CUBES_STACKED;
         case ClassId::ScreenGui: return ICON_FA_DESKTOP;
@@ -201,7 +211,13 @@ ImVec4 classColor(ClassId cls) {
         case ClassId::ScreenGui: case ClassId::StarterGui: case ClassId::Frame: case ClassId::TextLabel:
         case ClassId::TextButton: case ClassId::ImageLabel: case ClassId::ImageButton: return { 0.40f, 0.82f, 0.75f, 1.0f };
         case ClassId::Humanoid: case ClassId::Player: case ClassId::Players: case ClassId::StarterPlayer: return { 0.95f, 0.65f, 0.55f, 1.0f };
-        case ClassId::ReplicatedStorage: return { 0.75f, 0.65f, 0.55f, 1.0f };
+        case ClassId::ReplicatedStorage: case ClassId::ServerStorage: return { 0.75f, 0.65f, 0.55f, 1.0f };
+        case ClassId::LocalScript: return { 0.40f, 0.70f, 1.00f, 1.0f };
+        case ClassId::RemoteEvent: case ClassId::RemoteFunction: return { 1.00f, 0.62f, 0.35f, 1.0f };
+        case ClassId::BindableEvent: case ClassId::BindableFunction: return { 0.95f, 0.85f, 0.40f, 1.0f };
+        case ClassId::PlayerGui: return { 0.40f, 0.82f, 0.75f, 1.0f };
+        case ClassId::PlayerScripts: case ClassId::StarterPlayerScripts: case ClassId::StarterCharacterScripts: case ClassId::Backpack:
+            return { 0.95f, 0.65f, 0.55f, 1.0f };
         default: return { 0.70f, 0.72f, 0.78f, 1.0f };
     }
 }

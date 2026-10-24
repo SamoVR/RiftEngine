@@ -4,13 +4,21 @@
 // player). It plays on a CLONE of the scene, so the edited scene is never
 // touched and stopping is simply destroying the session.
 //
-// Each update():  input -> scripts (RenderStepped, Stepped) -> character +
-// physics -> touches / deaths / fallen parts -> scripts (Heartbeat, waits)
-// -> camera -> GUI -> sounds.
+// Like Roblox, a run has two sides in one process:
+//
+//   server   the authoritative world: Scripts run here, physics and the
+//            character controller simulate it, DataStores live here.
+//   client   the player's copy of the world (see Replicator): LocalScripts,
+//            input, the camera, the GUI (PlayerGui) and sounds live here.
+//
+// Each update():  input -> client RenderStepped / both Stepped -> character +
+// physics -> touches / deaths / fallen parts -> replication -> both Heartbeat,
+// waits -> remote messages -> camera -> GUI -> sounds.
 //
 #include "scene/Scene.h"
 #include "game/GameCamera.h"
 #include "game/GuiSystem.h"
+#include "script/RemoteValue.h"
 #include "core/Log.h"
 
 #include <deque>
@@ -18,6 +26,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace rift {
 
@@ -27,6 +36,7 @@ class PhysicsWorld;
 class CharacterController;
 class LuaRuntime;
 class AudioSystem;
+class Replicator;
 
 // What the host knows about the area the game is drawn in.
 struct ViewportInput {
@@ -51,6 +61,7 @@ public:
         LogLevel level = LogLevel::Info;
         double time = 0.0;
         uint64_t script = 0; // the script that printed it (0 = engine)
+        NetworkSide side = NetworkSide::Server;
     };
 
     GameSession(const Scene& editScene, ScriptStore& scripts, Input& input, Options options);
@@ -62,15 +73,21 @@ public:
     void start();
     void update(float dt, const ViewportInput& view);
 
-    // ---- state
-    Scene& scene() { return *scene_; }
+    // ---- the two worlds
+    Scene& scene() { return *scene_; }                 // the server's
     const Scene& scene() const { return *scene_; }
+    Scene& clientScene() { return *client_; }
+    const Scene& clientScene() const { return *client_; }
+    Scene& scene(NetworkSide side) { return side == NetworkSide::Server ? *scene_ : *client_; }
+    LuaRuntime& lua() { return *lua_; }                // runs Scripts
+    LuaRuntime& clientLua() { return *clientLua_; }    // runs LocalScripts
+
+    // ---- state
     PhysicsWorld& physics() { return *physics_; }
     ScriptStore& scripts() { return scripts_; }
     Input& input() { return input_; }
-    LuaRuntime& lua() { return *lua_; }
-    GuiSystem& gui() { return gui_; }
-    GameCamera& camera() { return camera_; }
+    GuiSystem& gui() { return *gui_; }                 // the client's GUI
+    GameCamera& camera() { return camera_; }           // the client's camera
     const GameCamera& camera() const { return camera_; }
     AudioSystem* audio() const { return options_.audio; }
     const Options& options() const { return options_; }
@@ -82,16 +99,23 @@ public:
     bool wantsMouseLock() const { return mouseLock_; }
     void setMouseLockRequested(bool lock) { scriptMouseLock_ = lock; }
 
-    // ---- player
-    Instance* player() const;
+    // ---- player (ids are the same on both sides)
+    uint64_t playerId() const { return playerId_; }
+    uint64_t characterId() const { return characterId_; }
+    uint64_t humanoidId() const { return humanoidId_; }
+    uint64_t rootPartId() const { return rootPartId_; }
+    Instance* player() const;     // server instances
     Instance* character() const;
     Instance* humanoid() const;
     Instance* rootPart() const;
     void loadCharacter();           // (re)spawn now
     void moveCharacterTo(const glm::vec3& target); // Humanoid:MoveTo
 
+    // ---- client <-> server messages (delivered next frame)
+    void postRemote(RemoteMessage message);
+
     // ---- output
-    void log(LogLevel level, const std::string& text, uint64_t script = 0);
+    void log(LogLevel level, const std::string& text, uint64_t script = 0, NetworkSide side = NetworkSide::Server);
     const std::deque<LogLine>& logLines() const { return log_; }
     uint64_t logCounter() const { return logCounter_; } // grows with every line (UI auto-scroll)
     void clearLog() { log_.clear(); }
@@ -100,7 +124,7 @@ public:
     void finish(bool won, const std::string& text);
     Outcome outcome() const { return outcome_; }
 
-    // ---- sounds (Sound instances)
+    // ---- sounds (Sound instances; what the client hears)
     void playSound(Instance& sound);
     void stopSound(Instance& sound);
     void pauseSound(Instance& sound, bool paused);
@@ -113,13 +137,16 @@ public:
     glm::vec3 worldToScreen(const glm::vec3& world) const; // z = depth (<= 0: behind the camera)
 
 private:
-    std::unique_ptr<Scene> scene_;
+    std::unique_ptr<Scene> scene_;   // server
+    std::unique_ptr<Scene> client_;
     ScriptStore& scripts_;
     Input& input_;
     Options options_;
     std::unique_ptr<PhysicsWorld> physics_;
+    std::unique_ptr<Replicator> replicator_;
     std::unique_ptr<LuaRuntime> lua_;
-    GuiSystem gui_;
+    std::unique_ptr<LuaRuntime> clientLua_;
+    std::unique_ptr<GuiSystem> gui_;
     GameCamera camera_;
     ViewportInput view_;
 
@@ -131,15 +158,20 @@ private:
 
     // player / character
     uint64_t playerId_ = 0, characterId_ = 0, humanoidId_ = 0, rootPartId_ = 0;
+    uint64_t playerGuiId_ = 0;
     CharacterController* controller_ = nullptr;
     float lastHealth_ = 0.0f;
     bool dead_ = false;
+    bool guiFilled_ = false;
     float respawnTimer_ = 0.0f;
     bool walkTarget_ = false;
     glm::vec3 walkTo_{ 0.0f };
     float facingYaw_ = 0.0f;
     float runningSpeed_ = -1.0f;
     std::vector<uint64_t> deathPieces_;     // limbs of the last character that died
+
+    // client <-> server
+    std::vector<RemoteMessage> remotes_;
 
     // output
     std::deque<LogLine> log_;
@@ -154,11 +186,16 @@ private:
 
     void spawnCharacter();
     void destroyCharacter();
+    void fillPlayerGui(bool respawn);
+    void setUpClientPlayer();
     glm::vec3 spawnPosition() const;
     void updateCharacter(float dt);
     void afterPhysics(float dt);
     void updateCamera(float dt);
     void updateSounds();
+    void deliverRemotes();
+    // Both runtimes, server first.
+    template <class F> void forBoth(F&& f);
 };
 
 } // namespace rift

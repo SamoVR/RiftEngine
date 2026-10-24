@@ -35,12 +35,12 @@ TEST_CASE("TransformUtil decompose inverts compose") {
 
 TEST_CASE("a new scene has its services") {
     Scene scene;
-    CHECK(scene.size() == kServiceCount);
+    CHECK(scene.size() == kServiceCount + 2); // + StarterPlayerScripts, StarterCharacterScripts
     CHECK(scene.workspace().name == "Workspace");
     CHECK(scene.service(ClassId::Lighting)->isService());
     CHECK(scene.create(ClassId::Workspace) == nullptr); // services are unique
     scene.destroy(&scene.workspace());
-    CHECK(scene.size() == kServiceCount);              // and cannot be destroyed
+    CHECK(scene.size() == kServiceCount + 2); // and cannot be destroyed
 }
 
 TEST_CASE("hierarchy rules") {
@@ -66,7 +66,7 @@ TEST_CASE("hierarchy rules") {
     scene.setParent(part, model);
     scene.destroy(model);
     CHECK(scene.find(modelId) == nullptr);
-    CHECK(scene.size() == kServiceCount); // the part went with its model
+    CHECK(scene.size() == kServiceCount + 2); // the part went with its model
 }
 
 TEST_CASE("sibling order is kept") {

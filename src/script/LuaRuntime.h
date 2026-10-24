@@ -16,6 +16,8 @@
 //
 // sol2 is heavy to compile, so it stays out of this header (pimpl).
 //
+#include "script/RemoteValue.h"
+
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -29,7 +31,9 @@ enum class GuiEvent;
 
 class LuaRuntime {
 public:
-    explicit LuaRuntime(GameSession& session);
+    // `side`: the server runs Scripts on the server's world, the client
+    // LocalScripts on the client's (see GameSession).
+    LuaRuntime(GameSession& session, NetworkSide side);
     ~LuaRuntime();
     LuaRuntime(const LuaRuntime&) = delete;
     LuaRuntime& operator=(const LuaRuntime&) = delete;
@@ -51,6 +55,9 @@ public:
     void onRunning(Instance& humanoid, float speed);
     void onGuiEvent(Instance& element, GuiEvent e);
     void onSoundEnded(Instance& sound);
+    // A RemoteEvent / RemoteFunction message for this side (GameSession delivers them).
+    void onRemoteMessage(const RemoteMessage& message);
+    NetworkSide side() const;
 
     // Diagnostics.
     size_t threadCount() const;

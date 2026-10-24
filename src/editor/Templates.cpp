@@ -10,6 +10,16 @@ const char* newScriptSource() {
         "print(\"Hello from \" .. script:GetFullName())\n";
 }
 
+const char* newLocalScriptSource() {
+    return
+        "-- This LocalScript runs on the player's computer (the client): input,\n"
+        "-- the camera and the GUI. Talk to Scripts on the server with RemoteEvents.\n"
+        "local Players = game:GetService(\"Players\")\n"
+        "local player = Players.LocalPlayer\n"
+        "\n"
+        "print(\"Hello from the client, \" .. player.Name)\n";
+}
+
 const char* newModuleSource() {
     return
         "-- A ModuleScript returns a value (usually a table of functions).\n"

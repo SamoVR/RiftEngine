@@ -7,6 +7,7 @@ know Roblox Studio, most of it works the way you expect: `workspace`,
 are listed at the end.
 
 - [Scripts and modules](#scripts-and-modules)
+- [Client and server](#client-and-server)
 - [Globals](#globals)
 - [Instances](#instances)
 - [Classes and properties](#classes-and-properties)
@@ -27,9 +28,19 @@ are listed at the end.
 
 ## Scripts and modules
 
-A **Script** is an object in the Explorer whose code lives in a `.lua` file in
-the scene's `scripts/` folder. Insert one with Insert > Script: it goes inside
-the selected object, or into ScriptService if nothing is selected.
+Code lives in `.lua` files in the scene's `scripts/` folder; the Explorer holds
+objects that point at them. There are three kinds, like in Roblox:
+
+| | Runs on | Typical place | Used for |
+|---|---|---|---|
+| **Script** | the server | ScriptService, inside parts | game rules, damage, coins, saving data |
+| **LocalScript** | the client (the player's computer) | StarterPlayerScripts, StarterGui, StarterCharacterScripts | input, camera, GUI, effects only this player sees |
+| **ModuleScript** | whoever `require`s it | ReplicatedStorage | shared code |
+
+Insert one with Insert > Script / LocalScript / ModuleScript: it goes inside the
+selected object, or (nothing selected) into ScriptService, StarterPlayerScripts
+or ReplicatedStorage. See [Client and server](#client-and-server) for how the
+two sides talk.
 
 ```lua
 -- Inside a part: script.Parent is the part.
@@ -43,10 +54,14 @@ part.Touched:Connect(function(hit)
 end)
 ```
 
-When the game starts, every enabled Script runs, wherever it is in the scene,
-**except** in ReplicatedStorage and StarterPlayer: those are templates. A Script
-starts when it enters the world (a clone parented to Workspace, for example) and
-stops when it is destroyed or disabled (`script.Enabled = false`).
+When the game starts, every enabled **Script** in Workspace, ScriptService or
+under a player runs; ReplicatedStorage, ServerStorage, StarterGui and
+StarterPlayer hold templates and nothing in them runs. **LocalScripts** run in
+what belongs to the local player: its PlayerGui, PlayerScripts, Backpack and
+character, which get copies of StarterGui, StarterPlayerScripts and
+StarterCharacterScripts. A script starts when it enters such a place (a clone
+parented to Workspace, for example) and stops when it is destroyed or disabled
+(`script.Enabled = false`).
 
 Each Script has its own global variables. To share code, use a **ModuleScript**:
 
@@ -73,6 +88,88 @@ while loading.
 and line (`Workspace.Door.Script:12: attempt to index nil`); clicking the line in
 the Output opens the script there.
 
+## Client and server
+
+A RIFT game runs as two worlds, exactly like Roblox:
+
+- The **server** owns the game. It runs the Scripts, simulates physics and
+  decides what is true: health, coins, which doors are open.
+- The **client** is the player's computer. It gets a copy of everything in
+  Workspace, ReplicatedStorage, Lighting, StarterGui, StarterPlayer, Players and
+  SoundService, kept up to date as the server changes it (**replication**). It
+  runs the LocalScripts and handles input, the camera, the GUI and sounds.
+
+ServerStorage and ScriptService never reach the client, so code and secrets in
+them stay on the server. What a LocalScript creates or changes exists only on
+that client: the server never sees it. The one exception is the player's own
+character, which the client moves and the server follows (that is how walking
+works without lag).
+
+While playing in the editor, the **Client / Server** switch in the toolbar (and
+at the top of the Explorer) picks which world you look at. The Client view is the
+game as the player sees it. The Server view shows the server's world with the
+editor camera: select and move things to see the change replicate. The Output
+tags every line with **Client** or **Server**.
+
+`game.Players.LocalPlayer` is the player on the client and `nil` on the server;
+on the server use `Players.PlayerAdded` or `Players:GetPlayers()`.
+`RunService:IsClient()` / `:IsServer()` tell where code runs. Client-only:
+`UserInputService` input, `player:GetMouse()`, `RunService.RenderStepped` and
+`:BindToRenderStep`, `FireServer` / `InvokeServer`. Server-only:
+`DataStoreService`, `player:LoadCharacter()`, `FireClient` / `FireAllClients` /
+`InvokeClient`. Calling one from the wrong side is an error that says so.
+
+### RemoteEvent and RemoteFunction
+
+Put remotes in ReplicatedStorage, where both sides can see them.
+
+```lua
+-- Script (server), ScriptService
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local buy = ReplicatedStorage.BuyItem          -- a RemoteEvent
+local getPrice = ReplicatedStorage.GetPrice    -- a RemoteFunction
+
+buy.OnServerEvent:Connect(function(player, item)
+    -- Never trust the client: check everything it sends.
+    if item == "Sword" and player.leaderstats.Coins.Value >= 10 then
+        player.leaderstats.Coins.Value = player.leaderstats.Coins.Value - 10
+        buy:FireClient(player, "You bought a sword!")
+    end
+end)
+
+getPrice.OnServerInvoke = function(player, item)
+    return item == "Sword" and 10 or nil
+end
+```
+
+```lua
+-- LocalScript (client), StarterPlayerScripts
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local buy = ReplicatedStorage:WaitForChild("BuyItem")
+
+buy.OnClientEvent:Connect(function(message)
+    print(message)
+end)
+
+print("A sword costs", ReplicatedStorage.GetPrice:InvokeServer("Sword"))
+buy:FireServer("Sword")
+```
+
+| | Client | Server |
+|---|---|---|
+| **RemoteEvent** | `:FireServer(...)`, `OnClientEvent` | `:FireClient(player, ...)`, `:FireAllClients(...)`, `OnServerEvent(player, ...)` |
+| **RemoteFunction** | `:InvokeServer(...)` (waits for the result), `OnClientInvoke` | `:InvokeClient(player, ...)`, `OnServerInvoke = function(player, ...)` |
+
+The server's handlers get the sending `player` first. Arguments are copied:
+numbers, strings, booleans, tables (without functions or metatables),
+Instances (`nil` if the other side does not have them), Vector3, Vector2,
+CFrame, Color3, UDim, UDim2 and EnumItems. Messages arrive on the next frame.
+An error in an `OnServerInvoke` handler is raised in the caller.
+
+**BindableEvent** (`:Fire(...)`, `Event`) and **BindableFunction**
+(`:Invoke(...)`, `OnInvoke`) do the same between scripts on the **same** side;
+their arguments are passed as they are, not copied.
+
 ## Globals
 
 | Name | |
@@ -93,7 +190,7 @@ the Output opens the script there.
 | `print`, `warn` | Output |
 
 `game:GetService` knows `Workspace`, `Players`, `Lighting`, `ReplicatedStorage`,
-`ServerStorage` (same as ReplicatedStorage), `ScriptService` / `ServerScriptService`,
+`ServerStorage` (server only), `ScriptService` / `ServerScriptService`,
 `StarterGui`, `StarterPlayer`, `SoundService`, `RunService`, `UserInputService`,
 `TweenService`, `Debris`, `CollectionService`, `HttpService` and `DataStoreService`.
 
@@ -223,7 +320,10 @@ everything inside it.
 
 **SoundService**: `Volume` (master volume).
 
-**Script**: `Enabled`. **ModuleScript**: (none).
+**Script**, **LocalScript**: `Enabled`. **ModuleScript**: (none).
+
+**RemoteEvent**, **RemoteFunction**, **BindableEvent**, **BindableFunction**:
+see [Client and server](#client-and-server).
 
 GUI classes are under [GUI](#gui).
 
@@ -263,9 +363,9 @@ thread, so it may call `task.wait`.
 
 ## Players and characters
 
-The game has one player, `game.Players.LocalPlayer`. `Players.PlayerAdded`
-fires for it after every script had the chance to connect, so the usual
-pattern works:
+The game has one player: `game.Players.LocalPlayer` in LocalScripts, the only
+entry of `Players:GetPlayers()` on the server. `Players.PlayerAdded` fires for it
+after every script had the chance to connect, so the usual pattern works:
 
 ```lua
 local Players = game:GetService("Players")
@@ -276,8 +376,10 @@ Players.PlayerAdded:Connect(function(player)
 end)
 ```
 
-**Player**: `Name`, `DisplayName`, `UserId` (1), `Character`, `PlayerGui`;
-`:LoadCharacter()` (respawn now), `:GetMouse()`, `:Kick([message])` (ends the game).
+**Player**: `Name`, `DisplayName`, `UserId` (1), `Character`, and the folders
+`PlayerGui` (copies of StarterGui), `Backpack` and `PlayerScripts` (copies of
+StarterPlayerScripts, client only); `:LoadCharacter()` (respawn now, server),
+`:GetMouse()` (client), `:Kick([message])` (ends the game).
 
 **Players**: `LocalPlayer`, `:GetPlayers()`, `:GetPlayerFromCharacter(model)`.
 
@@ -286,7 +388,8 @@ The **character** is a Model named after the player, in Workspace, with a
 `Left Arm`, `Right Arm`, `Left Leg`, `Right Leg`. It appears on an enabled
 SpawnLocation (a random one if there are several). Put your own Model named
 **StarterCharacter** (with a Humanoid and a HumanoidRootPart) in StarterPlayer to
-replace it.
+replace it. Scripts and LocalScripts in StarterPlayer.StarterCharacterScripts are
+copied into every new character.
 
 Touch handlers usually find the character from the part that touched:
 
@@ -370,6 +473,9 @@ Game time stops while the game is paused.
 
 ## Input
 
+Input is the client's: use it from a LocalScript. On the server nothing is ever
+pressed and the input events never fire.
+
 ```lua
 local UserInputService = game:GetService("UserInputService")
 
@@ -413,7 +519,7 @@ clicking the viewport).
 
 ## Camera
 
-`workspace.CurrentCamera`:
+`workspace.CurrentCamera` is the player's camera; control it from a LocalScript.
 
 | | |
 |---|---|
@@ -436,11 +542,15 @@ FirstPerson gives a first-person camera.
 
 ## GUI
 
-ScreenGuis in StarterGui are drawn on screen (`player.PlayerGui` is StarterGui).
+ScreenGuis in StarterGui are templates: when the character spawns, they are
+copied into `player.PlayerGui`, and those copies are what the player sees (a
+ScreenGui with `ResetOnSpawn = false` keeps its copy across respawns). Change the
+GUI from a LocalScript inside the ScreenGui (`script.Parent`) or through
+`player.PlayerGui`; the server can change PlayerGui too and it replicates.
 
 | Class | |
 |---|---|
-| `ScreenGui` | `Enabled`, `DisplayOrder` |
+| `ScreenGui` | `Enabled`, `DisplayOrder`, `ResetOnSpawn` |
 | `Frame` | Rectangle |
 | `TextLabel`, `TextButton` | + `Text`, `TextColor3`, `TextSize`, `TextXAlignment`, `TextYAlignment`, `TextWrapped` |
 | `ImageLabel`, `ImageButton` | + `Image`, `ImageColor3`, `ImageTransparency`, `ScaleType` (Stretch, Fit, Crop) |
@@ -450,8 +560,10 @@ Every element has `Position` and `Size` (UDim2), `AnchorPoint` (Vector2),
 `CornerRadius`, `BorderSizePixel`, `BorderColor3`.
 
 ```lua
+-- LocalScript in StarterPlayerScripts
+local player = game.Players.LocalPlayer
 local gui = Instance.new("ScreenGui")
-gui.Parent = game.StarterGui
+gui.Parent = player.PlayerGui
 
 local button = Instance.new("TextButton")
 button.Size = UDim2.fromOffset(200, 50)
@@ -461,7 +573,7 @@ button.Text = "Jump!"
 button.Parent = gui
 
 button.Activated:Connect(function()
-    local humanoid = game.Players.LocalPlayer.Character.Humanoid
+    local humanoid = player.Character.Humanoid
     humanoid.Jump = true
 end)
 ```
@@ -619,8 +731,7 @@ RIFT adds the Luau helpers people use most: `math.clamp`, `math.sign`,
 ## Differences from Roblox
 
 - **Lua 5.4, not Luau.** No type annotations, no `continue`, no compound assignment (write `x = x + 1`, not `x += 1`), no string interpolation with backticks. Integer division is `//`.
-- **One player, no client/server split.** There are no RemoteEvents; Scripts can use everything (input, camera, GUI). `RunService:IsClient()` and `:IsServer()` are both true.
-- **Scripts run anywhere** except in ReplicatedStorage and StarterPlayer, including inside StarterGui (which is also `PlayerGui`). There is no LocalScript.
+- **One player.** The client/server split works like Roblox (Scripts, LocalScripts, remotes, replication), but there is always exactly one player and both sides run in the same program, so remotes are never lost and arrive one frame later.
 - **Units**: gravity is 30 studs/s² (Roblox: 196.2) and the default character walks at 8 and jumps with 12, which feel similar at RIFT's scale.
 - `Instance.new("Script")` is not supported (code lives in files): clone a Script instead.
 - Reading or writing a member that does not exist is an error.

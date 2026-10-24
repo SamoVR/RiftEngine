@@ -70,8 +70,10 @@ ViewportInput ViewportPanel::gameInput(const Editor& editor) const {
     ViewportInput v;
     v.size = size_;
     v.mouse = const_cast<Editor&>(editor).input().mousePosition() - origin_;
-    v.hovered = hovered_;
-    v.keyboard = focused_ && !ImGui::GetIO().WantTextInput;
+    // Looking at the server: the editor has the mouse and keyboard, the game none.
+    const bool game = !editor.serverView();
+    v.hovered = game && hovered_;
+    v.keyboard = game && focused_ && !ImGui::GetIO().WantTextInput;
     return v;
 }
 
@@ -102,14 +104,15 @@ void ViewportPanel::draw(UiContext& ui) {
     hovered_ = ImGui::IsWindowHovered() || capture_;
     if (hovered_ && !capture_ && (ImGui::IsMouseClicked(ImGuiMouseButton_Right) || ImGui::IsMouseClicked(ImGuiMouseButton_Middle))) ImGui::SetWindowFocus();
     focused_ = ImGui::IsWindowFocused();
-    if (focused_ && ImGui::IsKeyPressed(ImGuiKey_Escape) && editor.playing()) {
+    const bool editView = !editor.playing() || editor.serverView(); // editor camera and tools
+    if (focused_ && ImGui::IsKeyPressed(ImGuiKey_Escape) && !editView) {
         ImGui::SetWindowFocus(nullptr); // gives the mouse back
         focused_ = false;
     }
 
     // ---- camera
     bool cameraCapture = false;
-    if (!editor.playing()) {
+    if (editView) {
         EditorCamera::ViewInput vi;
         vi.hovered = hovered_;
         vi.keyboard = !io.WantTextInput;
@@ -118,7 +121,7 @@ void ViewportPanel::draw(UiContext& ui) {
         cameraCapture = editor.camera().update(ui.dt, editor.input(), vi, settings.cameraSpeed, settings.mouseSensitivity);
     }
     bool gameCapture = false;
-    if (GameSession* s = editor.session()) {
+    if (GameSession* s = editView ? nullptr : editor.session()) {
         gameCapture = focused_ && (s->wantsMouseLock() || (hovered_ && editor.input().mouseDown(GLFW_MOUSE_BUTTON_RIGHT)));
     }
     const bool capture = cameraCapture || gameCapture;
@@ -131,7 +134,7 @@ void ViewportPanel::draw(UiContext& ui) {
     const float aspect = size_.x / size_.y;
     glm::mat4 view, proj;
     RenderCamera camera;
-    if (GameSession* s = editor.session()) {
+    if (GameSession* s = editView ? nullptr : editor.session()) {
         view = s->camera().view();
         proj = s->camera().projection(aspect);
         camera.position = s->camera().position;
@@ -144,13 +147,13 @@ void ViewportPanel::draw(UiContext& ui) {
     camera.projection = proj;
 
     RenderSettings rs;
-    rs.editor = !editor.playing();
+    rs.editor = editView;
     rs.grid = settings.showGrid;
     rs.gridStep = settings.gridStep;
     rs.wireframe = settings.wireframe;
     rs.shadows = settings.shadows;
     for (uint64_t id : editor.selection()) rs.selected.insert(id);
-    rs.hovered = editor.playing() ? 0 : hoveredId_;
+    rs.hovered = editView ? hoveredId_ : 0;
     framebuffer_.resize(static_cast<int>(size_.x), static_cast<int>(size_.y), 4);
     ui.renderer.render(editor.scene(), camera, rs, framebuffer_);
     ImGui::Image(static_cast<ImTextureID>(framebuffer_.texture()), ImVec2(size_.x, size_.y), ImVec2(0, 1), ImVec2(1, 0));
@@ -160,8 +163,11 @@ void ViewportPanel::draw(UiContext& ui) {
     const OverlayFonts fonts{ theme::fonts().ui, theme::fonts().heading };
     std::unique_ptr<GuiSystem> editGui;
     if (GameSession* s = editor.session()) {
-        drawGameGui(*s, ui.renderer.textures(), ImGui::GetWindowDrawList(), origin_, fonts);
-        drawGameHud(*s, ImGui::GetWindowDrawList(), origin_, size_, fonts);
+        // The GUI belongs to the player: the server view shows the world only.
+        if (!editView) {
+            drawGameGui(*s, ui.renderer.textures(), ImGui::GetWindowDrawList(), origin_, fonts);
+            drawGameHud(*s, ImGui::GetWindowDrawList(), origin_, size_, fonts);
+        }
     } else if (settings.showGui) {
         editGui = std::make_unique<GuiSystem>(editor.scene());
         editGui->layout(size_);
@@ -268,7 +274,7 @@ void ViewportPanel::drawGizmo(UiContext& ui, const glm::mat4& view, const glm::m
 
 void ViewportPanel::handleSelection(UiContext& ui, const glm::mat4& view, const glm::mat4& proj, const GuiSystem* gui) {
     Editor& editor = ui.editor;
-    if (editor.playing()) {
+    if (editor.playing() && !editor.serverView()) {
         hoveredId_ = 0;
         pressing_ = marquee_ = guiDragging_ = false;
         return;
@@ -411,7 +417,7 @@ void ViewportPanel::drawOverlays(UiContext& ui, const glm::mat4& view, const glm
 
     // Playing: a coloured frame around the view.
     if (GameSession* s = editor.session()) {
-        const ImVec4 c = s->paused() ? theme::color::warning : theme::color::success;
+        const ImVec4 c = s->paused() ? theme::color::warning : editor.serverView() ? theme::color::success : ImVec4(0.30f, 0.60f, 1.0f, 1.0f);
         draw->AddRect(a, b, theme::u32(c, 0.9f), 0.0f, 0, 2.0f);
     }
 
@@ -439,7 +445,7 @@ void ViewportPanel::drawOverlays(UiContext& ui, const glm::mat4& view, const glm
     }
 
     // ---- axis widget (edit mode): shows the orientation; click an axis to look along it
-    if (!editor.playing()) {
+    if (!editor.playing() || editor.serverView()) {
         const float radius = ImGui::GetFontSize() * 2.6f;
         const float dot = ImGui::GetFontSize() * 0.62f;
         const ImVec2 c(b.x - radius - dot - pad, a.y + button + pad * 2.0f + radius + dot);
@@ -502,7 +508,13 @@ void ViewportPanel::drawOverlays(UiContext& ui, const glm::mat4& view, const glm
 
     // ---- hints
     if (!editor.hasScene()) return;
-    if (editor.playing()) {
+    if (editor.serverView()) {
+        const char* text = ICON_FA_SERVER "  Server view: the game gets no input. Switch to Client to play.";
+        const ImVec2 t = ImGui::CalcTextSize(text);
+        const ImVec2 p(a.x + (size_.x - t.x) * 0.5f, a.y + pad * 2.0f);
+        draw->AddRectFilled(ImVec2(p.x - 12.0f, p.y - 6.0f), ImVec2(p.x + t.x + 12.0f, p.y + t.y + 6.0f), IM_COL32(16, 60, 36, 200), 8.0f);
+        draw->AddText(p, IM_COL32(235, 245, 238, 255), text);
+    } else if (editor.playing()) {
         if (!focused_) {
             const char* text = ICON_FA_GAMEPAD "  Click the view to control the game";
             const ImVec2 t = ImGui::CalcTextSize(text);

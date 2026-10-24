@@ -32,6 +32,7 @@ bool EditorSettings::load() {
     };
     get("recentProjects", recentProjects);
     get("lastProject", lastProject);
+    get("projectsFolder", projectsFolder);
     get("reopenLastProject", reopenLastProject);
     get("windowX", windowX);
     get("windowY", windowY);
@@ -76,6 +77,7 @@ bool EditorSettings::save() const {
     nlohmann::json j;
     j["recentProjects"] = recentProjects;
     j["lastProject"] = lastProject;
+    j["projectsFolder"] = projectsFolder;
     j["reopenLastProject"] = reopenLastProject;
     j["windowX"] = windowX;
     j["windowY"] = windowY;
