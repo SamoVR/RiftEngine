@@ -11,6 +11,7 @@
 //
 #include "scene/Instance.h"
 #include "scene/Reflection.h"
+#include "scene/Terrain.h"
 
 #include <array>
 #include <functional>
@@ -64,8 +65,13 @@ public:
     // includeAll also copies non-archivable instances (replication).
     Instance* cloneSubtree(const Instance& source, bool keepIds = false, bool includeAll = false);
     // Adds the containers every scene has (StarterPlayerScripts and
-    // StarterCharacterScripts in StarterPlayer) if they are missing.
+    // StarterCharacterScripts in StarterPlayer, Terrain in Workspace) if they are missing.
     void ensureDefaults();
+
+    // ---- terrain: the voxels, and the Terrain instance in Workspace that stands for them
+    TerrainData& terrain() { return terrain_; }
+    const TerrainData& terrain() const { return terrain_; }
+    Instance* terrainInstance() const;
     // Destroys the instance and its descendants. Services cannot be destroyed.
     void destroy(Instance* instance);
     // Destroys everything except the services (and resets nothing else).
@@ -113,6 +119,7 @@ private:
     std::array<Instance*, kServiceCount> services_{};
     std::vector<SceneObserver*> observers_;
     uint64_t revision_ = 0;
+    TerrainData terrain_;
 
     Instance* adopt(std::unique_ptr<Instance> instance);
     void detachFromParent(Instance* instance);

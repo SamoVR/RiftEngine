@@ -54,6 +54,7 @@ private:
     ScriptEditorPanel scripts_;
     AssetBrowserPanel assets_;
     SourceControlPanel sourceControl_;
+    TerrainPanel terrain_;
     Updater updater_;
 
     std::string iniPath_;

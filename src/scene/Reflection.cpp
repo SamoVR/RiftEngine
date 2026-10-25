@@ -11,7 +11,11 @@ namespace {
 
 // ---------------------------------------------------------------- enum tables
 const std::vector<std::string> kPartTypes = { "Block", "Ball", "Cylinder", "Wedge", "CornerWedge" };
-const std::vector<std::string> kMaterials = { "Plastic", "SmoothPlastic", "Metal", "Neon", "Glass", "Wood", "Concrete" };
+const std::vector<std::string> kMaterials = {
+    "Plastic", "SmoothPlastic", "Metal", "Neon", "Glass", "Wood", "Concrete",
+    "Brick", "Cobblestone", "Granite", "Marble", "Slate", "Fabric", "Foil", "DiamondPlate", "CorrodedMetal", "WoodPlanks", "Pebble", "Ice", "ForceField",
+    "Grass", "LeafyGrass", "Sand", "Sandstone", "Rock", "Ground", "Mud", "Snow", "Glacier", "Basalt", "Asphalt", "Limestone", "Pavement", "Salt", "CrackedLava",
+    "Water", "Air" };
 const std::vector<std::string> kCameraModes = { "ThirdPerson", "FirstPerson" };
 const std::vector<std::string> kTextX = { "Left", "Center", "Right" };
 const std::vector<std::string> kTextY = { "Top", "Center", "Bottom" };
@@ -219,6 +223,11 @@ std::vector<ClassInfo> buildClasses() {
     }
     def(ClassId::Folder, "Folder", "Organises instances. Has no position of its own.", true);
     {
+        ClassInfo& c = def(ClassId::Terrain, "Terrain", "Smooth voxel terrain (workspace.Terrain): sculpt it with the Terrain Editor, or from scripts with FillBlock, FillBall, ...", false);
+        c.props.push_back(field<&Instance::color>("WaterColor", "Water"));
+        c.props.push_back(field<&Instance::transparency>("WaterTransparency", "Water").range(0.0f, 1.0f).speed(0.01f));
+    }
+    {
         ClassInfo& c = def(ClassId::Tool, "Tool", "Something a player holds: a Part named Handle inside, the tool in StarterPack (or lying in the world to be picked up).", true);
         c.props.push_back(field<&Instance::enabled>("Enabled", "Behavior").tip("Off: clicking does not activate it."));
         c.props.push_back(field<&Instance::requiresHandle>("RequiresHandle", "Behavior").tip("Off: a tool with no Handle (a spell, an ability)."));
@@ -423,6 +432,10 @@ void applyClassDefaults(Instance& i) {
             break;
         case ClassId::Color3Value:
             i.color = { 1.0f, 1.0f, 1.0f };
+            break;
+        case ClassId::Terrain:
+            i.color = { 12.0f / 255.0f, 84.0f / 255.0f, 92.0f / 255.0f }; // WaterColor
+            i.transparency = 0.3f;
             break;
         case ClassId::SpawnLocation:
             i.size = { 4.0f, 0.4f, 4.0f };

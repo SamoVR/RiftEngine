@@ -209,6 +209,23 @@ void ReparentCommand::undo(Scene& scene) {
     }
 }
 
+// ============================================================================
+TerrainCommand::TerrainCommand(std::string label, TerrainData::Snapshot before, TerrainData::Snapshot after, std::vector<ColorChange> colors)
+    : before_(std::move(before)), after_(std::move(after)), colors_(std::move(colors)) {
+    label_ = std::move(label);
+}
+
+void TerrainCommand::execute(Scene& scene) {
+    scene.terrain().restore(after_);
+    for (const ColorChange& c : colors_) scene.terrain().setMaterialColor(c.material, c.after);
+}
+
+void TerrainCommand::undo(Scene& scene) {
+    scene.terrain().restore(before_);
+    for (const ColorChange& c : colors_) scene.terrain().setMaterialColor(c.material, c.before);
+}
+
+// ============================================================================
 CompositeCommand::CompositeCommand(std::string label, std::vector<std::unique_ptr<Command>> commands) : commands_(std::move(commands)) {
     label_ = std::move(label);
 }

@@ -35,12 +35,12 @@ TEST_CASE("TransformUtil decompose inverts compose") {
 
 TEST_CASE("a new scene has its services") {
     Scene scene;
-    CHECK(scene.size() == kServiceCount + 2); // + StarterPlayerScripts, StarterCharacterScripts
+    CHECK(scene.size() == kServiceCount + 3); // + StarterPlayerScripts, StarterCharacterScripts, Terrain
     CHECK(scene.workspace().name == "Workspace");
     CHECK(scene.service(ClassId::Lighting)->isService());
     CHECK(scene.create(ClassId::Workspace) == nullptr); // services are unique
     scene.destroy(&scene.workspace());
-    CHECK(scene.size() == kServiceCount + 2); // and cannot be destroyed
+    CHECK(scene.size() == kServiceCount + 3); // and cannot be destroyed
 }
 
 TEST_CASE("hierarchy rules") {
@@ -66,20 +66,23 @@ TEST_CASE("hierarchy rules") {
     scene.setParent(part, model);
     scene.destroy(model);
     CHECK(scene.find(modelId) == nullptr);
-    CHECK(scene.size() == kServiceCount + 2); // the part went with its model
+    CHECK(scene.size() == kServiceCount + 3); // the part went with its model
 }
 
 TEST_CASE("sibling order is kept") {
     Scene scene;
+    Instance* terrain = scene.terrainInstance(); // always first in Workspace
+    REQUIRE(terrain);
     Instance* a = scene.create(ClassId::Part, &scene.workspace());
     Instance* b = scene.create(ClassId::Part, &scene.workspace());
     Instance* c = scene.create(ClassId::Part, &scene.workspace(), 0);
-    scene.setParent(c, &scene.workspace(), 0);
-    REQUIRE(scene.workspace().children.size() == 3);
-    CHECK(scene.workspace().children[0] == c);
-    CHECK(scene.workspace().children[1] == a);
-    CHECK(scene.workspace().children[2] == b);
-    CHECK(scene.siblingIndex(b) == 2);
+    scene.setParent(c, &scene.workspace(), 1);
+    REQUIRE(scene.workspace().children.size() == 4);
+    CHECK(scene.workspace().children[0] == terrain);
+    CHECK(scene.workspace().children[1] == c);
+    CHECK(scene.workspace().children[2] == a);
+    CHECK(scene.workspace().children[3] == b);
+    CHECK(scene.siblingIndex(b) == 3);
 }
 
 TEST_CASE("size is not inherited by children") {
@@ -248,7 +251,7 @@ TEST_CASE("unknown classes and properties are skipped with warnings") {
     const auto r = SceneIO::sceneFromJson(scene, j);
     REQUIRE(r.ok);
     CHECK(r.warnings.size() >= 2);
-    CHECK(scene.workspace().children.size() == 1);
+    CHECK(scene.workspace().children.size() == 2); // the part and Terrain
 }
 
 TEST_CASE("newer formats are refused") {

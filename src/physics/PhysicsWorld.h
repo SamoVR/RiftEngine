@@ -3,6 +3,7 @@
 // PhysicsWorld.h -- Jolt Physics for the parts in a Scene's Workspace.
 //
 // Bodies:
+//   * Terrain: a static mesh per terrain chunk (rebuilt when the chunk changes).
 //   * An ANCHORED part is its own static body. If a script (or its moving
 //     parent) changes where it is, it becomes kinematic and is moved with a
 //     velocity, so it pushes dynamic parts and carries the player.
@@ -112,6 +113,7 @@ public:
         bool jump = false;
         float walkSpeed = 8.0f;
         float jumpSpeed = 12.0f;
+        bool swimming = false;           // in terrain water: no gravity, Space rises
     };
 
     virtual ~CharacterController() = default;

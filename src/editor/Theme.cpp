@@ -188,6 +188,7 @@ const char* classIcon(ClassId cls) {
         case ClassId::ServerStorage: return ICON_FA_SERVER;
         case ClassId::StarterPack: return ICON_FA_BRIEFCASE;
         case ClassId::Tool: return ICON_FA_HAMMER;
+        case ClassId::Terrain: return ICON_FA_MOUNTAIN_SUN;
         case ClassId::ScriptService: return ICON_FA_SCROLL;
         case ClassId::StarterGui: return ICON_FA_TABLE_COLUMNS;
         case ClassId::StarterPlayer: return ICON_FA_PERSON;
@@ -246,6 +247,7 @@ ImVec4 classColor(ClassId cls) {
         case ClassId::ReplicatedStorage: case ClassId::ServerStorage: return { 0.75f, 0.65f, 0.55f, 1.0f };
         case ClassId::StarterPack: return { 0.95f, 0.65f, 0.55f, 1.0f };
         case ClassId::Tool: return { 0.85f, 0.75f, 0.45f, 1.0f };
+        case ClassId::Terrain: return { 0.52f, 0.80f, 0.42f, 1.0f };
         case ClassId::LocalScript: return { 0.40f, 0.70f, 1.00f, 1.0f };
         case ClassId::RemoteEvent: case ClassId::RemoteFunction: return { 1.00f, 0.62f, 0.35f, 1.0f };
         case ClassId::BindableEvent: case ClassId::BindableFunction: return { 0.95f, 0.85f, 0.40f, 1.0f };

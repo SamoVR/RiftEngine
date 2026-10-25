@@ -35,6 +35,7 @@ namespace {
         f("showOutput", s.showOutput);
         f("showAssets", s.showAssets);
         f("showSourceControl", s.showSourceControl);
+        f("showTerrain", s.showTerrain);
         f("showGrid", s.showGrid);
         f("showGui", s.showGui);
         f("gridStep", s.gridStep);
@@ -53,6 +54,11 @@ namespace {
         f("snapRotate", s.snapRotate);
         f("snapScale", s.snapScale);
         f("localSpace", s.localSpace);
+        f("terrainSize", s.terrainSize);
+        f("terrainStrength", s.terrainStrength);
+        f("terrainCube", s.terrainCube);
+        f("terrainIgnoreWater", s.terrainIgnoreWater);
+        f("terrainMaterial", s.terrainMaterial);
         f("scriptFontSize", s.scriptFontSize);
         f("tabSize", s.tabSize);
         f("showWhitespace", s.showWhitespace);
@@ -107,6 +113,7 @@ void EditorSettings::resetPreferences() {
     fresh.showOutput = showOutput;
     fresh.showAssets = showAssets;
     fresh.showSourceControl = showSourceControl;
+    fresh.showTerrain = showTerrain;
     fresh.discordClientId = discordClientId;
     *this = fresh;
 }

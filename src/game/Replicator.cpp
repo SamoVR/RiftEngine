@@ -44,6 +44,7 @@ void Replicator::start() {
         for (const Instance* child : src->children) place(*child);
     }
     --applying_;
+    syncTransforms(); // the terrain too, before any script runs
     server_.addObserver(&serverObserver_);
     client_.addObserver(&clientObserver_);
     started_ = true;
@@ -139,6 +140,24 @@ void Replicator::clientPropertyChanged(Instance& i, const PropertyInfo& p) {
 }
 
 void Replicator::syncTransforms() {
+    // Terrain chunks the server changed (scripts' FillBlock, ...).
+    const TerrainData& terrain = server_.terrain();
+    if (terrain.revision() != terrainRevision_) {
+        terrainRevision_ = terrain.revision();
+        TerrainData& mine = client_.terrain();
+        for (auto it = terrainSent_.begin(); it != terrainSent_.end();) {
+            if (!terrain.chunks().count(it->first)) { mine.copyChunk(it->first, nullptr); it = terrainSent_.erase(it); }
+            else ++it;
+        }
+        for (const auto& [key, chunk] : terrain.chunks()) {
+            auto sent = terrainSent_.find(key);
+            if (sent != terrainSent_.end() && sent->second == chunk.revision) continue;
+            mine.copyChunk(key, &chunk);
+            terrainSent_[key] = chunk.revision;
+        }
+        mine.copyColors(terrain);
+    }
+
     // Parts the physics moved (no property events): send what changed since last time.
     Scene::forEachDescendant(server_.workspace(), [&](Instance& s) {
         if (s.cls == ClassId::Humanoid) {

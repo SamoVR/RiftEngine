@@ -38,6 +38,7 @@ std::unique_ptr<Scene> Scene::clone() const {
     }
     for (int i = 0; i < kServiceCount; ++i) copy->services_[i] = map.at(services_[i]);
     copy->revision_ = revision_;
+    copy->terrain_ = terrain_;
     return copy;
 }
 
@@ -90,7 +91,16 @@ Instance* Scene::cloneSubtree(const Instance& source, bool keepIds, bool include
     return copyNode(source);
 }
 
+Instance* Scene::terrainInstance() const {
+    for (Instance* c : workspace().children) if (c->cls == ClassId::Terrain) return c;
+    return nullptr;
+}
+
 void Scene::ensureDefaults() {
+    if (!terrainInstance()) {
+        Instance* t = create(ClassId::Terrain, &workspace());
+        setParent(t, &workspace(), 0); // first in Workspace, like Roblox
+    }
     Instance& starter = starterPlayer();
     for (ClassId cls : { ClassId::StarterPlayerScripts, ClassId::StarterCharacterScripts }) {
         bool found = false;
@@ -141,6 +151,7 @@ void Scene::clear() {
     std::vector<Instance*> loose;
     for (auto& [id, inst] : instances_) if (!inst->isService() && !inst->parent) loose.push_back(inst.get());
     for (Instance* inst : loose) destroy(inst);
+    terrain_.clear();
 }
 
 bool Scene::canParent(const Instance* instance, const Instance* newParent, std::string* error) const {

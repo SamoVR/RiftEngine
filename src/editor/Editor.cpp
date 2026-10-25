@@ -255,6 +255,7 @@ bool Editor::saveProjectSettings() {
 //  Scenes
 // ============================================================================
 void Editor::resetSceneState() {
+    stroking_ = false;
     history_.clear();
     selection_.clear();
     preview_.reset();
@@ -444,7 +445,53 @@ std::vector<Instance*> Editor::selectionRoots() {
 
 void Editor::selectAll() {
     selection_.clear();
-    for (Instance* i : scene().workspace().children) selection_.push_back(i->id);
+    for (Instance* i : scene().workspace().children)
+        if (!i->isFixedContainer()) selection_.push_back(i->id); // not the Terrain
+}
+
+// ============================================================================
+//  Terrain
+// ============================================================================
+void Editor::beginTerrainStroke() {
+    if (session_ || stroking_) return;
+    scene_->terrain().beginRecording();
+    stroking_ = true;
+}
+
+void Editor::endTerrainStroke(const std::string& label) {
+    if (!stroking_) return;
+    stroking_ = false;
+    TerrainData& terrain = scene_->terrain();
+    TerrainData::Snapshot before = terrain.endRecording();
+    if (before.empty()) return;
+    TerrainData::Snapshot after = terrain.capture(before);
+    history_.record(std::make_unique<TerrainCommand>(label, std::move(before), std::move(after)));
+}
+
+void Editor::generateTerrain(const TerrainData::GenerateOptions& options) {
+    if (session_) return;
+    endTerrainStroke("Terrain");
+    TerrainData& terrain = scene_->terrain();
+    terrain.beginRecording();
+    terrain.generate(options);
+    TerrainData::Snapshot before = terrain.endRecording();
+    if (before.empty()) return;
+    TerrainData::Snapshot after = terrain.capture(before);
+    history_.record(std::make_unique<TerrainCommand>("Generate Terrain", std::move(before), std::move(after)));
+    notify("Terrain generated");
+}
+
+void Editor::clearTerrain() {
+    if (session_) return;
+    endTerrainStroke("Terrain");
+    TerrainData& terrain = scene_->terrain();
+    if (terrain.empty()) return;
+    terrain.beginRecording();
+    terrain.clear();
+    TerrainData::Snapshot before = terrain.endRecording();
+    TerrainData::Snapshot after = terrain.capture(before);
+    history_.record(std::make_unique<TerrainCommand>("Clear Terrain", std::move(before), std::move(after)));
+    notify("Terrain cleared (Ctrl+Z brings it back)");
 }
 
 // ============================================================================
@@ -469,13 +516,14 @@ void Editor::requestDelete() {
 
 void Editor::undo() {
     if (session_) { notify("Undo is not available while the game runs", NoticeLevel::Warning); return; }
+    if (stroking_) return; // finish the terrain stroke first
     commitPreview();
     const std::string label = history_.undoLabel();
     if (history_.undo(*scene_)) notify("Undo: " + label);
 }
 
 void Editor::redo() {
-    if (session_) return;
+    if (session_ || stroking_) return;
     commitPreview();
     const std::string label = history_.redoLabel();
     if (history_.redo(*scene_)) notify("Redo: " + label);
@@ -492,7 +540,7 @@ glm::vec3 Editor::placementPoint(const glm::vec3& size) const {
     glm::vec3 origin, dir;
     camera_.ray(viewportSize * 0.5f, viewportSize, origin, dir);
     glm::vec3 point = camera_.position() + camera_.forward() * 16.0f;
-    if (auto hit = pickPart(session_ ? session_->scene() : *scene_, origin, dir)) {
+    if (auto hit = pickSurface(session_ ? session_->scene() : *scene_, origin, dir)) {
         point = hit->position + hit->normal * (std::abs(hit->normal.y) > 0.5f ? size.y * 0.5f : std::max(size.x, size.z) * 0.5f);
     } else if (auto ground = pickGround(origin, dir); ground && glm::length(*ground - origin) < 400.0f) {
         point = *ground + glm::vec3(0.0f, size.y * 0.5f, 0.0f);
@@ -998,6 +1046,7 @@ void Editor::openScript(uint64_t scriptId, int line) {
 void Editor::play() {
     if (session_ || !hasScene()) return;
     commitPreview();
+    endTerrainStroke("Terrain");
     if (settings_.saveBeforePlay && isDirty()) saveScene();
     if (settings_.clearOutputOnPlay) output_.clear();
     GameSession::Options options;

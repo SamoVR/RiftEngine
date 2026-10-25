@@ -29,7 +29,7 @@ enum class ClassId : uint8_t {
     // Services: exactly one of each per scene, always at the root.
     Workspace, Players, Lighting, ReplicatedStorage, ServerStorage, ScriptService, StarterGui, StarterPack, StarterPlayer, SoundService,
     // World
-    Part, SpawnLocation, MeshPart, Model, Folder, Tool,
+    Part, SpawnLocation, MeshPart, Model, Folder, Tool, Terrain,
     PointLight, SpotLight,
     Sound,
     Humanoid,
@@ -49,7 +49,17 @@ constexpr int kClassCount = static_cast<int>(ClassId::Count);
 
 // ---- enums used by properties (their names live in Reflection.cpp)
 enum class PartShape : int { Block, Ball, Cylinder, Wedge, CornerWedge };
-enum class Material : int { Plastic, SmoothPlastic, Metal, Neon, Glass, Wood, Concrete };
+// Roblox's materials. Parts use any of them; terrain voxels use the natural
+// ones (Grass .. CrackedLava, plus Concrete, Brick, Cobblestone, WoodPlanks,
+// Ice, Water). Saved by name, so new ones can be added anywhere.
+enum class Material : int {
+    Plastic, SmoothPlastic, Metal, Neon, Glass, Wood, Concrete,
+    Brick, Cobblestone, Granite, Marble, Slate, Fabric, Foil, DiamondPlate, CorrodedMetal, WoodPlanks, Pebble, Ice, ForceField,
+    Grass, LeafyGrass, Sand, Sandstone, Rock, Ground, Mud, Snow, Glacier, Basalt, Asphalt, Limestone, Pavement, Salt, CrackedLava,
+    Water, Air,
+    Count
+};
+constexpr int kMaterialCount = static_cast<int>(Material::Count);
 enum class CameraMode : int { ThirdPerson, FirstPerson };
 enum class TextXAlignment : int { Left, Center, Right };
 enum class TextYAlignment : int { Top, Center, Bottom };

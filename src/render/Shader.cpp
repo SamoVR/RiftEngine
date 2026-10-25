@@ -101,9 +101,22 @@ std::string Shader::loadShaderSource(const std::filesystem::path& path) {
         LOG_ERROR("Shader", "Failed to open shader file: " + Paths::toUtf8(path));
         return "";
     }
-    std::stringstream buffer;
-    buffer << file.rdbuf();
-    return buffer.str();
+    // `#include "name.glsl"` pastes another file from the same folder (shared lighting code).
+    std::string out, line;
+    while (std::getline(file, line)) {
+        const size_t at = line.find("#include \"");
+        if (at != std::string::npos && line.find_first_not_of(" \t") == at) {
+            const size_t end = line.find('"', at + 10);
+            if (end != std::string::npos) {
+                out += loadShaderSource(path.parent_path() / line.substr(at + 10, end - at - 10));
+                out += '\n';
+                continue;
+            }
+        }
+        out += line;
+        out += '\n';
+    }
+    return out;
 }
 
 bool Shader::checkCompileErrors(unsigned int shader, const std::string& type) {

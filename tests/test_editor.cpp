@@ -9,6 +9,7 @@
 #include "project/Exporter.h"
 
 #include <glm/gtc/epsilon.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <filesystem>
 #include <fstream>
 
@@ -376,4 +377,89 @@ TEST_CASE("exporting a game makes a self-contained folder") {
     options.outputFolder = p.folder / "assets" / "build";
     CHECK_FALSE(exportGame(project, options).ok);
     CHECK(executableName("My: Game?") == "My Game");
+}
+
+TEST_CASE("terrain edits: strokes, Generate and Clear are undoable and saved with the scene") {
+    Fixture f;
+    Editor& e = f.editor;
+    TerrainData& t = e.editScene().terrain();
+    REQUIRE(t.empty());
+
+    // A brush stroke: several dabs, one undo step.
+    e.beginTerrainStroke();
+    TerrainData::Dab dab;
+    dab.brush = TerrainData::Brush::Add;
+    dab.radius = 6.0f;
+    dab.material = Material::Rock;
+    for (int i = 0; i < 4; ++i) {
+        dab.center = { i * 3.0f, 2.0f, 0.0f };
+        t.applyDab(dab);
+    }
+    e.endTerrainStroke("Terrain Add");
+    CHECK(e.history().undoLabel() == "Terrain Add");
+    CHECK(e.isDirty());
+    CHECK(t.materialAt({ 0, 2, 0 }) == Material::Rock);
+    e.undo();
+    CHECK(t.density({ 0, 2, 0 }) < 0.01f);
+    e.redo();
+    CHECK(t.materialAt({ 9, 2, 0 }) == Material::Rock);
+
+    // Generate, then Clear; both come back with undo.
+    TerrainData::GenerateOptions g;
+    g.size = { 96.0f, 96.0f };
+    e.generateTerrain(g);
+    CHECK(e.history().undoLabel() == "Generate Terrain");
+    auto ground = t.raycast({ 30, 200, 30 }, { 0, -1, 0 }, 400.0f);
+    REQUIRE(ground);
+    e.clearTerrain();
+    CHECK(t.empty());
+    e.undo();
+    CHECK_FALSE(t.empty());
+    auto again = t.raycast({ 30, 200, 30 }, { 0, -1, 0 }, 400.0f);
+    REQUIRE(again);
+    CHECK(again->position.y == doctest::Approx(ground->position.y));
+
+    // Colours are undoable too.
+    e.execute(std::make_unique<TerrainCommand>("Rock Colour", TerrainData::Snapshot{}, TerrainData::Snapshot{},
+                                               std::vector<TerrainCommand::ColorChange>{ { Material::Rock, t.materialColor(Material::Rock), Color3(1, 0, 0) } }));
+    CHECK(t.materialColor(Material::Rock).r == doctest::Approx(1.0f));
+    e.undo();
+    CHECK(t.materialColor(Material::Rock) == TerrainData::defaultMaterialColor(Material::Rock));
+
+    // Saved next to the scene, read back on open.
+    REQUIRE(e.saveScene());
+    CHECK(fs::exists(e.scenePath().parent_path() / "terrain.bin"));
+    REQUIRE(e.openScene(e.scenePath()));
+    CHECK_FALSE(e.editScene().terrain().empty());
+
+    // Select All leaves the Terrain out; the Terrain cannot be deleted.
+    e.selectAll();
+    for (uint64_t id : e.selection()) CHECK(e.scene().find(id)->cls != ClassId::Terrain);
+}
+
+TEST_CASE("terrain: a dab inside one chunk only re-meshes that chunk") {
+    TerrainData t;
+    t.fillBlock(glm::translate(glm::mat4(1.0f), glm::vec3(0, 16, 0)), { 96, 8, 96 }, Material::Grass); // voxels y 6..9
+    std::map<ChunkKey, uint64_t> before;
+    for (const auto& [key, c] : t.chunks()) before[key] = c.revision;
+    TerrainData::Dab dab;
+    dab.brush = TerrainData::Brush::Paint;
+    dab.center = TerrainData::voxelCenter({ 8, 8, 8 }); // the middle of chunk (0,0,0)
+    dab.radius = 3.0f;
+    dab.strength = 1.0f;
+    dab.material = Material::Sand;
+    t.applyDab(dab);
+    int changed = 0;
+    for (const auto& [key, c] : t.chunks()) if (before.count(key) && before[key] != c.revision) ++changed;
+    CHECK(changed == 1);
+    // On a chunk corner the neighbours that share it are re-meshed too.
+    for (const auto& [key, c] : t.chunks()) before[key] = c.revision;
+    dab.center = TerrainData::voxelCenter({ 0, 8, 0 });
+    dab.radius = 1.0f;
+    dab.material = Material::Rock;
+    t.applyDab(dab);
+    changed = 0;
+    for (const auto& [key, c] : t.chunks()) if (before.count(key) && before[key] != c.revision) ++changed;
+    CHECK(changed >= 2);
+    CHECK(changed <= 8);
 }

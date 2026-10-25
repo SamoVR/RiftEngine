@@ -331,6 +331,21 @@ bool saveScene(const Scene& scene, const std::filesystem::path& file, std::strin
         std::filesystem::remove(tmp, ec);
         if (ec) { if (error) *error = "cannot replace " + file.string() + ": " + ec.message(); return false; }
     }
+    // The terrain's voxels: a binary file next to the scene (none when there is no terrain).
+    const std::filesystem::path terrainFile = file.parent_path() / "terrain.bin";
+    if (scene.terrain().empty()) {
+        std::filesystem::remove(terrainFile, ec);
+    } else {
+        std::filesystem::path terrainTmp = terrainFile;
+        terrainTmp += ".tmp";
+        std::string terrainError;
+        if (!scene.terrain().save(terrainTmp, &terrainError)) { if (error) *error = terrainError; std::filesystem::remove(terrainTmp, ec); return false; }
+        std::filesystem::rename(terrainTmp, terrainFile, ec);
+        if (ec) {
+            std::filesystem::copy_file(terrainTmp, terrainFile, std::filesystem::copy_options::overwrite_existing, ec);
+            std::filesystem::remove(terrainTmp, ec);
+        }
+    }
     return true;
 }
 
@@ -343,11 +358,20 @@ LoadResult loadScene(Scene& scene, const std::filesystem::path& file) {
     } catch (const json::exception& e) {
         return { false, std::string("not valid JSON: ") + e.what() };
     }
+    LoadResult r;
     try {
-        return sceneFromJson(scene, j);
+        r = sceneFromJson(scene, j);
     } catch (const std::exception& e) {
         return { false, std::string("malformed scene: ") + e.what() };
     }
+    if (!r.ok) return r;
+    std::error_code ec;
+    const std::filesystem::path terrainFile = file.parent_path() / "terrain.bin";
+    if (std::filesystem::exists(terrainFile, ec)) {
+        std::string error;
+        if (!scene.terrain().load(terrainFile, &error)) r.warnings.push_back("terrain.bin: " + error + " (the terrain was not loaded)");
+    }
+    return r;
 }
 
 } // namespace rift::SceneIO

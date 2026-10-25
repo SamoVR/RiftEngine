@@ -149,6 +149,19 @@ private:
     std::vector<Move> moves_;
 };
 
+// Terrain edits (brush strokes, Generate, Clear, material colours): the
+// chunks as they were and as they are now, swapped back in by undo / redo.
+class TerrainCommand : public Command {
+public:
+    struct ColorChange { Material material; Color3 before, after; };
+    TerrainCommand(std::string label, TerrainData::Snapshot before, TerrainData::Snapshot after, std::vector<ColorChange> colors = {});
+    void execute(Scene& scene) override;
+    void undo(Scene& scene) override;
+private:
+    TerrainData::Snapshot before_, after_;
+    std::vector<ColorChange> colors_;
+};
+
 class CompositeCommand : public Command {
 public:
     CompositeCommand(std::string label, std::vector<std::unique_ptr<Command>> commands);

@@ -286,8 +286,15 @@ void EditorApp::frame(float dt) {
             if (ImGuiWindow* w = ImGui::FindWindowByName("###Explorer")) ImGui::SetNextWindowDockID(w->DockId, ImGuiCond_FirstUseEver);
             sourceControl_.draw(ui, &settings_.showSourceControl);
         }
+        if (settings_.showTerrain) {
+            // First shown: a tab next to the Properties.
+            if (ImGuiWindow* w = ImGui::FindWindowByName("###Properties")) ImGui::SetNextWindowDockID(w->DockId, ImGuiCond_FirstUseEver);
+            terrain_.draw(ui, &settings_.showTerrain);
+        }
+        if (!settings_.showTerrain) editor_->terrainTool.active = false;
         if (focusExplorer_) {
             ImGui::SetWindowFocus("###Explorer");
+            ImGui::SetWindowFocus("###Properties");
             ImGui::SetWindowFocus("###Viewport");
             focusExplorer_ = false;
         }
@@ -331,6 +338,7 @@ void EditorApp::buildDefaultLayout(ImGuiID dockspace) {
     ImGui::DockBuilderDockWindow("###Explorer", right);
     ImGui::DockBuilderDockWindow("###SourceControl", right);
     ImGui::DockBuilderDockWindow("###Properties", rightBottom);
+    ImGui::DockBuilderDockWindow("###Terrain", rightBottom);
     ImGui::DockBuilderDockWindow("###Output", bottom);
     ImGui::DockBuilderDockWindow("###Assets", bottom);
     ImGui::DockBuilderFinish(dockspace);
@@ -383,10 +391,14 @@ void EditorApp::handleShortcuts() {
     }
     if (key(ImGuiKey_F) && !io.KeyCtrl && !io.KeyAlt && !viewport_.capturingMouse()) e.focusSelection();
     if (key(ImGuiKey_Escape) && !e.playing()) e.clearSelection();
-    if (key(ImGuiMod_Ctrl | ImGuiKey_1)) e.tool = Tool::Select;
-    if (key(ImGuiMod_Ctrl | ImGuiKey_2)) e.tool = Tool::Move;
-    if (key(ImGuiMod_Ctrl | ImGuiKey_3)) e.tool = Tool::Scale;
-    if (key(ImGuiMod_Ctrl | ImGuiKey_4)) e.tool = Tool::Rotate;
+    auto pickTool = [&](Tool t) {
+        e.tool = t;
+        e.terrainTool.active = false;
+    };
+    if (key(ImGuiMod_Ctrl | ImGuiKey_1)) pickTool(Tool::Select);
+    if (key(ImGuiMod_Ctrl | ImGuiKey_2)) pickTool(Tool::Move);
+    if (key(ImGuiMod_Ctrl | ImGuiKey_3)) pickTool(Tool::Scale);
+    if (key(ImGuiMod_Ctrl | ImGuiKey_4)) pickTool(Tool::Rotate);
     if (key(ImGuiMod_Ctrl | ImGuiKey_L)) settings_.localSpace = !settings_.localSpace;
 }
 
@@ -517,6 +529,7 @@ void EditorApp::drawMenuBar() {
         ImGui::MenuItem(ICON_FA_TERMINAL "  Output", nullptr, &settings_.showOutput);
         ImGui::MenuItem(ICON_FA_FOLDER_OPEN "  Assets", nullptr, &settings_.showAssets);
         ImGui::MenuItem(ICON_FA_CODE_BRANCH "  Source Control", nullptr, &settings_.showSourceControl);
+        ImGui::MenuItem(ICON_FA_MOUNTAIN_SUN "  Terrain Editor", nullptr, &settings_.showTerrain);
         ImGui::Separator();
         ImGui::MenuItem(ICON_FA_TABLE_CELLS "  Grid", nullptr, &settings_.showGrid);
         ImGui::MenuItem(ICON_FA_DESKTOP "  GUI While Editing", nullptr, &settings_.showGui);
@@ -592,13 +605,30 @@ void EditorApp::drawToolbar() {
 
     ImGui::BeginDisabled(!scene);
     // Tools (Roblox order and shortcuts)
-    if (theme::iconButton(ICON_FA_ARROW_POINTER, "Select (Ctrl+1)", e.tool == Tool::Select, button)) e.tool = Tool::Select;
+    const bool sculpting = e.terrainTool.active;
+    auto toolButton = [&](const char* icon, const char* tip, Tool t) {
+        if (theme::iconButton(icon, tip, e.tool == t && !sculpting, button)) {
+            e.tool = t;
+            e.terrainTool.active = false;
+        }
+    };
+    toolButton(ICON_FA_ARROW_POINTER, "Select (Ctrl+1)", Tool::Select);
     ImGui::SameLine(0.0f, 2.0f);
-    if (theme::iconButton(ICON_FA_UP_DOWN_LEFT_RIGHT, "Move (Ctrl+2)", e.tool == Tool::Move, button)) e.tool = Tool::Move;
+    toolButton(ICON_FA_UP_DOWN_LEFT_RIGHT, "Move (Ctrl+2)", Tool::Move);
     ImGui::SameLine(0.0f, 2.0f);
-    if (theme::iconButton(ICON_FA_UP_RIGHT_AND_DOWN_LEFT_FROM_CENTER, "Scale: drag a face of the part (Ctrl+3)", e.tool == Tool::Scale, button)) e.tool = Tool::Scale;
+    toolButton(ICON_FA_UP_RIGHT_AND_DOWN_LEFT_FROM_CENTER, "Scale: drag a face of the part (Ctrl+3)", Tool::Scale);
     ImGui::SameLine(0.0f, 2.0f);
-    if (theme::iconButton(ICON_FA_ROTATE, "Rotate (Ctrl+4)", e.tool == Tool::Rotate, button)) e.tool = Tool::Rotate;
+    toolButton(ICON_FA_ROTATE, "Rotate (Ctrl+4)", Tool::Rotate);
+    ImGui::SameLine(0.0f, 2.0f);
+    if (theme::iconButton(ICON_FA_MOUNTAIN_SUN, "Terrain Editor: generate land and sculpt it with brushes", sculpting || settings_.showTerrain, button) && !e.playing()) {
+        if (sculpting || settings_.showTerrain) {
+            e.terrainTool.active = false;
+            settings_.showTerrain = false;
+        } else {
+            settings_.showTerrain = true;
+            ImGui::SetWindowFocus("###Terrain");
+        }
+    }
     separator();
     if (theme::iconButton(s.localSpace ? ICON_FA_CUBE : ICON_FA_GLOBE, s.localSpace ? "Local axes (Ctrl+L to switch to world)" : "World axes (Ctrl+L to switch to local)", false, button))
         s.localSpace = !s.localSpace;

@@ -78,7 +78,8 @@ bool Renderer::init(std::string* error) {
     };
     if (!load(partShader_, "part.vert", "part.frag") || !load(shadowShader_, "shadow.vert", "shadow.frag")
         || !load(skyShader_, "sky.vert", "sky.frag") || !load(gridShader_, "grid.vert", "grid.frag")
-        || !load(lineShader_, "line.vert", "line.frag")) {
+        || !load(lineShader_, "line.vert", "line.frag") || !load(terrainShader_, "terrain.vert", "terrain.frag")
+        || !load(waterShader_, "terrain.vert", "water.frag")) {
         return false;
     }
     for (int i = 0; i < 5; ++i) primitives_[i] = std::make_unique<GpuMesh>(primitiveMesh(static_cast<PartShape>(i)));
@@ -175,7 +176,8 @@ void Renderer::collect(const Scene& scene, const glm::vec3& cameraPos, std::vect
             if (i.visible && i.transparency < 0.999f) {
                 const glm::mat4 world = frame * glm::scale(glm::mat4(1.0f), i.size);
                 const float distance = glm::length(glm::vec3(frame[3]) - cameraPos);
-                const bool isTransparent = i.transparency > 0.001f || i.material == Material::Glass;
+                const bool isTransparent = i.transparency > 0.001f || i.material == Material::Glass || i.material == Material::ForceField
+                    || i.material == Material::Ice || i.material == Material::Water;
                 (isTransparent ? transparent : opaque).push_back({ &i, world, distance });
             }
         } else if (i.isLight() && i.enabled) {
@@ -307,6 +309,8 @@ void Renderer::render(const Scene& scene, const RenderCamera& camera, const Rend
     std::vector<glm::mat4> lightFrames;
     collect(scene, camera.position, opaque, transparent, lights, lightFrames);
     stats_.parts = static_cast<int>(opaque.size() + transparent.size());
+    terrain_.update(scene.terrain());
+    const float time = std::chrono::duration<float>(std::chrono::steady_clock::now() - start_).count();
 
     // ---------------------------------------------------------------- shadows
     const bool shadows = settings.shadows && lighting.castShadow && sun.color.r + sun.color.g + sun.color.b > 0.01f;
@@ -339,6 +343,8 @@ void Renderer::render(const Scene& scene, const RenderCamera& camera, const Rend
             meshFor(*d.part).draw();
             ++stats_.drawCalls;
         }
+        shadowShader_->setMat4("uModel", glm::mat4(1.0f)); // terrain vertices are in world space
+        terrain_.drawSolid(lightViewProj);
         glDisable(GL_POLYGON_OFFSET_FILL);
     }
 
@@ -353,24 +359,6 @@ void Renderer::render(const Scene& scene, const RenderCamera& camera, const Rend
     glDisable(GL_BLEND);
     glEnable(GL_MULTISAMPLE);
 
-    partShader_->use();
-    partShader_->setMat4("uViewProj", viewProj);
-    partShader_->setMat4("uLightViewProj", lightViewProj);
-    partShader_->setVec3("uCameraPos", camera.position);
-    partShader_->setVec3("uSunDirection", sun.direction);
-    partShader_->setVec3("uSunColor", sun.color);
-    partShader_->setVec3("uAmbient", sun.ambient);
-    partShader_->setVec3("uSkyColor", sun.skyColor);
-    partShader_->setVec3("uHorizonColor", sun.horizonColor);
-    partShader_->setVec3("uFogColor", sun.fogColor);
-    partShader_->setFloat("uFogStart", lighting.fogStart);
-    partShader_->setFloat("uFogEnd", std::max(lighting.fogEnd, lighting.fogStart + 0.01f));
-    partShader_->setFloat("uExposure", exposure);
-    partShader_->setVec3("uTint", settings.hoverColor);
-    partShader_->setInt("uTexture", 0);
-    partShader_->setInt("uShadowMap", 1);
-    partShader_->setInt("uShadows", shadows ? 1 : 0);
-    partShader_->setFloat("uShadowTexel", shadows ? 1.0f / static_cast<float>(settings.shadowMapSize) : 0.0f);
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, shadows ? shadowMap_.texture() : 0);
     glActiveTexture(GL_TEXTURE0);
@@ -384,17 +372,49 @@ void Renderer::render(const Scene& scene, const RenderCamera& camera, const Rend
     });
     const int lightCount = std::min(static_cast<int>(order.size()), kMaxLights);
     stats_.lights = lightCount;
-    partShader_->setInt("uLightCount", lightCount);
-    for (int k = 0; k < lightCount; ++k) {
-        const Instance& l = *lights[order[k]];
-        const glm::mat4& f = lightFrames[order[k]];
-        const std::string idx = "[" + std::to_string(k) + "]";
-        partShader_->setVec4("uLightPosRange" + idx, glm::vec4(glm::vec3(f[3]), std::max(l.range, 0.01f)));
-        partShader_->setVec4("uLightColorType" + idx, glm::vec4(toLinear(l.color) * l.brightness * 1.6f, l.cls == ClassId::SpotLight ? 1.0f : 0.0f));
-        partShader_->setVec4("uLightDirCone" + idx, glm::vec4(-glm::normalize(glm::vec3(f[2])), std::cos(glm::radians(l.angle * 0.5f))));
-    }
+    // The lighting uniforms every lit shader shares (lighting.glsl).
+    auto applyLighting = [&](Shader& s) {
+        s.use();
+        s.setMat4("uViewProj", viewProj);
+        s.setMat4("uLightViewProj", lightViewProj);
+        s.setVec3("uCameraPos", camera.position);
+        s.setVec3("uSunDirection", sun.direction);
+        s.setVec3("uSunColor", sun.color);
+        s.setVec3("uAmbient", sun.ambient);
+        s.setVec3("uSkyColor", sun.skyColor);
+        s.setVec3("uHorizonColor", sun.horizonColor);
+        s.setVec3("uFogColor", sun.fogColor);
+        s.setFloat("uFogStart", lighting.fogStart);
+        s.setFloat("uFogEnd", std::max(lighting.fogEnd, lighting.fogStart + 0.01f));
+        s.setFloat("uExposure", exposure);
+        s.setInt("uShadowMap", 1);
+        s.setInt("uShadows", shadows ? 1 : 0);
+        s.setFloat("uShadowTexel", shadows ? 1.0f / static_cast<float>(settings.shadowMapSize) : 0.0f);
+        s.setFloat("uTime", time);
+        s.setInt("uLightCount", lightCount);
+        for (int k = 0; k < lightCount; ++k) {
+            const Instance& l = *lights[order[k]];
+            const glm::mat4& f = lightFrames[order[k]];
+            const std::string idx = "[" + std::to_string(k) + "]";
+            s.setVec4("uLightPosRange" + idx, glm::vec4(glm::vec3(f[3]), std::max(l.range, 0.01f)));
+            s.setVec4("uLightColorType" + idx, glm::vec4(toLinear(l.color) * l.brightness * 1.6f, l.cls == ClassId::SpotLight ? 1.0f : 0.0f));
+            s.setVec4("uLightDirCone" + idx, glm::vec4(-glm::normalize(glm::vec3(f[2])), std::cos(glm::radians(l.angle * 0.5f))));
+        }
+    };
 
     if (settings.wireframe) glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+    // Terrain (opaque; its surfaces are closed, so back faces are skipped,
+    // unless the camera is inside the ground and would see through it).
+    applyLighting(*terrainShader_);
+    terrainShader_->setFloat("uWave", 0.0f);
+    if (scene.terrain().density(camera.position) < 0.5f) glEnable(GL_CULL_FACE);
+    else glDisable(GL_CULL_FACE);
+    stats_.triangles += terrain_.drawSolid(viewProj);
+    ++stats_.drawCalls;
+
+    applyLighting(*partShader_);
+    partShader_->setVec3("uTint", settings.hoverColor);
+    partShader_->setInt("uTexture", 0);
     glDisable(GL_CULL_FACE); // wedges and thin parts are visible from inside too
     drawParts(opaque, settings);
 
@@ -427,6 +447,18 @@ void Renderer::render(const Scene& scene, const RenderCamera& camera, const Rend
         gridShader_->setVec3("uLineColor", glm::vec3(0.62f, 0.64f, 0.70f) * glm::mix(0.3f, 1.0f, sun.day)); // no glaring grid at night
         glBindVertexArray(gridVao_);
         glDrawArrays(GL_TRIANGLES, 0, 6);
+        ++stats_.drawCalls;
+    }
+
+    // Terrain water: see-through, behind the transparent parts.
+    if (terrain_.hasWater()) {
+        applyLighting(*waterShader_);
+        const Instance* t = scene.terrainInstance();
+        waterShader_->setVec3("uWaterColor", t ? t->color.vec() : glm::vec3(0.05f, 0.33f, 0.36f));
+        waterShader_->setFloat("uWaterTransparency", t ? std::clamp(t->transparency, 0.0f, 1.0f) : 0.3f);
+        waterShader_->setFloat("uWave", 0.12f);
+        glDepthMask(GL_FALSE);
+        stats_.triangles += terrain_.drawWater(viewProj);
         ++stats_.drawCalls;
     }
 

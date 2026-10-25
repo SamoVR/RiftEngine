@@ -32,6 +32,7 @@ struct EditorSettings {
     bool showTooltips = true;
     int layoutVersion = 0;
     bool showExplorer = true, showProperties = true, showOutput = true, showAssets = true, showSourceControl = true;
+    bool showTerrain = false;        // the Terrain Editor
 
     // Viewport
     bool showGrid = true;
@@ -54,6 +55,13 @@ struct EditorSettings {
     float snapRotate = 15.0f;
     float snapScale = 0.5f;
     bool localSpace = false;
+
+    // Terrain Editor brush
+    float terrainSize = 12.0f;      // brush diameter, studs
+    float terrainStrength = 0.5f;   // 0..1
+    bool terrainCube = false;
+    bool terrainIgnoreWater = true;
+    int terrainMaterial = 20;       // Material::Grass
 
     // Script editor
     float scriptFontSize = 15.0f;

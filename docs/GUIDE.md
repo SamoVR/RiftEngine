@@ -125,7 +125,7 @@ The toolbar has buttons for a part and a script; the arrow next to them and the
 - **Objects**: Model, Folder, Point Light, Spot Light, Sound, value objects.
 - **Code**: Script (server), LocalScript (client), ModuleScript, and under Communication: RemoteEvent, RemoteFunction, BindableEvent, BindableFunction. Scripts go inside the selected object, or into ScriptService / StarterPlayerScripts / ReplicatedStorage; remotes into ReplicatedStorage.
 - **GUI**: ScreenGui, Frame, TextLabel, TextButton, ImageLabel, ImageButton. They go into the selected ScreenGui or Frame, or a new ScreenGui in StarterGui.
-- **Gameplay**: ready-made pieces with their scripts: Kill Brick, Spinner, Coin, Jump Pad, Moving Platform, Checkpoint, Door, Finish Line and a Leaderboard script. Their scripts are ordinary Lua: open them to see how they work.
+- **Gameplay**: ready-made pieces with their scripts: Kill Brick, Spinner, Coin, Jump Pad, Moving Platform, Checkpoint, Door, Finish Line, a Sword and other tools, and a Leaderboard script. Their scripts are ordinary Lua: open them to see how they work. Tools go into StarterPack, so every player spawns with them.
 
 Right-click in the Explorer for the same menu plus Rename (F2), Cut / Copy /
 Paste / Paste Into / Duplicate (Ctrl+D), Delete, Group (Ctrl+G), Ungroup
@@ -135,6 +135,18 @@ clipboard).
 Drag objects in the Explorer to move them: drop on a row to put them inside it,
 or on the top / bottom edge of a row to place them before / after it. Their
 position in the world does not change.
+
+### Terrain
+
+The mountain button in the toolbar (or **View > Terrain Editor**) opens the
+Terrain Editor:
+
+- **Create**: pick the area, the height, how hilly and mountainous it is, water and caves, then **Generate**. A different **Seed** gives different land. **Clear Terrain** removes all of it.
+- **Edit**: brushes you drag over the land in the viewport. **Add** and **Subtract** build and carve, **Grow** and **Erode** raise and wear the surface gently, **Smooth** rounds it off, **Flatten** levels it to the height where you start the stroke (or a fixed height), **Paint** changes only the material. Hold **Ctrl** to reverse a brush (Add ↔ Subtract, Grow ↔ Erode) and **Shift** to smooth. **[** and **]** change the size, **Esc** goes back to selecting. Pick the material from the swatches under the brush settings.
+- **Colours**: the water's colour and transparency, and the colour of every terrain material.
+
+Every stroke, Generate and Clear is one undo step (Ctrl+Z). Terrain is saved
+next to the scene as `terrain.bin`.
 
 ### Assets
 
@@ -185,6 +197,7 @@ scene: whatever it changes (moved parts, destroyed objects, new instances) is
 thrown away on **Stop** (Shift+F5). **Pause** (F6) freezes the game.
 
 - Click the viewport to give the game the keyboard and mouse. The character walks with W A S D, jumps with Space, and the camera turns with the right mouse button. **Esc** gives the mouse back to the editor.
+- **Test players**: the button next to Play sets how many players join (1 to 8). Each gets a character and its own client; while playing, the player list next to the Client / Server switch picks whose view you see and control.
 - The game runs as a **server** and a **client**, like Roblox. The **Client / Server** switch in the toolbar picks which one you see. Client: the player's view, where you play. Server: the server's world with the editor camera, where you can select and move objects and watch the change reach the client.
 - The Explorer shows the world you are looking at, so it lists the client's objects (PlayerGui, PlayerScripts, whatever LocalScripts create) on the Client side and the server's on the Server side. Output lines are tagged Client or Server.
 - `print` output appears in the Output panel with the game time.

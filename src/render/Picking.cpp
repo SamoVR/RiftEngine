@@ -98,6 +98,23 @@ std::optional<PickHit> pickPart(const Scene& scene, const glm::vec3& origin, con
         if (glm::dot(h.normal, dir) > 0.0f) h.normal = -h.normal;
         best = h;
     });
+    // A hill in front of the part hides it.
+    if (best && !accept && scene.terrain().raycast(origin, dir, best->distance)) return std::nullopt;
+    return best;
+}
+
+std::optional<PickHit> pickSurface(const Scene& scene, const glm::vec3& origin, const glm::vec3& direction, bool hitWater) {
+    const glm::vec3 dir = glm::normalize(direction);
+    std::optional<PickHit> best = pickPart(scene, origin, dir, [](const Instance& p) { return p.visible && p.transparency < 0.999f; });
+    const float reach = best ? best->distance : 5000.0f;
+    if (auto t = scene.terrain().raycast(origin, dir, reach, hitWater); t && (!best || t->distance < best->distance)) {
+        PickHit h;
+        h.part = scene.terrainInstance();
+        h.distance = t->distance;
+        h.position = t->position;
+        h.normal = t->normal;
+        best = h;
+    }
     return best;
 }
 

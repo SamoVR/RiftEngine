@@ -5,6 +5,23 @@ GitHub release page show the section of the version being installed.
 
 RIFT is in **beta**: versions are 0.x until the engine is complete.
 
+## 0.2.0
+
+### Terrain
+- Smooth voxel terrain like Roblox's (`workspace.Terrain`): 2-stud voxels in 22 natural materials plus water, meshed smooth, with shadows and materials that blend into each other.
+- The **Terrain Editor**: generate land (hills, mountains, lakes, beaches, caves) and sculpt it with Add, Subtract, Grow, Erode, Smooth, Flatten and Paint brushes (sphere or cube, size, strength, Ctrl to reverse, Shift to smooth). Material and water colours. Every stroke is one undo step.
+- Characters walk on terrain and swim in its water. Ray casts hit it and report its material.
+- Scripts: `Terrain:FillBlock`, `FillBall`, `FillCylinder`, `Clear`, `GetMaterialColor` / `SetMaterialColor`; server changes reach every client.
+- Saved next to the scene as `terrain.bin`.
+
+### Materials
+- Parts get the full set of Roblox materials (Wood, Brick, Cobblestone, Granite, Marble, Slate, Fabric, Foil, Diamond Plate, Corroded Metal, Wood Planks, Pebble, Ice, Force Field, and the terrain materials), each with its own procedural look.
+
+### Players and tools
+- Test with several players at once (1 to 8): each gets a character and a client; pick whose view you see while playing.
+- Tools and the Backpack: StarterPack, equipping with the number keys, Activated / Equipped events, dropping and picking up, grip position, `Humanoid:EquipTool`. A ready-made Sword.
+- `StarterGui:SetCoreGuiEnabled` hides the backpack bar or the leaderboard.
+
 ## 0.1.0
 
 The first beta.

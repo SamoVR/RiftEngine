@@ -23,7 +23,7 @@ bool Instance::isScript() const { return cls == ClassId::Script || cls == ClassI
 bool Instance::isRemote() const { return cls >= ClassId::RemoteEvent && cls <= ClassId::BindableFunction; }
 bool Instance::isFixedContainer() const {
     return cls == ClassId::StarterPlayerScripts || cls == ClassId::StarterCharacterScripts || cls == ClassId::PlayerGui
-        || cls == ClassId::PlayerScripts || cls == ClassId::Backpack;
+        || cls == ClassId::PlayerScripts || cls == ClassId::Backpack || cls == ClassId::Terrain;
 }
 
 bool Instance::isGui() const { return cls >= ClassId::ScreenGui && cls <= ClassId::ImageButton; }

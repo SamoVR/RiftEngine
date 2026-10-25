@@ -19,6 +19,7 @@
 #include <Jolt/Physics/Collision/Shape/ConvexHullShape.h>
 #include <Jolt/Physics/Collision/Shape/StaticCompoundShape.h>
 #include <Jolt/Physics/Collision/Shape/RotatedTranslatedShape.h>
+#include <Jolt/Physics/Collision/Shape/MeshShape.h>
 #include <Jolt/Physics/Collision/RayCast.h>
 #include <Jolt/Physics/Collision/CastResult.h>
 #include <Jolt/Physics/Collision/CollideShape.h>
@@ -281,6 +282,18 @@ public:
         const bool movingTowardsGround = (currentVertical.GetY() - groundVelocity.GetY()) < 0.1f;
 
         JPH::Vec3 v;
+        if (input_.swimming) {
+            // Swimming: drift down slowly, Space swims up, move at a little below walking speed.
+            glm::vec3 swim = input_.moveDirection;
+            swim.y = 0.0f;
+            if (glm::length(swim) > 1.0f) swim = glm::normalize(swim);
+            const float vy = input_.jump ? input_.walkSpeed * 0.8f : std::max(currentVertical.GetY() * 0.9f - 6.0f * dt, -2.5f);
+            character_->SetLinearVelocity(toJ(swim * input_.walkSpeed * 0.75f) + vy * up);
+            JPH::CharacterVirtual::ExtendedUpdateSettings ext;
+            const LayerMask layers(kSolidMask);
+            character_->ExtendedUpdate(dt, JPH::Vec3::sZero(), ext, JPH::BroadPhaseLayerFilter(), layers, JPH::BodyFilter(), JPH::ShapeFilter(), temp);
+            return;
+        }
         if (character_->GetGroundState() == JPH::CharacterVirtual::EGroundState::OnGround && movingTowardsGround
             && !character_->IsSlopeTooSteep(character_->GetGroundNormal())) {
             v = groundVelocity; // ride moving platforms
@@ -352,6 +365,11 @@ struct PhysicsWorld::Impl {
     std::vector<uint64_t> fallen;
     std::vector<std::unique_ptr<CharacterImpl>> characters;
 
+    // Terrain: one static mesh body per chunk, rebuilt when its revision changes.
+    struct TerrainBody { JPH::BodyID body; uint64_t revision = 0; };
+    std::unordered_map<ChunkKey, TerrainBody, ChunkKeyHash> terrainBodies;
+    uint64_t terrainRevision = 0;
+
     explicit Impl(Scene& s) : scene(s) {
         ensureJolt();
         temp = std::make_unique<JPH::TempAllocatorImpl>(16 * 1024 * 1024);
@@ -367,6 +385,12 @@ struct PhysicsWorld::Impl {
     ~Impl() {
         characters.clear();
         JPH::BodyInterface& bi = system->GetBodyInterface();
+        for (auto& [key, t] : terrainBodies) {
+            if (t.body.IsInvalid()) continue;
+            bi.RemoveBody(t.body);
+            bi.DestroyBody(t.body);
+        }
+        terrainBodies.clear();
         for (auto* map : { &bodies, &ghosts }) {
             for (auto& [id, rec] : *map) { bi.RemoveBody(rec.body); bi.DestroyBody(rec.body); }
             map->clear();
@@ -567,6 +591,48 @@ struct PhysicsWorld::Impl {
     struct KinematicMove { JPH::BodyID body; Frame from, to; };
     std::vector<KinematicMove> kinematicMoves;
 
+    void syncTerrain() {
+        const TerrainData& terrain = scene.terrain();
+        if (terrain.revision() == terrainRevision) return;
+        terrainRevision = terrain.revision();
+        const Instance* owner = scene.terrainInstance();
+        const uint64_t ownerId = owner ? owner->id : 0;
+        auto drop = [&](TerrainBody& t) {
+            if (t.body.IsInvalid()) return;
+            bi().RemoveBody(t.body);
+            bi().DestroyBody(t.body);
+            t.body = JPH::BodyID();
+        };
+        for (auto it = terrainBodies.begin(); it != terrainBodies.end();) {
+            if (!terrain.chunks().count(it->first)) { drop(it->second); it = terrainBodies.erase(it); }
+            else ++it;
+        }
+        TerrainMesh mesh;
+        for (const auto& [key, chunk] : terrain.chunks()) {
+            TerrainBody& t = terrainBodies[key];
+            if (t.revision == chunk.revision && t.revision != 0) continue;
+            t.revision = chunk.revision;
+            drop(t);
+            terrain.meshChunk(key, mesh, nullptr);
+            if (mesh.empty()) continue;
+            JPH::VertexList vertices;
+            vertices.reserve(mesh.vertices.size());
+            for (const TerrainVertex& v : mesh.vertices) vertices.push_back(JPH::Float3(v.position.x, v.position.y, v.position.z));
+            JPH::IndexedTriangleList triangles;
+            triangles.reserve(mesh.indices.size() / 3);
+            for (size_t i = 0; i + 2 < mesh.indices.size(); i += 3) triangles.push_back(JPH::IndexedTriangle(mesh.indices[i], mesh.indices[i + 1], mesh.indices[i + 2], 0));
+            JPH::MeshShapeSettings settings(std::move(vertices), std::move(triangles));
+            JPH::ShapeSettings::ShapeResult result = settings.Create();
+            if (result.HasError()) continue;
+            JPH::Ref<JPH::Shape> shape = result.Get();
+            shape->SetUserData(ownerId); // hits report the Terrain instance
+            JPH::BodyCreationSettings bcs(shape, JPH::RVec3::sZero(), JPH::Quat::sIdentity(), JPH::EMotionType::Static, Layers::Static);
+            bcs.mFriction = 0.7f;
+            bcs.mUserData = ownerId;
+            t.body = bi().CreateAndAddBody(bcs, JPH::EActivation::DontActivate);
+        }
+    }
+
     void syncFromScene() {
         kinematicMoves.clear();
         for (auto& [ownerId, rec] : bodies) {
@@ -726,6 +792,7 @@ void PhysicsWorld::step(float dt) {
     s.processDirty();
     s.system->SetGravity(JPH::Vec3(0.0f, -s.scene.workspace().gravity, 0.0f));
     s.syncFromScene();
+    s.syncTerrain();
 
     const int steps = std::clamp(static_cast<int>(std::ceil(dt / kMaxStep)), 1, kMaxSubSteps);
     const float h = dt / static_cast<float>(steps);
@@ -741,6 +808,7 @@ void PhysicsWorld::step(float dt) {
 
 std::optional<RaycastHit> PhysicsWorld::raycast(const glm::vec3& origin, const glm::vec3& direction, const RaycastFilter& filter) const {
     impl_->processDirty(); // parts created since the last step must be hittable
+    impl_->syncTerrain();
     const Impl& s = *impl_;
     if (glm::length(direction) < 1e-6f) return std::nullopt;
 

@@ -185,10 +185,198 @@ void ViewportPanel::draw(UiContext& ui) {
         }
     }
 
-    drawGizmo(ui, view, proj);
+    // The Terrain Editor's brush replaces selecting and the gizmo while it is on.
+    const bool brush = editor.terrainTool.active && !editor.playing();
+    if (!brush) {
+        if (brushing_) endStroke(editor);
+        brushHit_ = false;
+        drawGizmo(ui, view, proj);
+    }
     drawOverlays(ui, view, proj);
-    handleSelection(ui, view, proj, editGui.get());
+    if (brush) handleTerrainBrush(ui, view, proj);
+    else handleSelection(ui, view, proj, editGui.get());
     ImGui::End();
+}
+
+// ============================================================================
+//  Terrain brush
+// ============================================================================
+void ViewportPanel::endStroke(Editor& editor) {
+    brushing_ = false;
+    editor.endTerrainStroke(std::string("Terrain ") + terrainBrushName(editor.terrainTool.brush));
+}
+
+void ViewportPanel::handleTerrainBrush(UiContext& ui, const glm::mat4& view, const glm::mat4& proj) {
+    Editor& editor = ui.editor;
+    EditorSettings& s = editor.settings();
+    Editor::TerrainTool& tool = editor.terrainTool;
+    TerrainData& terrain = editor.editScene().terrain();
+    const ImGuiIO& io = ImGui::GetIO();
+    hoveredId_ = 0;
+    pressing_ = marquee_ = guiDragging_ = false;
+
+    // Keys: [ ] brush size, Esc back to selecting.
+    if (focused_ && !io.WantTextInput) {
+        if (ImGui::IsKeyPressed(ImGuiKey_LeftBracket)) s.terrainSize = std::max(2.0f, std::round(s.terrainSize / 1.25f));
+        if (ImGui::IsKeyPressed(ImGuiKey_RightBracket)) s.terrainSize = std::min(64.0f, std::round(s.terrainSize * 1.25f));
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+            if (brushing_) endStroke(editor);
+            tool.active = false;
+            return;
+        }
+    }
+
+    // The brush this frame: Ctrl reverses it, Shift smooths.
+    TerrainData::Brush b = tool.brush;
+    if (io.KeyCtrl) {
+        if (b == TerrainData::Brush::Add) b = TerrainData::Brush::Subtract;
+        else if (b == TerrainData::Brush::Subtract) b = TerrainData::Brush::Add;
+        else if (b == TerrainData::Brush::Grow) b = TerrainData::Brush::Erode;
+        else if (b == TerrainData::Brush::Erode) b = TerrainData::Brush::Grow;
+    }
+    if (io.KeyShift && b != TerrainData::Brush::Paint) b = TerrainData::Brush::Smooth;
+    const float radius = s.terrainSize * 0.5f;
+    const Material material = static_cast<Material>(std::clamp(s.terrainMaterial, 0, kMaterialCount - 1));
+
+    // Where the brush is: on the terrain under the mouse, else on the ground plane.
+    if (!capture_) {
+        const glm::vec2 mouse = editor.input().mousePosition() - origin_;
+        glm::vec3 o, d;
+        editor.camera().ray(mouse, size_, o, d);
+        const bool water = !s.terrainIgnoreWater || (material == Material::Water && b == TerrainData::Brush::Add);
+        brushHit_ = false;
+        const float facing = glm::dot(d, strokeNormal_);
+        if (hovered_ && brushing_ && b == TerrainData::Brush::Add && facing < -0.05f) {
+            // Add piles terrain up towards the camera: during a stroke the brush
+            // slides on the surface where the stroke started instead of
+            // climbing the terrain it has just added (and ending up in your face).
+            const float t = glm::dot(strokeOrigin_ - o, strokeNormal_) / facing;
+            if (t > 0.0f && t < 4000.0f) {
+                brushHit_ = true;
+                brushPoint_ = o + d * t;
+                brushNormal_ = strokeNormal_;
+            }
+        } else if (hovered_) {
+            if (auto hit = terrain.raycast(o, d, 4000.0f, water)) {
+                brushHit_ = true;
+                brushPoint_ = hit->position;
+                brushNormal_ = hit->normal;
+            } else {
+                const float planeY = tool.brush == TerrainData::Brush::Flatten && tool.fixedPlane ? tool.planeHeight : 0.0f;
+                if (std::abs(d.y) > 1e-4f) {
+                    const float t = (planeY - o.y) / d.y;
+                    if (t > 0.0f && t < 2000.0f) {
+                        brushHit_ = true;
+                        brushPoint_ = o + d * t;
+                        brushNormal_ = { 0.0f, 1.0f, 0.0f };
+                    }
+                }
+            }
+        }
+    }
+
+    // ---- strokes: a dab every 1/30 s while the left button is held
+    const bool overUi = ImGui::IsAnyItemHovered() || ImGui::IsAnyItemActive();
+    if (!brushing_ && brushHit_ && hovered_ && !capture_ && !overUi && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+        brushing_ = true;
+        brushTimer_ = 1.0f; // the first dab right away
+        strokePlane_ = tool.fixedPlane ? tool.planeHeight : brushPoint_.y;
+        strokeOrigin_ = brushPoint_;
+        strokeNormal_ = glm::length(brushNormal_) > 0.5f ? glm::normalize(brushNormal_) : glm::vec3(0.0f, 1.0f, 0.0f);
+        editor.beginTerrainStroke();
+    }
+    if (brushing_) {
+        if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+            endStroke(editor);
+        } else if (brushHit_) {
+            constexpr float kDabInterval = 1.0f / 30.0f;
+            brushTimer_ += ui.dt;
+            if (brushTimer_ >= kDabInterval) {
+                brushTimer_ = std::fmod(brushTimer_, kDabInterval);
+                TerrainData::Dab dab;
+                dab.brush = b;
+                dab.center = brushPoint_;
+                dab.radius = radius;
+                dab.cube = s.terrainCube;
+                dab.strength = s.terrainStrength;
+                dab.material = material;
+                dab.planeHeight = strokePlane_;
+                dab.ignoreWater = s.terrainIgnoreWater;
+                terrain.applyDab(dab);
+            }
+        }
+    }
+
+    // ---- the brush outline
+    if (!brushHit_) return;
+    ImDrawList* draw = ImGui::GetWindowDrawList();
+    const glm::mat4 viewProj = proj * view;
+    auto project = [&](const glm::vec3& p, ImVec2& out) {
+        const glm::vec4 c = viewProj * glm::vec4(p, 1.0f);
+        if (c.w <= 0.05f) return false;
+        out = ImVec2(origin_.x + (c.x / c.w * 0.5f + 0.5f) * size_.x, origin_.y + (0.5f - c.y / c.w * 0.5f) * size_.y);
+        return true;
+    };
+    ImVec4 tint = theme::color::accentHover;
+    if (b == TerrainData::Brush::Add || b == TerrainData::Brush::Grow) tint = theme::color::success;
+    else if (b == TerrainData::Brush::Subtract || b == TerrainData::Brush::Erode) tint = theme::color::error;
+    else if (b == TerrainData::Brush::Flatten) tint = theme::color::warning;
+    else if (b == TerrainData::Brush::Paint) {
+        const Color3 c = terrain.materialColor(material);
+        tint = ImVec4(c.r, c.g, c.b, 1.0f);
+    }
+    const ImU32 line = theme::u32(tint, brushing_ ? 1.0f : 0.85f);
+    const ImU32 fill = theme::u32(tint, 0.12f);
+    // A loop of points around `centre` in the plane of u, v.
+    auto loop = [&](const glm::vec3& centre, const glm::vec3& u, const glm::vec3& v, float r, float thickness, bool filled) {
+        constexpr int kSegments = 64;
+        ImVec2 pts[kSegments];
+        int count = 0;
+        for (int i = 0; i < kSegments; ++i) {
+            const float a = static_cast<float>(i) / kSegments * 6.2831853f;
+            if (!project(centre + (u * std::cos(a) + v * std::sin(a)) * r, pts[count])) return;
+            ++count;
+        }
+        if (filled) draw->AddConvexPolyFilled(pts, count, fill);
+        draw->AddPolyline(pts, count, line, ImDrawFlags_Closed, thickness);
+    };
+    const glm::vec3 n = glm::length(brushNormal_) > 0.5f ? glm::normalize(brushNormal_) : glm::vec3(0.0f, 1.0f, 0.0f);
+    const glm::vec3 helper = std::abs(n.y) < 0.9f ? glm::vec3(0.0f, 1.0f, 0.0f) : glm::vec3(1.0f, 0.0f, 0.0f);
+    const glm::vec3 u = glm::normalize(glm::cross(n, helper)), v = glm::cross(n, u);
+    if (s.terrainCube) {
+        // The cube's 12 edges.
+        const glm::vec3 c = brushPoint_;
+        auto corner = [&](int i) { return c + glm::vec3((i & 1) ? radius : -radius, (i & 2) ? radius : -radius, (i & 4) ? radius : -radius); };
+        static const int edges[12][2] = { { 0, 1 }, { 2, 3 }, { 4, 5 }, { 6, 7 }, { 0, 2 }, { 1, 3 }, { 4, 6 }, { 5, 7 }, { 0, 4 }, { 1, 5 }, { 2, 6 }, { 3, 7 } };
+        for (const auto& e : edges) {
+            ImVec2 a, bb;
+            if (project(corner(e[0]), a) && project(corner(e[1]), bb)) draw->AddLine(a, bb, line, 1.5f);
+        }
+    } else {
+        // The sphere's outline as seen from the camera, and its footprint on the surface.
+        const glm::vec3 eye = editor.camera().position();
+        const glm::vec3 toEye = glm::length(eye - brushPoint_) > 1e-3f ? glm::normalize(eye - brushPoint_) : n;
+        const glm::vec3 h2 = std::abs(toEye.y) < 0.9f ? glm::vec3(0.0f, 1.0f, 0.0f) : glm::vec3(1.0f, 0.0f, 0.0f);
+        const glm::vec3 su = glm::normalize(glm::cross(toEye, h2)), sv = glm::cross(toEye, su);
+        loop(brushPoint_, su, sv, radius, 1.0f, false);
+    }
+    loop(brushPoint_ + n * 0.05f, u, v, radius, 2.0f, true);
+    if (b == TerrainData::Brush::Flatten) {
+        // The level the stroke flattens to.
+        const float y = brushing_ ? strokePlane_ : (tool.fixedPlane ? tool.planeHeight : brushPoint_.y);
+        loop(glm::vec3(brushPoint_.x, y, brushPoint_.z), { 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f }, radius * 1.15f, 1.0f, true);
+    }
+    ImVec2 centre;
+    if (project(brushPoint_, centre)) draw->AddCircleFilled(centre, 2.5f, line);
+
+    // What the brush does, by the cursor.
+    char label[96];
+    std::snprintf(label, sizeof(label), "%s  %s  %.0f", terrainBrushIcon(b), terrainBrushName(b), s.terrainSize);
+    const ImVec2 mouse = io.MousePos;
+    const ImVec2 t = ImGui::CalcTextSize(label);
+    const ImVec2 p(mouse.x + 18.0f, mouse.y + 14.0f);
+    draw->AddRectFilled(ImVec2(p.x - 6.0f, p.y - 3.0f), ImVec2(p.x + t.x + 6.0f, p.y + t.y + 3.0f), IM_COL32(12, 12, 16, 190), 4.0f);
+    draw->AddText(p, IM_COL32(235, 235, 245, 255), label);
 }
 
 void ViewportPanel::saveThumbnail(Editor& editor) {
@@ -564,7 +752,8 @@ void ViewportPanel::drawOverlays(UiContext& ui, const glm::mat4& view, const glm
             draw->AddRectFilled(ImVec2(p.x - 12.0f, p.y - 6.0f), ImVec2(p.x + t.x + 12.0f, p.y + t.y + 6.0f), IM_COL32(10, 10, 14, 170), 8.0f);
             draw->AddText(p, IM_COL32(235, 235, 245, 255), text);
         }
-    } else if (editor.scene().workspace().children.empty()) {
+    } else if (std::all_of(editor.scene().workspace().children.begin(), editor.scene().workspace().children.end(), [](const Instance* i) { return i->isFixedContainer(); })
+               && editor.scene().terrain().empty()) {
         const char* text = "The scene is empty. Insert a part from the toolbar, or drag files from the Assets panel.";
         const ImVec2 t = ImGui::CalcTextSize(text);
         draw->AddText(ImVec2(a.x + (size_.x - t.x) * 0.5f, a.y + size_.y * 0.45f), theme::u32(theme::color::textDim), text);

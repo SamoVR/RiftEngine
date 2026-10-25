@@ -363,9 +363,12 @@ thread, so it may call `task.wait`.
 
 ## Players and characters
 
-The game has one player: `game.Players.LocalPlayer` in LocalScripts, the only
-entry of `Players:GetPlayers()` on the server. `Players.PlayerAdded` fires for it
-after every script had the chance to connect, so the usual pattern works:
+A published game has one player. When testing in the editor you can start
+several (the players button next to Play): each gets a character, a client with
+its own LocalScripts and GUI, and a slot in `Players:GetPlayers()` on the server.
+`game.Players.LocalPlayer` is the client's own player. `Players.PlayerAdded`
+fires for every player after every script had the chance to connect, so the
+usual pattern works:
 
 ```lua
 local Players = game:GetService("Players")
@@ -382,6 +385,10 @@ StarterPlayerScripts, client only); `:LoadCharacter()` (respawn now, server),
 `:GetMouse()` (client), `:Kick([message])` (ends the game).
 
 **Players**: `LocalPlayer`, `:GetPlayers()`, `:GetPlayerFromCharacter(model)`.
+
+`RemoteEvent:FireClient(player, ...)` reaches only that player's client,
+`:FireAllClients(...)` every client, and `OnServerEvent` tells the server which
+player fired.
 
 The **character** is a Model named after the player, in Workspace, with a
 `Humanoid`, a `HumanoidRootPart` (the collision capsule) and `Head`, `Torso`,
@@ -410,6 +417,63 @@ Moving the character: set `character.HumanoidRootPart.CFrame` (teleport) or
 
 **Leaderboard**: a Folder named `leaderstats` inside the Player, with IntValue /
 NumberValue / StringValue / BoolValue children, is shown in the top right corner.
+
+## Tools and the Backpack
+
+A **Tool** is something a character can hold: a sword, a flashlight, a
+building tool. Tools in **StarterPack** are copied into every player's
+`Backpack` when the character spawns; the backpack bar at the bottom of the
+screen shows them, and the number keys (or a click) equip them. A tool needs a
+part named **Handle** (unless `RequiresHandle` is false): the character's right
+hand holds it, placed by `GripPos` and `GripRotation`.
+
+```lua
+-- A Script inside the Tool (Insert > Gameplay > Sword has a full example)
+local tool = script.Parent
+tool.Activated:Connect(function()        -- clicked while equipped
+    local character = tool.Parent
+    print(character.Name .. " swings")
+end)
+tool.Equipped:Connect(function() print("out") end)
+tool.Unequipped:Connect(function() print("away") end)
+```
+
+**Tool**: `Enabled`, `RequiresHandle`, `CanBeDropped` (Backspace drops it),
+`ManualActivationOnly` (clicks do not activate; call `:Activate()`), `ToolTip`,
+`TextureId` (the icon in the backpack bar), `GripPos`, `GripRotation`;
+events `Equipped`, `Unequipped`, `Activated`, `Deactivated`. An equipped tool is
+a child of the character; an unequipped one lives in the player's Backpack.
+`Humanoid:EquipTool(tool)` and `Humanoid:UnequipTools()` do the same from code.
+A dropped tool lies in Workspace until a character touches it.
+
+**Built-in GUI**: `StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)`
+hides the backpack bar (`PlayerList` the leaderboard, `All` both);
+`:GetCoreGuiEnabled(type)` reads it. Call it from a LocalScript.
+
+## Terrain
+
+`workspace.Terrain` is smooth voxel terrain, like Roblox's: a grid of 2-stud
+voxels, each with a material and how full it is. Make it with the **Terrain
+Editor** (View > Terrain Editor) or from scripts:
+
+```lua
+local terrain = workspace.Terrain
+terrain:FillBlock(CFrame.new(0, -4, 0), Vector3.new(200, 8, 200), Enum.Material.Grass)
+terrain:FillBall(Vector3.new(20, 6, 0), 10, Enum.Material.Rock)
+terrain:FillCylinder(CFrame.new(-30, 0, 0), 4, 12, Enum.Material.Water) -- height, radius
+terrain:FillBall(Vector3.new(0, 0, 0), 6, Enum.Material.Air)             -- Air carves
+terrain:SetMaterialColor(Enum.Material.Grass, Color3.fromRGB(110, 160, 70))
+terrain:Clear()
+```
+
+Terrain materials: Grass, LeafyGrass, Ground, Mud, Sand, Sandstone, Rock,
+Slate, Basalt, Limestone, CrackedLava, Salt, Snow, Glacier, Ice, Asphalt,
+Pavement, Concrete, Brick, Cobblestone, WoodPlanks and Water (others raise an
+error). Characters stand on terrain and swim in terrain water (Space swims
+up). `workspace:Raycast` hits terrain: `result.Instance` is the Terrain and
+`result.Material` the voxel's material. The Terrain's `WaterColor` and
+`WaterTransparency` properties colour the water. Changes made by the server
+reach every client.
 
 ## Physics
 
@@ -735,7 +799,7 @@ RIFT adds the Luau helpers people use most: `math.clamp`, `math.sign`,
 - **Units**: gravity is 30 studs/s² (Roblox: 196.2) and the default character walks at 8 and jumps with 12, which feel similar at RIFT's scale.
 - `Instance.new("Script")` is not supported (code lives in files): clone a Script instead.
 - Reading or writing a member that does not exist is an error.
-- Only the classes listed above exist (no Beams, ParticleEmitters, constraints, Terrain, ...). MeshParts collide as their bounding box.
+- Only the classes listed above exist (no Beams, ParticleEmitters, constraints, ...). MeshParts collide as their bounding box.
 - DataStores save to local files and never fail or throttle; `HttpService` has no network functions.
 - `game:Message`, `game:Win`, `game:Lose` and the global service shortcuts are RIFT additions.
 

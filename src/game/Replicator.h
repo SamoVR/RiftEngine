@@ -30,7 +30,7 @@ public:
 
     // Copies the server's world to the (empty) client scene and starts listening.
     void start();
-    // Per frame, after physics.
+    // Per frame, after physics: moved parts and changed terrain chunks.
     void syncTransforms();
     // The character the client owns (0 = none).
     void setLocalCharacter(uint64_t id) { character_ = id; }
@@ -62,6 +62,8 @@ private:
     int applying_ = 0;           // > 0 while copying in either direction (no echo)
     uint64_t character_ = 0;
     std::unordered_map<uint64_t, Sent> sent_; // last transform sent per part
+    uint64_t terrainRevision_ = 0;            // the server terrain's revision last sent
+    std::unordered_map<ChunkKey, uint64_t, ChunkKeyHash> terrainSent_; // server chunk revisions sent
 
     void added(Instance& i);
     void removing(Instance& i);

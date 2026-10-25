@@ -2,16 +2,20 @@
 //
 // Renderer.h -- draws a Scene into a Framebuffer.
 //
-// Frame: sun shadow map -> opaque parts -> sky -> editor grid -> transparent
-// parts (back to front) -> overlay lines (selection boxes, light gizmos).
+// Frame: sun shadow map -> opaque parts and terrain -> sky -> editor grid ->
+// terrain water -> transparent parts (back to front) -> overlay lines
+// (selection boxes, light gizmos).
 // Lighting comes from the Lighting service (ClockTime moves the sun; sky,
 // ambient and fog colours; GlobalShadows) plus up to 16 Point/SpotLights.
 //
 #include "render/Framebuffer.h"
 #include "render/GpuMesh.h"
 #include "render/Shader.h"
+#include "render/TerrainGpu.h"
 #include "render/TextureCache.h"
 #include "scene/Scene.h"
+
+#include <chrono>
 
 #include <array>
 #include <memory>
@@ -91,7 +95,9 @@ private:
     };
     struct LineVertex { glm::vec3 pos; glm::vec4 color; };
 
-    std::unique_ptr<Shader> partShader_, shadowShader_, skyShader_, gridShader_, lineShader_;
+    std::unique_ptr<Shader> partShader_, shadowShader_, skyShader_, gridShader_, lineShader_, terrainShader_, waterShader_;
+    TerrainGpu terrain_;
+    std::chrono::steady_clock::time_point start_ = std::chrono::steady_clock::now();
     std::array<std::unique_ptr<GpuMesh>, 5> primitives_;
     std::unordered_map<std::string, std::unique_ptr<GpuMesh>> models_; // null: failed to load
     ShadowMap shadowMap_;

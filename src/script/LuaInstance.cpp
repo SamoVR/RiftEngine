@@ -88,6 +88,12 @@ bool methodApplies(const std::string& name, const Instance& i) {
         { "Fire", [](const Instance& x) { return x.cls == ClassId::BindableEvent; } },
         { "Invoke", [](const Instance& x) { return x.cls == ClassId::BindableFunction; } },
         { "Activate", [](const Instance& x) { return x.cls == ClassId::Tool; } },
+        { "FillBlock", [](const Instance& x) { return x.cls == ClassId::Terrain; } },
+        { "FillBall", [](const Instance& x) { return x.cls == ClassId::Terrain; } },
+        { "FillCylinder", [](const Instance& x) { return x.cls == ClassId::Terrain; } },
+        { "Clear", [](const Instance& x) { return x.cls == ClassId::Terrain; } },
+        { "GetMaterialColor", [](const Instance& x) { return x.cls == ClassId::Terrain; } },
+        { "SetMaterialColor", [](const Instance& x) { return x.cls == ClassId::Terrain; } },
         { "Deactivate", [](const Instance& x) { return x.cls == ClassId::Tool; } },
         { "EquipTool", [](const Instance& x) { return x.cls == ClassId::Humanoid; } },
         { "SetCoreGuiEnabled", [](const Instance& x) { return x.cls == ClassId::StarterGui; } },
@@ -449,7 +455,45 @@ void LuaRuntime::Impl::registerInstance() {
         result["Normal"] = Vector3L{ hit->normal };
         result["Distance"] = hit->distance;
         if (part && part->isBasePart()) result["Material"] = EnumItem{ enumType("Material"), static_cast<int>(part->material) };
+        if (part && part->cls == ClassId::Terrain) {
+            const Material m = scene.terrain().materialAt(hit->position - hit->normal * 0.3f);
+            result["Material"] = EnumItem{ enumType("Material"), static_cast<int>(m) };
+        }
         return result;
+    };
+    // ---- Terrain (workspace.Terrain)
+    auto terrainOf = [this](const Inst& h, const char* member) -> TerrainData& {
+        Instance* i = need(h);
+        if (i->cls != ClassId::Terrain) fail(memberError(member, *i));
+        return scene.terrain();
+    };
+    auto materialOf = [](const sol::object& o) -> Material {
+        if (o.is<EnumItem>()) {
+            const EnumItem e = o.as<EnumItem>();
+            if (e.type && e.type->name == "Material" && e.value >= 0 && e.value < kMaterialCount) return static_cast<Material>(e.value);
+        }
+        fail("expected Enum.Material");
+    };
+    auto terrainMaterial = [materialOf](const sol::object& o) {
+        const Material m = materialOf(o);
+        if (m != Material::Air && !TerrainData::isTerrainMaterial(m)) fail("that material cannot be used on terrain (use Grass, Rock, Sand, Water, ...)");
+        return m;
+    };
+    m["FillBlock"] = [terrainOf, terrainMaterial](const Inst& h, const CFrame& cf, const Vector3L& size, sol::object material) {
+        terrainOf(h, "FillBlock").fillBlock(cf.toMat4(), size.v, terrainMaterial(material));
+    };
+    m["FillBall"] = [terrainOf, terrainMaterial](const Inst& h, const Vector3L& center, float radius, sol::object material) {
+        terrainOf(h, "FillBall").fillBall(center.v, radius, terrainMaterial(material));
+    };
+    m["FillCylinder"] = [terrainOf, terrainMaterial](const Inst& h, const CFrame& cf, float height, float radius, sol::object material) {
+        terrainOf(h, "FillCylinder").fillCylinder(cf.toMat4(), height, radius, terrainMaterial(material));
+    };
+    m["Clear"] = [terrainOf](const Inst& h) { terrainOf(h, "Clear").clear(); };
+    m["GetMaterialColor"] = [terrainOf, materialOf](const Inst& h, sol::object material) {
+        return terrainOf(h, "GetMaterialColor").materialColor(materialOf(material));
+    };
+    m["SetMaterialColor"] = [terrainOf, materialOf](const Inst& h, sol::object material, const Color3& color) {
+        terrainOf(h, "SetMaterialColor").setMaterialColor(materialOf(material), color);
     };
     m["GetPartBoundsInBox"] = [this](const Inst& h, const CFrame& cf, const Vector3L& size) {
         Instance* i = need(h);

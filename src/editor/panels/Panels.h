@@ -9,6 +9,7 @@
 //   OutputPanel        engine and game log
 //   ScriptEditorPanel  Lua editing, one dockable tab per script
 //   AssetBrowserPanel  the project's files, drag them into the scene
+//   TerrainPanel       Terrain Editor: generate, brushes, material colours
 //
 #include "editor/Editor.h"
 #include "game/GameSession.h"
@@ -20,6 +21,7 @@
 #include <functional>
 #include <future>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -61,6 +63,11 @@ void dropAsset(Editor& editor, const std::string& storedPath, Instance* target);
 // "Workspace.Part.Script:12: message" -> 12 (1-based), or -1. `chunk` is the
 // script's full name (the chunk name scripts run under); empty = any.
 int scriptErrorLine(const std::string& message, const std::string& chunk);
+
+// Terrain brushes and materials by name (Terrain Editor, viewport hints).
+const char* terrainBrushName(TerrainData::Brush brush);
+const char* terrainBrushIcon(TerrainData::Brush brush);
+const char* materialName(Material material);
 
 // What kind of file an asset is, by extension.
 enum class AssetKind { Folder, Image, Sound, Model, Script, Scene, Other };
@@ -105,12 +112,43 @@ private:
     float fpsTimer_ = 0.0f, fps_ = 0.0f;
     int frames_ = 0;
 
+    // Terrain brush (Terrain Editor tool active)
+    bool brushHit_ = false;            // the mouse is over a place the brush can work
+    glm::vec3 brushPoint_{ 0.0f }, brushNormal_{ 0.0f, 1.0f, 0.0f };
+    bool brushing_ = false;            // a stroke is in progress (left button held)
+    float brushTimer_ = 0.0f;
+    float strokePlane_ = 0.0f;         // Flatten: the height the stroke levels to
+    glm::vec3 strokeOrigin_{ 0.0f }, strokeNormal_{ 0.0f, 1.0f, 0.0f }; // Add: the surface where the stroke started
+
     // Writes <project>/.rift/thumbnail.png from the last rendered frame (the home screen shows it).
     void saveThumbnail(Editor& editor);
     void handleSelection(UiContext& ui, const glm::mat4& view, const glm::mat4& proj, const GuiSystem* gui);
     void drawGizmo(UiContext& ui, const glm::mat4& view, const glm::mat4& proj);
     void handleDrop(UiContext& ui);
     void drawOverlays(UiContext& ui, const glm::mat4& view, const glm::mat4& proj);
+    void handleTerrainBrush(UiContext& ui, const glm::mat4& view, const glm::mat4& proj);
+    void endStroke(Editor& editor);
+};
+
+// ---------------------------------------------------------------------------
+// The Terrain Editor: Create (generate, clear), Edit (brush tools, size,
+// strength, material swatches) and Colours (water and material colours).
+// The brush itself works in the viewport (ViewportPanel::handleTerrainBrush).
+class TerrainPanel {
+public:
+    void draw(UiContext& ui, bool* open);
+    void showEditTab() { editTabRequest_ = true; }
+
+private:
+    TerrainData::GenerateOptions generate_;
+    bool editTabRequest_ = false;
+    struct ColorEdit { Material material; Color3 before; };
+    std::optional<ColorEdit> colorEdit_; // a material colour being dragged (one undo step at the end)
+
+    void drawCreate(UiContext& ui);
+    void drawEdit(UiContext& ui);
+    void drawColors(UiContext& ui);
+    void commitColor(Editor& editor);
 };
 
 // ---------------------------------------------------------------------------

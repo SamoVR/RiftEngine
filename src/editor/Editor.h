@@ -119,6 +119,22 @@ public:
     // work (on the server's world) and the game gets no input.
     bool serverView() const { return session_ && viewSide == NetworkSide::Server; }
 
+    // ---- terrain (the Terrain Editor panel and the viewport brush)
+    struct TerrainTool {
+        bool active = false;                       // the viewport sculpts instead of selecting
+        TerrainData::Brush brush = TerrainData::Brush::Add;
+        bool fixedPlane = false;                   // Flatten: level to planeHeight, not where the stroke starts
+        float planeHeight = 0.0f;
+    };
+    TerrainTool terrainTool;
+    // A brush stroke: dabs between begin and end go straight to the terrain
+    // and become one undo step.
+    void beginTerrainStroke();
+    void endTerrainStroke(const std::string& label);
+    bool strokingTerrain() const { return stroking_; }
+    void generateTerrain(const TerrainData::GenerateOptions& options);
+    void clearTerrain();
+
     // ---- undoable edits
     CommandHistory& history() { return history_; }
     void execute(std::unique_ptr<Command> command); // while playing: applied without history
@@ -206,6 +222,7 @@ private:
     uint64_t lastSessionLog_ = 0;
     uint64_t saveCount_ = 0;
     int logListener_ = 0;
+    bool stroking_ = false;
 
     struct Preview { std::string prop; std::vector<SetPropertyCommand::Change> changes; };
     std::unique_ptr<Preview> preview_;

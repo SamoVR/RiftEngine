@@ -468,6 +468,7 @@ void GameSession::updateCharacter(Client& c, float dt) {
     CharacterController::Input in;
     in.walkSpeed = hum->walkSpeed;
     in.jumpSpeed = hum->jumpPower;
+    in.swimming = scene_->terrain().waterAt(actual + glm::vec3(0.0f, 0.3f, 0.0f)) > 0.0f; // chest-deep in terrain water
     if (!c.dead) {
         glm::vec3 wish(0.0f);
         if (c.view.keyboard) {
