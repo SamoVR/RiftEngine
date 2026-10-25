@@ -126,7 +126,7 @@ void drawInsertMenuItems(Editor& editor) {
     classItem(editor, ClassId::Sound, "Sound");
     classItem(editor, ClassId::Tool, "Tool");
     theme::tooltip("Something players hold: goes into StarterPack with a Handle part. Click activates it.");
-    if (ImGui::BeginMenu(ICON_FA_HASHTAG "  Values")) {
+    if (theme::beginMenu(ICON_FA_HASHTAG, theme::classColor(ClassId::IntValue), "Values")) {
         classItem(editor, ClassId::IntValue, "IntValue");
         classItem(editor, ClassId::NumberValue, "NumberValue");
         classItem(editor, ClassId::StringValue, "StringValue");
@@ -142,7 +142,7 @@ void drawInsertMenuItems(Editor& editor) {
     classItem(editor, ClassId::LocalScript, "LocalScript");
     theme::tooltip("Runs on the client: input, camera and GUI. Lives in StarterPlayerScripts, StarterGui or StarterCharacterScripts.");
     classItem(editor, ClassId::ModuleScript, "ModuleScript");
-    if (ImGui::BeginMenu(ICON_FA_TOWER_BROADCAST "  Communication")) {
+    if (theme::beginMenu(ICON_FA_TOWER_BROADCAST, theme::classColor(ClassId::RemoteEvent), "Communication")) {
         classItem(editor, ClassId::RemoteEvent, "RemoteEvent");
         theme::tooltip("Client <-> server messages: FireServer / OnServerEvent, FireClient / OnClientEvent.");
         classItem(editor, ClassId::RemoteFunction, "RemoteFunction");
@@ -154,7 +154,25 @@ void drawInsertMenuItems(Editor& editor) {
     }
 
     ImGui::SeparatorText("More");
-    if (ImGui::BeginMenu(ICON_FA_DESKTOP "  GUI")) {
+    if (theme::beginMenu(ICON_FA_FIRE, theme::classColor(ClassId::ParticleEmitter), "Effects")) {
+        if (theme::menuItem(theme::classIcon(ClassId::Attachment), theme::classColor(ClassId::Attachment), "Attachment")) editor.insertEffect("Attachment");
+        theme::tooltip("A point on the selected part. Beams and trails go between two; particles can come out of one.");
+        if (theme::menuItem(theme::classIcon(ClassId::ParticleEmitter), theme::classColor(ClassId::ParticleEmitter), "ParticleEmitter")) editor.insertEffect("ParticleEmitter");
+        theme::tooltip("Particles from the selected part (or a new invisible one).");
+        if (theme::menuItem(theme::classIcon(ClassId::Beam), theme::classColor(ClassId::Beam), "Beam")) editor.insertEffect("Beam");
+        theme::tooltip("Select two parts: a beam between them. One part: across it.");
+        if (theme::menuItem(theme::classIcon(ClassId::Trail), theme::classColor(ClassId::Trail), "Trail")) editor.insertEffect("Trail");
+        theme::tooltip("A fading ribbon behind the selected part as it moves.");
+        ImGui::SeparatorText("Ready-made");
+        static const char* const icons[] = { ICON_FA_FIRE, ICON_FA_SMOG, ICON_FA_WAND_MAGIC_SPARKLES, ICON_FA_BOLT, ICON_FA_WIND };
+        static const ImVec4 colors[] = { { 1.0f, 0.55f, 0.2f, 1.0f }, { 0.7f, 0.7f, 0.75f, 1.0f }, { 1.0f, 0.85f, 0.35f, 1.0f }, { 0.65f, 0.45f, 1.0f, 1.0f }, { 0.55f, 0.8f, 1.0f, 1.0f } };
+        const auto& presets = Editor::effectPresets();
+        for (size_t k = 0; k < presets.size(); ++k) {
+            if (theme::menuItem(icons[k % 5], colors[k % 5], presets[k].second.c_str())) editor.insertEffect(presets[k].first);
+        }
+        ImGui::EndMenu();
+    }
+    if (theme::beginMenu(ICON_FA_DESKTOP, theme::classColor(ClassId::ScreenGui), "GUI")) {
         classItem(editor, ClassId::ScreenGui, "ScreenGui");
         classItem(editor, ClassId::Frame, "Frame");
         classItem(editor, ClassId::TextLabel, "TextLabel");
@@ -163,9 +181,9 @@ void drawInsertMenuItems(Editor& editor) {
         classItem(editor, ClassId::ImageButton, "ImageButton");
         ImGui::EndMenu();
     }
-    if (ImGui::BeginMenu(ICON_FA_WAND_MAGIC_SPARKLES "  Gameplay")) {
+    if (theme::beginMenu(ICON_FA_WAND_MAGIC_SPARKLES, theme::color::warning, "Gameplay")) {
         for (const PartTemplate& t : partTemplates()) {
-            const char* icon = t.sceneScript ? ICON_FA_TROPHY : t.cls == ClassId::SpawnLocation ? ICON_FA_FLAG : ICON_FA_PUZZLE_PIECE;
+            const char* icon = t.sceneScript ? ICON_FA_TROPHY : t.tool ? theme::classIcon(ClassId::Tool) : t.cls == ClassId::SpawnLocation ? ICON_FA_FLAG : ICON_FA_PUZZLE_PIECE;
             const ImVec4 color = t.sceneScript ? theme::color::warning : ImVec4(t.color.r, t.color.g, t.color.b, 1.0f);
             if (theme::menuItem(icon, color, t.title.c_str())) editor.insertTemplate(t.id);
             theme::tooltip(t.description.c_str());

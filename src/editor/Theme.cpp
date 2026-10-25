@@ -189,6 +189,10 @@ const char* classIcon(ClassId cls) {
         case ClassId::StarterPack: return ICON_FA_BRIEFCASE;
         case ClassId::Tool: return ICON_FA_HAMMER;
         case ClassId::Terrain: return ICON_FA_MOUNTAIN_SUN;
+        case ClassId::Attachment: return ICON_FA_LOCATION_DOT;
+        case ClassId::ParticleEmitter: return ICON_FA_FIRE;
+        case ClassId::Beam: return ICON_FA_BOLT;
+        case ClassId::Trail: return ICON_FA_WIND;
         case ClassId::ScriptService: return ICON_FA_SCROLL;
         case ClassId::StarterGui: return ICON_FA_TABLE_COLUMNS;
         case ClassId::StarterPlayer: return ICON_FA_PERSON;
@@ -248,6 +252,10 @@ ImVec4 classColor(ClassId cls) {
         case ClassId::StarterPack: return { 0.95f, 0.65f, 0.55f, 1.0f };
         case ClassId::Tool: return { 0.85f, 0.75f, 0.45f, 1.0f };
         case ClassId::Terrain: return { 0.52f, 0.80f, 0.42f, 1.0f };
+        case ClassId::Attachment: return { 0.40f, 0.92f, 0.50f, 1.0f };
+        case ClassId::ParticleEmitter: return { 1.00f, 0.58f, 0.25f, 1.0f };
+        case ClassId::Beam: return { 0.70f, 0.50f, 1.00f, 1.0f };
+        case ClassId::Trail: return { 0.55f, 0.80f, 1.00f, 1.0f };
         case ClassId::LocalScript: return { 0.40f, 0.70f, 1.00f, 1.0f };
         case ClassId::RemoteEvent: case ClassId::RemoteFunction: return { 1.00f, 0.62f, 0.35f, 1.0f };
         case ClassId::BindableEvent: case ClassId::BindableFunction: return { 0.95f, 0.85f, 0.40f, 1.0f };
@@ -287,6 +295,20 @@ bool menuItem(const char* icon, const ImVec4& iconColor, const char* label, cons
     const bool pressed = ImGui::MenuItem(text.c_str(), shortcut, selected, enabled);
     ImGui::GetWindowDrawList()->AddText(pos, u32(iconColor, enabled ? 1.0f : 0.4f), icon);
     return pressed;
+}
+
+bool beginMenu(const char* icon, const ImVec4& iconColor, const char* label, bool enabled) {
+    const ImVec2 pos = ImGui::GetCursorScreenPos();
+    const float iconWidth = ImGui::GetFontSize() * 1.6f;
+    std::string text;
+    const float space = std::max(ImGui::CalcTextSize(" ").x, 1.0f);
+    text.assign(static_cast<size_t>(iconWidth / space + 0.5f), ' ');
+    text += label;
+    const bool open = ImGui::BeginMenu(text.c_str(), enabled);
+    // Drawn into the parent menu (BeginMenu may have switched to the submenu's window).
+    ImGuiWindow* parent = open ? ImGui::GetCurrentWindow()->ParentWindow : ImGui::GetCurrentWindow();
+    if (parent) parent->DrawList->AddText(pos, u32(iconColor, enabled ? 1.0f : 0.4f), icon);
+    return open;
 }
 
 void tooltip(const char* text) {

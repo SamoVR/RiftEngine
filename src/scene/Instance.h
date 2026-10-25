@@ -31,6 +31,8 @@ enum class ClassId : uint8_t {
     // World
     Part, SpawnLocation, MeshPart, Model, Folder, Tool, Terrain,
     PointLight, SpotLight,
+    // Effects: points on parts, and what is drawn from them
+    Attachment, ParticleEmitter, Beam, Trail,
     Sound,
     Humanoid,
     // Players and their containers (made by the engine)
@@ -64,6 +66,9 @@ enum class CameraMode : int { ThirdPerson, FirstPerson };
 enum class TextXAlignment : int { Left, Center, Right };
 enum class TextYAlignment : int { Top, Center, Bottom };
 enum class ScaleType : int { Stretch, Fit, Crop };
+enum class NormalId : int { Right, Top, Back, Left, Bottom, Front };   // +X, +Y, +Z, -X, -Y, -Z
+enum class ParticleOrientation : int { FacingCamera, FacingCameraWorldUp, VelocityParallel, VelocityPerpendicular };
+enum class TextureMode : int { Stretch, Wrap, Static };
 
 struct Attribute {
     std::string name;
@@ -156,6 +161,43 @@ struct Instance {
     glm::vec3 vector3Value{ 0.0f };
     CameraMode cameraMode = CameraMode::ThirdPerson;
     float cameraMaxZoom = 40.0f;
+
+    // ------------------------------------------------------------ effects
+    // Attachment: Position / Orientation are `position` / `rotation`, in the
+    // parent part's space. ParticleEmitter, Beam and Trail share Enabled,
+    // Texture and Brightness; their colour and transparency change over a
+    // particle's life or along the beam / trail, so they are sequences.
+    ColorSequence colorSequence;                 // Color
+    NumberSequence transparencySequence{ 0.0f }; // Transparency
+    NumberSequence sizeSequence{ 1.0f };         // ParticleEmitter.Size, Trail.WidthScale
+    NumberRange lifetime{ 5.0f, 10.0f };         // ParticleEmitter.Lifetime (seconds)
+    NumberRange speedRange{ 5.0f };              // ParticleEmitter.Speed (studs/s)
+    NumberRange rotationRange{ 0.0f };           // ParticleEmitter.Rotation (degrees at birth)
+    NumberRange rotSpeed{ 0.0f };                // ParticleEmitter.RotSpeed (degrees/s)
+    float rate = 20.0f;                          // particles per second
+    glm::vec2 spreadAngle{ 0.0f };               // degrees around the emission direction (X, Y)
+    glm::vec3 acceleration{ 0.0f };              // studs/s^2
+    float drag = 0.0f;                           // speed lost per second (exponential)
+    float lightEmission = 0.0f;                  // 0 normal blending, 1 additive (glows)
+    float lightInfluence = 0.0f;                 // how much the scene's light darkens it
+    float zOffset = 0.0f;                        // studs towards the camera
+    float timeScale = 1.0f;
+    bool lockedToPart = false;                   // particles move with the emitter
+    NormalId emissionDirection = NormalId::Top;
+    ParticleOrientation particleOrientation = ParticleOrientation::FacingCamera;
+    InstanceRef attachment0, attachment1;        // Beam, Trail: the two Attachments
+    float width0 = 1.0f, width1 = 1.0f;          // Beam: width at each end
+    float curveSize0 = 0.0f, curveSize1 = 0.0f;  // Beam: bend along each attachment's X axis
+    int segments = 10;                           // Beam: pieces along the curve
+    bool faceCamera = false;                     // Beam, Trail: always turned towards the camera
+    float textureLength = 1.0f;                  // studs per texture repeat (Wrap)
+    float textureSpeed = 1.0f;                   // Beam: texture scroll (repeats per second)
+    TextureMode textureMode = TextureMode::Stretch;
+    float trailLifetime = 2.0f;                  // Trail.Lifetime (seconds)
+    float minLength = 0.1f, maxLength = 0.0f;    // Trail: point spacing, total length (0 = no limit)
+    // Runtime (never saved): ParticleEmitter:Emit(n) / :Clear() waiting for the renderer.
+    int emitRequests = 0;
+    uint32_t clearRequests = 0;
 
     // ------------------------------------------------------------ GUI
     UDim2 guiPosition{};

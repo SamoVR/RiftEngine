@@ -88,10 +88,11 @@ bool methodApplies(const std::string& name, const Instance& i) {
         { "Fire", [](const Instance& x) { return x.cls == ClassId::BindableEvent; } },
         { "Invoke", [](const Instance& x) { return x.cls == ClassId::BindableFunction; } },
         { "Activate", [](const Instance& x) { return x.cls == ClassId::Tool; } },
+        { "Emit", [](const Instance& x) { return x.cls == ClassId::ParticleEmitter; } },
         { "FillBlock", [](const Instance& x) { return x.cls == ClassId::Terrain; } },
         { "FillBall", [](const Instance& x) { return x.cls == ClassId::Terrain; } },
         { "FillCylinder", [](const Instance& x) { return x.cls == ClassId::Terrain; } },
-        { "Clear", [](const Instance& x) { return x.cls == ClassId::Terrain; } },
+        { "Clear", [](const Instance& x) { return x.cls == ClassId::Terrain || x.cls == ClassId::ParticleEmitter; } },
         { "GetMaterialColor", [](const Instance& x) { return x.cls == ClassId::Terrain; } },
         { "SetMaterialColor", [](const Instance& x) { return x.cls == ClassId::Terrain; } },
         { "Deactivate", [](const Instance& x) { return x.cls == ClassId::Tool; } },
@@ -370,6 +371,29 @@ void LuaRuntime::Impl::registerInstance() {
         return true;
     };
 
+    // ---- particles
+    m["Emit"] = [this](const Inst& h, sol::optional<double> count) {
+        Instance* i = need(h);
+        if (i->cls != ClassId::ParticleEmitter) fail(memberError("Emit", *i));
+        const int n = std::clamp(static_cast<int>(count.value_or(16.0)), 0, 10000);
+        i->emitRequests += n;
+        // Particles are drawn by the clients: the server's Emit reaches them too.
+        if (!isClient()) {
+            for (int k = 0; k < session.clientCount(); ++k)
+                if (Instance* copy = session.client(k).scene->find(i->id)) copy->emitRequests += n;
+        }
+    };
+    m["Clear"] = [this](const Inst& h) {
+        Instance* i = need(h);
+        if (i->cls == ClassId::Terrain) { scene.terrain().clear(); return; }
+        if (i->cls != ClassId::ParticleEmitter) fail(memberError("Clear", *i));
+        ++i->clearRequests;
+        if (!isClient()) {
+            for (int k = 0; k < session.clientCount(); ++k)
+                if (Instance* copy = session.client(k).scene->find(i->id)) ++copy->clearRequests;
+        }
+    };
+
     // ---- tools
     m["Activate"] = [this](const Inst& h) {
         Instance* i = need(h);
@@ -488,7 +512,6 @@ void LuaRuntime::Impl::registerInstance() {
     m["FillCylinder"] = [terrainOf, terrainMaterial](const Inst& h, const CFrame& cf, float height, float radius, sol::object material) {
         terrainOf(h, "FillCylinder").fillCylinder(cf.toMat4(), height, radius, terrainMaterial(material));
     };
-    m["Clear"] = [terrainOf](const Inst& h) { terrainOf(h, "Clear").clear(); };
     m["GetMaterialColor"] = [terrainOf, materialOf](const Inst& h, sol::object material) {
         return terrainOf(h, "GetMaterialColor").materialColor(materialOf(material));
     };

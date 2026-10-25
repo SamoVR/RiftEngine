@@ -150,6 +150,7 @@ void ViewportPanel::draw(UiContext& ui) {
     RenderSettings rs;
     rs.editor = editView;
     rs.grid = settings.showGrid;
+    rs.dt = editor.session() && editor.session()->paused() ? 0.0f : ui.dt; // effects also play while editing
     rs.gridStep = settings.gridStep;
     rs.wireframe = settings.wireframe;
     rs.shadows = settings.shadows;

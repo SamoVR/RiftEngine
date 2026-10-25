@@ -124,6 +124,7 @@ The toolbar has buttons for a part and a script; the arrow next to them and the
 - **Parts**: Block, Sphere, Cylinder, Wedge, Corner Wedge, Spawn Location. New parts land on the surface in the middle of the view.
 - **Objects**: Model, Folder, Point Light, Spot Light, Sound, value objects.
 - **Code**: Script (server), LocalScript (client), ModuleScript, and under Communication: RemoteEvent, RemoteFunction, BindableEvent, BindableFunction. Scripts go inside the selected object, or into ScriptService / StarterPlayerScripts / ReplicatedStorage; remotes into ReplicatedStorage.
+- **Effects**: Attachment, ParticleEmitter, Beam and Trail, and ready-made Fire, Smoke, Sparkles, Magic Beam and Speed Trail. Select two parts before inserting a beam to stretch it between them (one part: across it); a trail goes on the selected part. Their attachments are made and linked for you. In the Properties panel, click a colour bar or a curve to edit it.
 - **GUI**: ScreenGui, Frame, TextLabel, TextButton, ImageLabel, ImageButton. They go into the selected ScreenGui or Frame, or a new ScreenGui in StarterGui.
 - **Gameplay**: ready-made pieces with their scripts: Kill Brick, Spinner, Coin, Jump Pad, Moving Platform, Checkpoint, Door, Finish Line, a Sword and other tools, and a Leaderboard script. Their scripts are ordinary Lua: open them to see how they work. Tools go into StarterPack, so every player spawns with them.
 

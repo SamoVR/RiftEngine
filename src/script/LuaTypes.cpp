@@ -307,6 +307,89 @@ void LuaRuntime::Impl::registerTypes() {
         sol::meta_function::equal_to, [](const UDim2& a, const UDim2& b) { return a == b; },
         sol::meta_function::to_string, [](const UDim2& u) { return "{" + num(u.xScale) + ", " + num(u.xOffset) + "}, {" + num(u.yScale) + ", " + num(u.yOffset) + "}"; });
 
+    // ------------------------------------------------------------ NumberRange, NumberSequence, ColorSequence
+    lua.new_usertype<NumberRange>("NumberRange",
+        "new", sol::factories([](float lo, sol::optional<float> hi) {
+            const float h = hi.value_or(lo);
+            if (h < lo) fail("NumberRange.new: max must not be less than min");
+            return NumberRange(lo, h);
+        }),
+        "Min", sol::property([](const NumberRange& r) { return r.min; }),
+        "Max", sol::property([](const NumberRange& r) { return r.max; }),
+        sol::meta_function::equal_to, [](const NumberRange& a, const NumberRange& b) { return a == b; },
+        sol::meta_function::to_string, [](const NumberRange& r) { return num(r.min) + " " + num(r.max); });
+
+    lua.new_usertype<NumberKeypoint>("NumberSequenceKeypoint",
+        "new", sol::factories([](float t, float v, sol::optional<float> e) { return NumberKeypoint{ t, v, e.value_or(0.0f) }; }),
+        "Time", sol::property([](const NumberKeypoint& k) { return k.time; }),
+        "Value", sol::property([](const NumberKeypoint& k) { return k.value; }),
+        "Envelope", sol::property([](const NumberKeypoint& k) { return k.envelope; }),
+        sol::meta_function::equal_to, [](const NumberKeypoint& a, const NumberKeypoint& b) { return a == b; },
+        sol::meta_function::to_string, [](const NumberKeypoint& k) { return num(k.time) + " " + num(k.value) + " " + num(k.envelope); });
+
+    auto keypointList = [](const sol::table& t, const char* what) {
+        if (t.size() < 2) fail(std::string(what) + ".new needs at least 2 keypoints");
+        if (t.size() > 20) fail(std::string(what) + ".new takes at most 20 keypoints");
+    };
+    lua.new_usertype<NumberSequence>("NumberSequence",
+        "new", sol::factories(
+            [](float v) { return NumberSequence(v); },
+            [](float a, float b) { return NumberSequence(a, b); },
+            [keypointList](const sol::table& t) {
+                keypointList(t, "NumberSequence");
+                std::vector<NumberKeypoint> keys;
+                for (size_t i = 1; i <= t.size(); ++i) {
+                    sol::object o = t[i];
+                    if (!o.is<NumberKeypoint>()) fail("NumberSequence.new expects NumberSequenceKeypoints");
+                    keys.push_back(o.as<NumberKeypoint>());
+                }
+                return NumberSequence(std::move(keys));
+            }),
+        "Keypoints", sol::property([this](const NumberSequence& s) {
+            sol::table out = lua.create_table();
+            for (size_t i = 0; i < s.keys.size(); ++i) out[i + 1] = s.keys[i];
+            return out;
+        }),
+        sol::meta_function::equal_to, [](const NumberSequence& a, const NumberSequence& b) { return a == b; },
+        sol::meta_function::to_string, [](const NumberSequence& s) {
+            std::string out;
+            for (const NumberKeypoint& k : s.keys) out += num(k.time) + " " + num(k.value) + " " + num(k.envelope) + " ";
+            return out;
+        });
+
+    lua.new_usertype<ColorKeypoint>("ColorSequenceKeypoint",
+        "new", sol::factories([](float t, const Color3& c) { return ColorKeypoint{ t, c }; }),
+        "Time", sol::property([](const ColorKeypoint& k) { return k.time; }),
+        "Value", sol::property([](const ColorKeypoint& k) { return k.color; }),
+        sol::meta_function::equal_to, [](const ColorKeypoint& a, const ColorKeypoint& b) { return a == b; },
+        sol::meta_function::to_string, [](const ColorKeypoint& k) { return num(k.time) + " " + num(k.color.r) + " " + num(k.color.g) + " " + num(k.color.b); });
+
+    lua.new_usertype<ColorSequence>("ColorSequence",
+        "new", sol::factories(
+            [](const Color3& c) { return ColorSequence(c); },
+            [](const Color3& a, const Color3& b) { return ColorSequence(a, b); },
+            [keypointList](const sol::table& t) {
+                keypointList(t, "ColorSequence");
+                std::vector<ColorKeypoint> keys;
+                for (size_t i = 1; i <= t.size(); ++i) {
+                    sol::object o = t[i];
+                    if (!o.is<ColorKeypoint>()) fail("ColorSequence.new expects ColorSequenceKeypoints");
+                    keys.push_back(o.as<ColorKeypoint>());
+                }
+                return ColorSequence(std::move(keys));
+            }),
+        "Keypoints", sol::property([this](const ColorSequence& s) {
+            sol::table out = lua.create_table();
+            for (size_t i = 0; i < s.keys.size(); ++i) out[i + 1] = s.keys[i];
+            return out;
+        }),
+        sol::meta_function::equal_to, [](const ColorSequence& a, const ColorSequence& b) { return a == b; },
+        sol::meta_function::to_string, [](const ColorSequence& s) {
+            std::string out;
+            for (const ColorKeypoint& k : s.keys) out += num(k.time) + " " + num(k.color.r) + " " + num(k.color.g) + " " + num(k.color.b) + " ";
+            return out;
+        });
+
     // ------------------------------------------------------------ CFrame
     lua.new_usertype<CFrame>("CFrame",
         "new", sol::factories(
@@ -414,6 +497,13 @@ sol::object LuaRuntime::Impl::toLua(const Value& v, const PropertyInfo* prop) {
         case ValueType::Vector2: return sol::make_object(lua, Vector2L{ std::get<glm::vec2>(v) });
         case ValueType::Color3: return sol::make_object(lua, std::get<Color3>(v));
         case ValueType::UDim2: return sol::make_object(lua, std::get<UDim2>(v));
+        case ValueType::NumberRange: return sol::make_object(lua, std::get<NumberRange>(v));
+        case ValueType::NumberSequence: return sol::make_object(lua, std::get<NumberSequence>(v));
+        case ValueType::ColorSequence: return sol::make_object(lua, std::get<ColorSequence>(v));
+        case ValueType::Ref: {
+            const uint64_t id = std::get<InstanceRef>(v).id;
+            return id && scene.find(id) ? instanceFor(id) : nil();
+        }
         case ValueType::Enum: {
             const int index = std::get<EnumValue>(v).index;
             if (prop && !prop->enumType.empty()) {
@@ -460,6 +550,25 @@ Value LuaRuntime::Impl::fromLua(const sol::object& o, const PropertyInfo& prop, 
         case ValueType::UDim2:
             if (o.is<UDim2>()) return o.as<UDim2>();
             return wrong("a UDim2");
+        case ValueType::NumberRange:
+            if (o.is<NumberRange>()) return o.as<NumberRange>();
+            if (t == sol::type::number) return NumberRange(static_cast<float>(o.as<double>()));
+            return wrong("a NumberRange");
+        case ValueType::NumberSequence:
+            if (o.is<NumberSequence>()) return o.as<NumberSequence>();
+            if (t == sol::type::number) return NumberSequence(static_cast<float>(o.as<double>()));
+            return wrong("a NumberSequence");
+        case ValueType::ColorSequence:
+            if (o.is<ColorSequence>()) return o.as<ColorSequence>();
+            if (o.is<Color3>()) return ColorSequence(o.as<Color3>());
+            return wrong("a ColorSequence");
+        case ValueType::Ref: {
+            if (t == sol::type::lua_nil || t == sol::type::none) return InstanceRef{};
+            if (!o.is<Inst>()) return wrong("an Attachment");
+            Instance* target = need(o.as<Inst>());
+            if (target->cls != ClassId::Attachment) return wrong("an Attachment");
+            return InstanceRef{ target->id };
+        }
         case ValueType::Enum: {
             if (o.is<EnumItem>()) {
                 const EnumItem e = o.as<EnumItem>();

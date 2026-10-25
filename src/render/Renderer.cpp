@@ -79,7 +79,7 @@ bool Renderer::init(std::string* error) {
     if (!load(partShader_, "part.vert", "part.frag") || !load(shadowShader_, "shadow.vert", "shadow.frag")
         || !load(skyShader_, "sky.vert", "sky.frag") || !load(gridShader_, "grid.vert", "grid.frag")
         || !load(lineShader_, "line.vert", "line.frag") || !load(terrainShader_, "terrain.vert", "terrain.frag")
-        || !load(waterShader_, "terrain.vert", "water.frag")) {
+        || !load(waterShader_, "terrain.vert", "water.frag") || !load(effectShader_, "effect.vert", "effect.frag")) {
         return false;
     }
     for (int i = 0; i < 5; ++i) primitives_[i] = std::make_unique<GpuMesh>(primitiveMesh(static_cast<PartShape>(i)));
@@ -292,6 +292,37 @@ void Renderer::addEditorOverlays(const Scene& scene, const RenderSettings& setti
             }
         }
     }
+
+    // Attachments: a small diamond with its axes, shown when it (or its part,
+    // or a beam / trail / emitter using it) is selected, or when Visible is on.
+    std::unordered_set<uint64_t> shown;
+    for (uint64_t id : settings.selected) {
+        const Instance* i = scene.find(id);
+        if (!i) continue;
+        if (i->cls == ClassId::Attachment) shown.insert(i->id);
+        if (i->cls == ClassId::Beam || i->cls == ClassId::Trail) { shown.insert(i->attachment0.id); shown.insert(i->attachment1.id); }
+        if (i->cls == ClassId::ParticleEmitter && i->parent && i->parent->cls == ClassId::Attachment) shown.insert(i->parent->id);
+        for (const Instance* c : i->children) if (c->cls == ClassId::Attachment) shown.insert(c->id);
+    }
+    Scene::forEachDescendant(const_cast<Instance&>(scene.workspace()), [&](Instance& a) {
+        if (a.cls != ClassId::Attachment || (!a.visible && !shown.count(a.id))) return;
+        const glm::mat4 f = a.worldFrame();
+        const glm::vec3 p(f[3]);
+        const bool selected = settings.selected.count(a.id) != 0;
+        const glm::vec4 green(0.35f, 0.95f, 0.45f, selected ? 1.0f : 0.8f);
+        const float r = 0.22f;
+        const glm::vec3 d[6] = { { r, 0, 0 }, { -r, 0, 0 }, { 0, r, 0 }, { 0, -r, 0 }, { 0, 0, r }, { 0, 0, -r } };
+        // Octahedron edges.
+        for (int u = 0; u < 2; ++u)
+            for (int v = 2; v < 4; ++v) line(p + d[u], p + d[v], green, true);
+        for (int u = 0; u < 4; ++u)
+            for (int w = 4; w < 6; ++w) line(p + d[u], p + d[w], green, true);
+        if (selected) {
+            // Its axes: X (red, where beams curve) and Y (green, where particles leave).
+            line(p, p + glm::normalize(glm::vec3(f[0])) * 0.8f, glm::vec4(0.93f, 0.33f, 0.36f, 1.0f), true);
+            line(p, p + glm::normalize(glm::vec3(f[1])) * 0.8f, glm::vec4(0.45f, 0.82f, 0.36f, 1.0f), true);
+        }
+    });
 }
 
 // ============================================================================
@@ -469,6 +500,19 @@ void Renderer::render(const Scene& scene, const RenderCamera& camera, const Rend
         if (settings.wireframe) glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
         drawParts(transparent, settings);
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+    }
+    // Particles, beams and trails: premultiplied, so LightEmission can turn
+    // normal blending (0) into adding light (1) per particle.
+    {
+        const glm::vec3 sceneLight = glm::clamp(sun.ambient + sun.color * std::max(sun.direction.y, 0.0f) * 0.7f, glm::vec3(0.05f), glm::vec3(1.0f));
+        effects_.update(scene, settings.dt, camera.position, sceneLight);
+        stats_.particles = effects_.particleCount();
+        glDepthMask(GL_FALSE);
+        glDisable(GL_CULL_FACE);
+        glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+        effects_.draw(*effectShader_, textures_, viewProj);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        ++stats_.drawCalls;
     }
     glDepthMask(GL_TRUE);
 

@@ -3,11 +3,12 @@
 // Renderer.h -- draws a Scene into a Framebuffer.
 //
 // Frame: sun shadow map -> opaque parts and terrain -> sky -> editor grid ->
-// terrain water -> transparent parts (back to front) -> overlay lines
-// (selection boxes, light gizmos).
+// terrain water -> transparent parts (back to front) -> particles, beams and
+// trails -> overlay lines (selection boxes, light and attachment gizmos).
 // Lighting comes from the Lighting service (ClockTime moves the sun; sky,
 // ambient and fog colours; GlobalShadows) plus up to 16 Point/SpotLights.
 //
+#include "render/Effects.h"
 #include "render/Framebuffer.h"
 #include "render/GpuMesh.h"
 #include "render/Shader.h"
@@ -44,6 +45,7 @@ struct RenderSettings {
     uint64_t hovered = 0;
     glm::vec3 selectionColor{ 0.62f, 0.45f, 1.0f };
     glm::vec3 hoverColor{ 0.85f, 0.8f, 1.0f };
+    float dt = 0.0f;               // seconds since the last frame: moves particles and trails (0 = frozen)
 };
 
 struct RenderStats {
@@ -51,6 +53,7 @@ struct RenderStats {
     int drawCalls = 0;
     int triangles = 0;
     int lights = 0;
+    int particles = 0;
 };
 
 // Where the sun is and how bright things are, from Lighting's properties.
@@ -95,8 +98,9 @@ private:
     };
     struct LineVertex { glm::vec3 pos; glm::vec4 color; };
 
-    std::unique_ptr<Shader> partShader_, shadowShader_, skyShader_, gridShader_, lineShader_, terrainShader_, waterShader_;
+    std::unique_ptr<Shader> partShader_, shadowShader_, skyShader_, gridShader_, lineShader_, terrainShader_, waterShader_, effectShader_;
     TerrainGpu terrain_;
+    Effects effects_;
     std::chrono::steady_clock::time_point start_ = std::chrono::steady_clock::now();
     std::array<std::unique_ptr<GpuMesh>, 5> primitives_;
     std::unordered_map<std::string, std::unique_ptr<GpuMesh>> models_; // null: failed to load

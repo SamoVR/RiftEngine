@@ -560,6 +560,169 @@ namespace {
         scene.destroy(detached);
         return std::make_unique<CreateCommand>(label, std::move(snapshot), std::vector<PlacedSubtree>{ { parent ? parent->id : 0, Scene::npos } });
     }
+
+    // The same for several new instances, each with its own parent.
+    std::unique_ptr<CreateCommand> commitNewMany(Scene& scene, const std::vector<std::pair<Instance*, Instance*>>& items, const std::string& label) {
+        std::vector<const Instance*> roots;
+        std::vector<PlacedSubtree> placement;
+        for (const auto& [detached, parent] : items) {
+            roots.push_back(detached);
+            placement.push_back({ parent ? parent->id : 0, Scene::npos });
+        }
+        nlohmann::json snapshot = SceneIO::subtreesToJson(roots);
+        for (const auto& item : items) scene.destroy(item.first);
+        return std::make_unique<CreateCommand>(label, std::move(snapshot), std::move(placement));
+    }
+
+    // Ready-made particle effects.
+    void presetFire(Instance& e) {
+        e.name = "Fire";
+        e.colorSequence = ColorSequence(std::vector<ColorKeypoint>{ { 0.0f, Color3(1.0f, 0.82f, 0.32f) }, { 0.3f, Color3(1.0f, 0.45f, 0.08f) }, { 1.0f, Color3(0.65f, 0.1f, 0.03f) } });
+        e.transparencySequence = NumberSequence(std::vector<NumberKeypoint>{ { 0.0f, 0.55f, 0.0f }, { 0.25f, 0.3f, 0.0f }, { 1.0f, 1.0f, 0.0f } });
+        e.sizeSequence = NumberSequence(std::vector<NumberKeypoint>{ { 0.0f, 1.6f, 0.3f }, { 0.6f, 1.2f, 0.2f }, { 1.0f, 0.2f, 0.0f } });
+        e.lifetime = NumberRange(0.6f, 1.1f);
+        e.speedRange = NumberRange(2.5f, 5.0f);
+        e.rate = 45.0f;
+        e.spreadAngle = { 18.0f, 18.0f };
+        e.acceleration = { 0.0f, 5.0f, 0.0f };
+        e.drag = 1.0f;
+        e.rotationRange = NumberRange(0.0f, 360.0f);
+        e.rotSpeed = NumberRange(-90.0f, 90.0f);
+        e.lightEmission = 0.75f; // glows, but keeps its colour in daylight
+    }
+    void presetSmoke(Instance& e) {
+        e.name = "Smoke";
+        e.colorSequence = ColorSequence(Color3(0.62f, 0.62f, 0.64f), Color3(0.4f, 0.4f, 0.42f));
+        e.transparencySequence = NumberSequence(std::vector<NumberKeypoint>{ { 0.0f, 1.0f, 0.0f }, { 0.15f, 0.55f, 0.0f }, { 1.0f, 1.0f, 0.0f } });
+        e.sizeSequence = NumberSequence(1.5f, 6.0f);
+        e.lifetime = NumberRange(3.0f, 5.0f);
+        e.speedRange = NumberRange(1.0f, 2.5f);
+        e.rate = 8.0f;
+        e.spreadAngle = { 12.0f, 12.0f };
+        e.acceleration = { 0.6f, 1.2f, 0.0f };
+        e.drag = 0.3f;
+        e.rotationRange = NumberRange(0.0f, 360.0f);
+        e.rotSpeed = NumberRange(-25.0f, 25.0f);
+        e.lightInfluence = 1.0f;
+    }
+    void presetSparkles(Instance& e) {
+        e.name = "Sparkles";
+        e.colorSequence = ColorSequence(Color3(1.0f, 0.85f, 0.35f), Color3(1.0f, 1.0f, 1.0f));
+        e.transparencySequence = NumberSequence(0.0f, 1.0f);
+        e.sizeSequence = NumberSequence(0.4f, 0.0f);
+        e.lifetime = NumberRange(0.8f, 1.6f);
+        e.speedRange = NumberRange(3.0f, 7.0f);
+        e.rate = 25.0f;
+        e.spreadAngle = { 180.0f, 180.0f };
+        e.acceleration = { 0.0f, -3.0f, 0.0f };
+        e.drag = 1.5f;
+        e.lightEmission = 1.0f;
+        e.brightness = 2.0f;
+    }
+}
+
+const std::vector<std::pair<std::string, std::string>>& Editor::effectPresets() {
+    static const std::vector<std::pair<std::string, std::string>> list = {
+        { "Fire", "Fire" }, { "Smoke", "Smoke" }, { "Sparkles", "Sparkles" }, { "MagicBeam", "Magic Beam" }, { "SpeedTrail", "Speed Trail" },
+    };
+    return list;
+}
+
+Instance* Editor::insertEffect(const std::string& kind) {
+    Scene& s = scene();
+    std::vector<Instance*> parts;
+    for (Instance* i : selectedInstances()) if (i->isBasePart()) parts.push_back(i);
+    Instance* selected = selection_.empty() ? nullptr : s.find(primary());
+    Instance* part = parts.empty() ? nullptr : parts.back();
+    const bool emitter = kind == "ParticleEmitter" || kind == "Fire" || kind == "Smoke" || kind == "Sparkles";
+    const bool beam = kind == "Beam" || kind == "MagicBeam";
+    const bool trail = kind == "Trail" || kind == "SpeedTrail";
+
+    std::vector<std::pair<Instance*, Instance*>> items; // new instance, parent
+    uint64_t selectId = 0;
+    if (kind == "Attachment") {
+        if (!part) {
+            notify("Select a part first: attachments go inside parts", NoticeLevel::Warning);
+            return nullptr;
+        }
+        Instance* a = s.create(ClassId::Attachment);
+        items.emplace_back(a, part);
+        selectId = a->id;
+    } else if (emitter) {
+        // Into the selected part or attachment; otherwise a new invisible part to hold it.
+        Instance* holder = selected && (selected->isBasePart() || selected->cls == ClassId::Attachment) ? selected : nullptr;
+        Instance* e = s.create(ClassId::ParticleEmitter);
+        if (kind == "Fire") presetFire(*e);
+        else if (kind == "Smoke") presetSmoke(*e);
+        else if (kind == "Sparkles") presetSparkles(*e);
+        if (!holder) {
+            Instance* p = s.create(ClassId::Part);
+            p->name = e->name == "ParticleEmitter" ? "Emitter" : e->name;
+            p->size = { 2.0f, 1.0f, 2.0f };
+            p->transparency = 1.0f;
+            p->canCollide = false;
+            p->castShadow = false;
+            placeAt(*p, insertionParent(), placementPoint(p->size));
+            s.setParent(e, p);
+            items.emplace_back(p, insertionParent());
+        } else {
+            items.emplace_back(e, holder);
+        }
+        selectId = e->id;
+    } else if (beam || trail) {
+        if (!part) {
+            notify(beam ? "Select one or two parts first: the beam goes between them" : "Select a part first: the trail follows it", NoticeLevel::Warning);
+            return nullptr;
+        }
+        // Two attachments: on two parts (beam between them), or at the ends of one part.
+        Instance* first = parts.size() >= 2 ? parts[parts.size() - 2] : part;
+        Instance* second = part;
+        Instance* a0 = s.create(ClassId::Attachment);
+        Instance* a1 = s.create(ClassId::Attachment);
+        a0->name = beam ? "BeamStart" : "TrailTop";
+        a1->name = beam ? "BeamEnd" : "TrailBottom";
+        if (trail) {
+            a0->position = { 0.0f, part->size.y * 0.5f, 0.0f };
+            a1->position = { 0.0f, -part->size.y * 0.5f, 0.0f };
+        } else if (first == second) {
+            a0->position = { -part->size.x * 0.5f, 0.0f, 0.0f };
+            a1->position = { part->size.x * 0.5f, 0.0f, 0.0f };
+        }
+        Instance* fx = s.create(beam ? ClassId::Beam : ClassId::Trail);
+        fx->attachment0.id = a0->id;
+        fx->attachment1.id = a1->id;
+        if (kind == "MagicBeam") {
+            fx->name = "MagicBeam";
+            fx->colorSequence = ColorSequence(Color3(0.65f, 0.35f, 1.0f), Color3(0.3f, 0.85f, 1.0f));
+            fx->transparencySequence = NumberSequence(std::vector<NumberKeypoint>{ { 0.0f, 0.6f, 0.0f }, { 0.5f, 0.1f, 0.0f }, { 1.0f, 0.6f, 0.0f } });
+            fx->lightEmission = 0.45f;
+            fx->brightness = 1.3f;
+            fx->width0 = fx->width1 = 0.6f;
+            fx->curveSize0 = 3.0f;
+            fx->curveSize1 = -3.0f;
+            fx->segments = 24;
+            fx->faceCamera = true;
+        } else if (kind == "SpeedTrail") {
+            fx->name = "SpeedTrail";
+            fx->colorSequence = ColorSequence(Color3(1.0f, 1.0f, 1.0f), Color3(0.55f, 0.4f, 1.0f));
+            fx->transparencySequence = NumberSequence(0.15f, 1.0f);
+            fx->sizeSequence = NumberSequence(1.0f, 0.0f);
+            fx->trailLifetime = 0.45f;
+            fx->lightEmission = 0.6f;
+        } else if (beam) {
+            fx->faceCamera = true;
+        }
+        items.emplace_back(a0, first);
+        items.emplace_back(a1, second);
+        items.emplace_back(fx, first);
+        selectId = fx->id;
+    } else {
+        return nullptr;
+    }
+    const std::string title = kind == "MagicBeam" ? "Magic Beam" : kind == "SpeedTrail" ? "Speed Trail" : kind;
+    execute(commitNewMany(s, items, "Insert " + title));
+    selection_ = { selectId };
+    return s.find(selectId);
 }
 
 Instance* Editor::createScript(Instance* parent, ClassId cls, const std::string& name, const std::string& source) {
@@ -622,6 +785,8 @@ Instance* Editor::insert(ClassId cls, PartShape shape) {
         i->guiPosition = { 0.5f, 0.0f, 0.5f, 0.0f };
         i->anchorPoint = { 0.5f, 0.5f };
         parent = container;
+    } else if (cls == ClassId::Attachment || cls == ClassId::ParticleEmitter || cls == ClassId::Beam || cls == ClassId::Trail) {
+        return insertEffect(classInfo(cls).name);
     } else if (cls == ClassId::PointLight || cls == ClassId::SpotLight || cls == ClassId::Sound) {
         i = s.create(cls);
         if (selected && selected->isBasePart()) parent = selected; // attached to the part
@@ -733,6 +898,14 @@ nlohmann::json Editor::freshIds(nlohmann::json snapshot) {
         if (e.contains("parent") && e["parent"].is_string()) {
             auto it = remap.find(e["parent"].get<std::string>());
             if (it != remap.end()) e["parent"] = it->second;
+        }
+        // References inside the copy (a Beam's attachments) follow too.
+        if (e.contains("props") && e["props"].is_object()) {
+            for (const char* ref : { "Attachment0", "Attachment1" }) {
+                if (!e["props"].contains(ref) || !e["props"][ref].is_string()) continue;
+                auto it = remap.find(e["props"][ref].get<std::string>());
+                if (it != remap.end()) e["props"][ref] = it->second;
+            }
         }
     }
     // Each copied script gets its own file (Roblox copies the Source).

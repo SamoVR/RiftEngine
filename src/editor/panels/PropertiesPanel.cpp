@@ -1,4 +1,5 @@
 #include "editor/panels/Panels.h"
+#include "editor/panels/SequenceEditors.h"
 #include "editor/Theme.h"
 #include "core/Paths.h"
 #include "platform/Platform.h"
@@ -395,6 +396,55 @@ void PropertiesPanel::drawProperty(UiContext& ui, const std::vector<Instance*>& 
                 if (ImGui::Button(ICON_FA_XMARK, ImVec2(button, button))) editor.setProperty(ids, prop.name, AssetPath{});
                 theme::tooltip("Clear");
             }
+            break;
+        }
+        case ValueType::NumberRange: {
+            NumberRange r = std::get<NumberRange>(value);
+            if (numberRangeField("##v", r, dragSpeed(prop), lo, hi)) editor.previewProperty(ids, prop.name, r);
+            break;
+        }
+        case ValueType::NumberSequence: {
+            if (numberSequencePreview("##v", std::get<NumberSequence>(value), lo, hi, prop.bounded())) ImGui::OpenPopup("##sequence");
+            if (ImGui::BeginPopup("##sequence")) {
+                ImGui::PushFont(theme::fonts().medium, 0.0f);
+                ImGui::TextUnformatted(prop.name.c_str());
+                ImGui::PopFont();
+                if (!prop.tooltip.empty()) {
+                    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ImGui::GetFontSize() * 26.0f);
+                    ImGui::TextColored(theme::color::textDim, "%s", prop.tooltip.c_str());
+                    ImGui::PopTextWrapPos();
+                }
+                ImGui::Separator();
+                NumberSequence seq = std::get<NumberSequence>(getProperty(primary, prop));
+                bool discrete = false;
+                if (numberSequenceEditor(seq, lo, hi, prop.bounded(), discrete)) {
+                    if (discrete) editor.setProperty(ids, prop.name, seq);
+                    else editor.previewProperty(ids, prop.name, seq);
+                }
+                ImGui::EndPopup();
+            }
+            break;
+        }
+        case ValueType::ColorSequence: {
+            if (colorSequencePreview("##v", std::get<ColorSequence>(value))) ImGui::OpenPopup("##colors");
+            if (ImGui::BeginPopup("##colors")) {
+                ImGui::PushFont(theme::fonts().medium, 0.0f);
+                ImGui::TextUnformatted(prop.name.c_str());
+                ImGui::PopFont();
+                ImGui::Separator();
+                ColorSequence seq = std::get<ColorSequence>(getProperty(primary, prop));
+                bool discrete = false;
+                if (colorSequenceEditor(seq, discrete)) {
+                    if (discrete) editor.setProperty(ids, prop.name, seq);
+                    else editor.previewProperty(ids, prop.name, seq);
+                }
+                ImGui::EndPopup();
+            }
+            break;
+        }
+        case ValueType::Ref: {
+            InstanceRef ref = mixed ? InstanceRef{} : std::get<InstanceRef>(value);
+            if (attachmentPicker("##v", editor.scene(), ref, primary.id)) editor.setProperty(ids, prop.name, ref);
             break;
         }
         default:

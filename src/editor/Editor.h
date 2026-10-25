@@ -146,6 +146,12 @@ public:
     // inside the selection, GUI elements in a ScreenGui, ...). Parts take `shape`.
     Instance* insert(ClassId cls, PartShape shape = PartShape::Block);
     Instance* insertTemplate(const std::string& templateId);
+    // Effects: "Attachment", "ParticleEmitter", "Beam", "Trail", or a ready-made
+    // one ("Fire", "Smoke", "Sparkles", "MagicBeam", "SpeedTrail"). They go
+    // into the selected part (emitters also into an attachment, or a new part);
+    // beams and trails get their two attachments made and linked. One undo step.
+    Instance* insertEffect(const std::string& kind);
+    static const std::vector<std::pair<std::string, std::string>>& effectPresets(); // id, title
     // Creates `cls` under `parent` and lets `setup` fill it in: one undo step, selected.
     Instance* insertWith(ClassId cls, Instance* parent, const std::function<void(Instance&)>& setup, const std::string& label = "");
     void deleteSelection();

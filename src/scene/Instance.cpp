@@ -16,7 +16,7 @@ bool Instance::isBasePart() const {
 }
 
 bool Instance::hasTransform() const {
-    return isBasePart() || cls == ClassId::Model || isLight();
+    return isBasePart() || cls == ClassId::Model || isLight() || cls == ClassId::Attachment;
 }
 
 bool Instance::isScript() const { return cls == ClassId::Script || cls == ClassId::LocalScript || cls == ClassId::ModuleScript; }

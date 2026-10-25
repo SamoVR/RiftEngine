@@ -20,6 +20,9 @@ const std::vector<std::string> kCameraModes = { "ThirdPerson", "FirstPerson" };
 const std::vector<std::string> kTextX = { "Left", "Center", "Right" };
 const std::vector<std::string> kTextY = { "Top", "Center", "Bottom" };
 const std::vector<std::string> kScaleTypes = { "Stretch", "Fit", "Crop" };
+const std::vector<std::string> kNormalIds = { "Right", "Top", "Back", "Left", "Bottom", "Front" };
+const std::vector<std::string> kParticleOrientations = { "FacingCamera", "FacingCameraWorldUp", "VelocityParallel", "VelocityPerpendicular" };
+const std::vector<std::string> kTextureModes = { "Stretch", "Wrap", "Static" };
 
 // ---------------------------------------------------------------- field accessors
 template <class T> constexpr ValueType valueTypeOf() {
@@ -32,6 +35,10 @@ template <class T> constexpr ValueType valueTypeOf() {
     else if constexpr (std::is_same_v<T, Color3>) return ValueType::Color3;
     else if constexpr (std::is_same_v<T, UDim2>) return ValueType::UDim2;
     else if constexpr (std::is_same_v<T, AssetPath>) return ValueType::Asset;
+    else if constexpr (std::is_same_v<T, NumberRange>) return ValueType::NumberRange;
+    else if constexpr (std::is_same_v<T, NumberSequence>) return ValueType::NumberSequence;
+    else if constexpr (std::is_same_v<T, ColorSequence>) return ValueType::ColorSequence;
+    else if constexpr (std::is_same_v<T, InstanceRef>) return ValueType::Ref;
     else if constexpr (std::is_enum_v<T>) return ValueType::Enum;
     else static_assert(sizeof(T) == 0, "unsupported property field type");
 }
@@ -134,6 +141,30 @@ void addText(std::vector<PropertyInfo>& p) {
     p.push_back(field<&Instance::textXAlignment>("TextXAlignment", "Text").enums("TextXAlignment"));
     p.push_back(field<&Instance::textYAlignment>("TextYAlignment", "Text").enums("TextYAlignment"));
     p.push_back(field<&Instance::textWrapped>("TextWrapped", "Text"));
+}
+
+// Attachment.WorldPosition: computed from the parent part; setting it moves the attachment.
+Value getWorldPosition(const Instance& i) { return i.worldPosition(); }
+bool setWorldPosition(Instance& i, const Value& v) {
+    const glm::vec3* p = std::get_if<glm::vec3>(&v);
+    if (!p) return false;
+    i.setWorldFrame(*p, i.worldRotation());
+    return true;
+}
+
+// What ParticleEmitter, Beam and Trail share.
+void addEffectLook(std::vector<PropertyInfo>& p, const char* transparencyTip) {
+    p.push_back(field<&Instance::colorSequence>("Color", "Appearance"));
+    p.push_back(field<&Instance::transparencySequence>("Transparency", "Appearance").range(0.0f, 1.0f).tip(transparencyTip));
+    p.push_back(field<&Instance::texture>("Texture", "Appearance").tip("Image to draw (white parts take the colour). Empty: a soft dot for particles, a plain band for beams and trails."));
+    p.push_back(field<&Instance::brightness>("Brightness", "Appearance").range(0.0f, 20.0f).speed(0.02f));
+    p.push_back(field<&Instance::lightEmission>("LightEmission", "Appearance").range(0.0f, 1.0f).speed(0.01f).tip("0: drawn normally. 1: adds its light to what is behind it (fire, magic, lasers)."));
+    p.push_back(field<&Instance::lightInfluence>("LightInfluence", "Appearance").range(0.0f, 1.0f).speed(0.01f).tip("0: always fully bright. 1: lit by the sun and lights like a part."));
+}
+
+void addAttachments(std::vector<PropertyInfo>& p) {
+    p.push_back(field<&Instance::attachment0>("Attachment0", "Attachments").tip("Where it starts: an Attachment inside a part."));
+    p.push_back(field<&Instance::attachment1>("Attachment1", "Attachments").tip("Where it ends: another Attachment."));
 }
 
 void addImage(std::vector<PropertyInfo>& p) {
@@ -256,6 +287,68 @@ std::vector<ClassInfo> buildClasses() {
         c.props.push_back(field<&Instance::range>("Range", "Light").range(0.0f, 200.0f).speed(0.1f));
         c.props.push_back(field<&Instance::angle>("Angle", "Light").range(1.0f, 170.0f));
         c.props.push_back(field<&Instance::castShadow>("Shadows", "Light"));
+    }
+    {
+        ClassInfo& c = def(ClassId::Attachment, "Attachment", "A point (with a direction) on a part. Beams and trails go between two; particles can come out of one.", true);
+        c.props.push_back(field<&Instance::position>("Position", "Transform").speed(0.05f).tip("Offset from the middle of the parent part, in its own space (studs)."));
+        c.props.push_back(field<&Instance::rotation>("Orientation", "Transform").speed(0.5f).tip("Rotation in degrees. Its X axis is where a beam curves; particles leave along its Y axis."));
+        c.props.push_back(field<&Instance::visible>("Visible", "Appearance").tip("Show it in the editor even when it is not selected."));
+        PropertyInfo world;
+        world.name = "WorldPosition";
+        world.category = "Transform";
+        world.type = ValueType::Vector3;
+        world.get = &getWorldPosition;
+        world.set = &setWorldPosition;
+        world.flags = PF_ScriptRead | PF_ScriptWrite | PF_Runtime;
+        c.props.push_back(world);
+    }
+    {
+        ClassInfo& c = def(ClassId::ParticleEmitter, "ParticleEmitter", "Sends out little images: fire, smoke, sparkles, rain, dust. Put it in a part (they come out of a face) or an Attachment.", true);
+        c.props.push_back(field<&Instance::enabled>("Enabled", "Emission").tip("Off: no new particles (the ones alive finish their life). Scripts can still :Emit(n)."));
+        c.props.push_back(field<&Instance::rate>("Rate", "Emission").range(0.0f, 1000.0f).speed(0.2f).tip("Particles per second."));
+        c.props.push_back(field<&Instance::lifetime>("Lifetime", "Emission").range(0.0f, 60.0f).tip("How long each particle lives, in seconds (random between the two)."));
+        c.props.push_back(field<&Instance::speedRange>("Speed", "Emission").range(-500.0f, 500.0f).tip("Starting speed in studs per second (random between the two)."));
+        c.props.push_back(field<&Instance::spreadAngle>("SpreadAngle", "Emission").range(-180.0f, 180.0f).speed(0.5f).tip("How far (degrees) particles may leave from the emission direction, on two axes."));
+        c.props.push_back(field<&Instance::emissionDirection>("EmissionDirection", "Emission").enums("NormalId").tip("Which face of the part they come out of (Top = up)."));
+        c.props.push_back(field<&Instance::rotationRange>("Rotation", "Emission").range(-360.0f, 360.0f).tip("Starting rotation of the image, in degrees."));
+        c.props.push_back(field<&Instance::rotSpeed>("RotSpeed", "Emission").range(-3600.0f, 3600.0f).tip("Spin in degrees per second."));
+        addEffectLook(c.props, "Over each particle's life: 0 solid, 1 invisible.");
+        c.props.push_back(field<&Instance::sizeSequence>("Size", "Appearance").range(0.0f, 100.0f).tip("Over each particle's life, in studs."));
+        c.props.push_back(field<&Instance::particleOrientation>("Orientation", "Appearance").enums("ParticleOrientation").tip("FacingCamera for most effects; VelocityParallel stretches along the motion (rain, sparks)."));
+        c.props.push_back(field<&Instance::zOffset>("ZOffset", "Appearance").range(-100.0f, 100.0f).speed(0.05f).tip("Moves the particles towards the camera (studs) so they draw in front of nearby surfaces."));
+        c.props.push_back(field<&Instance::acceleration>("Acceleration", "Motion").speed(0.1f).tip("Constant push in studs/s^2, e.g. (0, -30, 0) to fall, (0, 4, 0) for rising smoke."));
+        c.props.push_back(field<&Instance::drag>("Drag", "Motion").range(0.0f, 100.0f).speed(0.02f).tip("How quickly particles slow down."));
+        c.props.push_back(field<&Instance::lockedToPart>("LockedToPart", "Motion").tip("On: particles move along with the part (a jet flame). Off: they stay where they were born."));
+        c.props.push_back(field<&Instance::timeScale>("TimeScale", "Motion").range(0.0f, 10.0f).speed(0.01f).tip("Speeds up or slows down the whole effect (0 freezes it)."));
+    }
+    {
+        ClassInfo& c = def(ClassId::Beam, "Beam", "A band drawn between two Attachments, straight or curved: lasers, ropes, light rays, waterfalls.", true);
+        c.props.push_back(field<&Instance::enabled>("Enabled", "Behavior"));
+        addAttachments(c.props);
+        addEffectLook(c.props, "Along the beam, from Attachment0 (0) to Attachment1 (1): 0 solid, 1 invisible.");
+        c.props.push_back(field<&Instance::textureMode>("TextureMode", "Appearance").enums("TextureMode").tip("Stretch: the image once over the beam. Wrap: repeats every TextureLength studs. Static: repeats without stretching."));
+        c.props.push_back(field<&Instance::textureLength>("TextureLength", "Appearance").range(0.01f, 1000.0f).speed(0.02f));
+        c.props.push_back(field<&Instance::textureSpeed>("TextureSpeed", "Appearance").range(-100.0f, 100.0f).speed(0.02f).tip("How fast the texture scrolls along the beam."));
+        c.props.push_back(field<&Instance::width0>("Width0", "Shape").range(0.0f, 1000.0f).speed(0.02f));
+        c.props.push_back(field<&Instance::width1>("Width1", "Shape").range(0.0f, 1000.0f).speed(0.02f));
+        c.props.push_back(field<&Instance::curveSize0>("CurveSize0", "Shape").range(-1000.0f, 1000.0f).speed(0.05f).tip("Bends the beam out along Attachment0's X axis (studs)."));
+        c.props.push_back(field<&Instance::curveSize1>("CurveSize1", "Shape").range(-1000.0f, 1000.0f).speed(0.05f).tip("Bends the beam out along Attachment1's X axis (studs)."));
+        c.props.push_back(field<&Instance::segments>("Segments", "Shape").range(1.0f, 1000.0f).tip("Pieces the curve is made of."));
+        c.props.push_back(field<&Instance::faceCamera>("FaceCamera", "Shape").tip("On: the band always turns its face to the camera."));
+        c.props.push_back(field<&Instance::zOffset>("ZOffset", "Shape").range(-100.0f, 100.0f).speed(0.05f));
+    }
+    {
+        ClassInfo& c = def(ClassId::Trail, "Trail", "A fading ribbon left behind as its two Attachments move: sword swings, speed streaks, magic.", true);
+        c.props.push_back(field<&Instance::enabled>("Enabled", "Behavior"));
+        addAttachments(c.props);
+        addEffectLook(c.props, "From the newest end (0) to the oldest (1): 0 solid, 1 invisible.");
+        c.props.push_back(field<&Instance::textureMode>("TextureMode", "Appearance").enums("TextureMode"));
+        c.props.push_back(field<&Instance::textureLength>("TextureLength", "Appearance").range(0.01f, 1000.0f).speed(0.02f));
+        c.props.push_back(field<&Instance::trailLifetime>("Lifetime", "Emission").range(0.01f, 20.0f).speed(0.01f).tip("Seconds a point of the trail stays before it fades out."));
+        c.props.push_back(field<&Instance::minLength>("MinLength", "Emission").range(0.0f, 100.0f).speed(0.01f).tip("A new point is added when the attachments moved this far (studs)."));
+        c.props.push_back(field<&Instance::maxLength>("MaxLength", "Emission").range(0.0f, 10000.0f).speed(0.1f).tip("The longest the trail may get (studs). 0: no limit."));
+        c.props.push_back(field<&Instance::sizeSequence>("WidthScale", "Shape").range(0.0f, 10.0f).tip("Width along the trail as a fraction of the distance between the attachments."));
+        c.props.push_back(field<&Instance::faceCamera>("FaceCamera", "Shape"));
     }
     {
         ClassInfo& c = def(ClassId::Sound, "Sound", "Plays an audio file. Inside a part it is 3D (quieter with distance).", true);
@@ -454,6 +547,15 @@ void applyClassDefaults(Instance& i) {
             i.range = 24.0f;
             i.castShadow = false;
             break;
+        case ClassId::Attachment:
+            i.visible = false;
+            break;
+        case ClassId::Beam:
+            i.transparencySequence = NumberSequence(0.5f);
+            break;
+        case ClassId::Trail:
+            i.transparencySequence = NumberSequence(0.5f);
+            break;
         case ClassId::Frame:
             i.color = { 1.0f, 1.0f, 1.0f };
             i.guiSize = { 0.0f, 100.0f, 0.0f, 100.0f };
@@ -547,6 +649,26 @@ bool setProperty(Instance& instance, const PropertyInfo& prop, const Value& valu
     } else if (prop.type == ValueType::Color3) {
         const Color3 c = std::get<Color3>(v);
         v = Color3(std::clamp(c.r, 0.0f, 1.0f), std::clamp(c.g, 0.0f, 1.0f), std::clamp(c.b, 0.0f, 1.0f));
+    } else if (prop.type == ValueType::NumberRange) {
+        NumberRange r = std::get<NumberRange>(v);
+        if (!std::isfinite(r.min) || !std::isfinite(r.max)) { if (error) *error = prop.name + " must be finite"; return false; }
+        if (r.max < r.min) std::swap(r.min, r.max);
+        if (prop.bounded()) r = NumberRange(std::clamp(r.min, prop.minValue, prop.maxValue), std::clamp(r.max, prop.minValue, prop.maxValue));
+        v = r;
+    } else if (prop.type == ValueType::NumberSequence) {
+        NumberSequence s = std::get<NumberSequence>(v);
+        if (s.keys.size() > 20) s.keys.resize(20);
+        for (NumberKeypoint& k : s.keys) {
+            if (!std::isfinite(k.value) || !std::isfinite(k.envelope) || !std::isfinite(k.time)) { if (error) *error = prop.name + " must be finite"; return false; }
+            if (prop.bounded()) k.value = std::clamp(k.value, prop.minValue, prop.maxValue);
+            k.envelope = std::max(k.envelope, 0.0f);
+        }
+        v = NumberSequence(std::move(s.keys));
+    } else if (prop.type == ValueType::ColorSequence) {
+        ColorSequence s = std::get<ColorSequence>(v);
+        if (s.keys.size() > 20) s.keys.resize(20);
+        for (ColorKeypoint& k : s.keys) k.color = Color3(std::clamp(k.color.r, 0.0f, 1.0f), std::clamp(k.color.g, 0.0f, 1.0f), std::clamp(k.color.b, 0.0f, 1.0f));
+        v = ColorSequence(std::move(s.keys));
     } else if (prop.type == ValueType::Enum) {
         const int index = std::get<EnumValue>(v).index;
         if (index < 0 || index >= static_cast<int>(prop.enumNames.size())) {
@@ -569,6 +691,9 @@ const std::vector<std::pair<std::string, std::vector<std::string>>>& allEnums() 
         { "TextXAlignment", kTextX },
         { "TextYAlignment", kTextY },
         { "ScaleType", kScaleTypes },
+        { "NormalId", kNormalIds },
+        { "ParticleOrientation", kParticleOrientations },
+        { "TextureMode", kTextureModes },
     };
     return table;
 }

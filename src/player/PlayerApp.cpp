@@ -253,6 +253,7 @@ void PlayerApp::frame(float dt) {
     RenderSettings settings;
     settings.editor = false;
     settings.grid = false;
+    settings.dt = session_->paused() ? 0.0f : dt;
     framebuffer_.resize(w, h, 4);
     renderer_->render(session_->clientScene(), camera, settings, framebuffer_); // what the player sees
 

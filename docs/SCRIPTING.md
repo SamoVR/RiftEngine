@@ -475,6 +475,31 @@ up). `workspace:Raycast` hits terrain: `result.Instance` is the Terrain and
 `WaterTransparency` properties colour the water. Changes made by the server
 reach every client.
 
+## Effects
+
+An **Attachment** is a point on a part (`Position` and `Orientation` in the
+part's own space, `WorldPosition` in the world). Effects use them:
+
+- **ParticleEmitter**: in a part, particles come out of the face named by `EmissionDirection` (anywhere on it); in an Attachment, out of its point. `Rate` per second, `Lifetime` and `Speed` (NumberRange), `SpreadAngle`, `Acceleration`, `Drag`, `Rotation` / `RotSpeed`, and over each particle's life `Color` (ColorSequence), `Size` and `Transparency` (NumberSequence). `LightEmission` 1 makes them add light (fire, magic), `LockedToPart` moves them with the part, `Texture` is an image (without one: a soft round dot). `:Emit(n)` sends out n at once (also with `Enabled` off), `:Clear()` removes them all.
+- **Beam**: a band from `Attachment0` to `Attachment1`, bent along each attachment's X axis by `CurveSize0` / `CurveSize1`, `Width0` / `Width1`, `Segments`, `FaceCamera`, and along its length `Color` and `Transparency`. A `Texture` repeats with `TextureMode` / `TextureLength` and scrolls with `TextureSpeed`.
+- **Trail**: a ribbon left behind as its two attachments move (put them at the top and bottom of a sword's blade). `Lifetime`, `MinLength`, `MaxLength`, `WidthScale`, and `Color` / `Transparency` from the newest end (0) to the oldest (1).
+
+```lua
+local emitter = Instance.new("ParticleEmitter")
+emitter.Color = ColorSequence.new(Color3.fromRGB(255, 200, 80), Color3.fromRGB(255, 60, 20))
+emitter.Size = NumberSequence.new(1, 0)
+emitter.Lifetime = NumberRange.new(0.5, 1)
+emitter.Speed = NumberRange.new(8)
+emitter.SpreadAngle = Vector2.new(180, 180)
+emitter.LightEmission = 1
+emitter.Enabled = false
+emitter.Parent = part
+emitter:Emit(40)   -- a burst
+```
+
+Effects are only drawn, never simulated by physics: every client draws its own
+particles, and `:Emit` on the server reaches all of them.
+
 ## Physics
 
 Anchored parts never move by themselves (scripts can still move them).
@@ -752,6 +777,20 @@ part.CFrame = part.CFrame * CFrame.Angles(0, math.rad(90), 0)   -- turn 90 degre
 `UDim2.fromScale(x, y)`, `UDim2.fromOffset(x, y)`; `X`, `Y`, `Width`, `Height`;
 `:Lerp(u, t)`; `+`, `-`.
 
+**NumberRange**: `NumberRange.new(min [, max])`; `Min`, `Max` (particle
+lifetimes and speeds are picked at random between them).
+
+**NumberSequence**: a number that changes over 0..1 (a particle's life, along a
+beam). `NumberSequence.new(n)`, `NumberSequence.new(from, to)`,
+`NumberSequence.new({ NumberSequenceKeypoint.new(time, value [, envelope]), ... })`
+(2 to 20 points, the first at time 0 and the last at 1); `Keypoints`. A keypoint
+has `Time`, `Value`, `Envelope` (random spread around the value).
+
+**ColorSequence**: the same with colours. `ColorSequence.new(color)`,
+`ColorSequence.new(from, to)`, `ColorSequence.new({ ColorSequenceKeypoint.new(time, color), ... })`;
+`Keypoints` (each has `Time` and `Value`). Properties of these types also accept
+a plain number or Color3 (`emitter.Transparency = 0.5`).
+
 **EnumItem**: `Name`, `Value`, `EnumType`, `:IsA(typeName)`. Properties also
 accept the item's name as a string (`part.Material = "Neon"`).
 
@@ -799,7 +838,7 @@ RIFT adds the Luau helpers people use most: `math.clamp`, `math.sign`,
 - **Units**: gravity is 30 studs/s² (Roblox: 196.2) and the default character walks at 8 and jumps with 12, which feel similar at RIFT's scale.
 - `Instance.new("Script")` is not supported (code lives in files): clone a Script instead.
 - Reading or writing a member that does not exist is an error.
-- Only the classes listed above exist (no Beams, ParticleEmitters, constraints, ...). MeshParts collide as their bounding box.
+- Only the classes listed above exist (no constraints, ...). MeshParts collide as their bounding box.
 - DataStores save to local files and never fail or throttle; `HttpService` has no network functions.
 - `game:Message`, `game:Win`, `game:Lose` and the global service shortcuts are RIFT additions.
 

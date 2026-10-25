@@ -1,6 +1,7 @@
 #include "scene/Scene.h"
 
 #include <algorithm>
+#include <unordered_map>
 
 namespace rift {
 
@@ -88,7 +89,32 @@ Instance* Scene::cloneSubtree(const Instance& source, bool keepIds, bool include
         }
         return raw;
     };
-    return copyNode(source);
+    Instance* root = copyNode(source);
+    // References inside the copy (a Beam's attachments) point at the copied
+    // instances, as in Roblox's Clone().
+    if (root && !keepIds) {
+        std::unordered_map<uint64_t, uint64_t> remap;
+        std::function<void(const Instance&, const Instance&)> pair = [&](const Instance& src, const Instance& dst) {
+            remap[src.id] = dst.id;
+            size_t k = 0;
+            for (const Instance* child : src.children) {
+                if (!child->archivable && !includeAll) continue;
+                if (k < dst.children.size()) pair(*child, *dst.children[k++]);
+            }
+        };
+        pair(source, *root);
+        forEachDescendant(*root, [&](Instance& i) {
+            for (InstanceRef* ref : { &i.attachment0, &i.attachment1 }) {
+                auto it = remap.find(ref->id);
+                if (it != remap.end()) ref->id = it->second;
+            }
+        });
+        for (InstanceRef* ref : { &root->attachment0, &root->attachment1 }) {
+            auto it = remap.find(ref->id);
+            if (it != remap.end()) ref->id = it->second;
+        }
+    }
+    return root;
 }
 
 Instance* Scene::terrainInstance() const {

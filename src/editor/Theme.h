@@ -66,6 +66,8 @@ bool iconButton(const char* icon, const char* tooltip, bool active = false, floa
 void iconText(const char* icon, const ImVec4& iconColor, const char* text);
 // Menu item with a coloured icon in front of the label.
 bool menuItem(const char* icon, const ImVec4& iconColor, const char* label, const char* shortcut = nullptr, bool selected = false, bool enabled = true);
+// Submenu with a coloured icon, lined up with menuItem rows. EndMenu() when true.
+bool beginMenu(const char* icon, const ImVec4& iconColor, const char* label, bool enabled = true);
 // Tooltip for the last item, after a short hover.
 void tooltip(const char* text);
 // Bold section title with a thin line under it (`width` 0: to the edge of the window).

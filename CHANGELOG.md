@@ -14,6 +14,12 @@ RIFT is in **beta**: versions are 0.x until the engine is complete.
 - Scripts: `Terrain:FillBlock`, `FillBall`, `FillCylinder`, `Clear`, `GetMaterialColor` / `SetMaterialColor`; server changes reach every client.
 - Saved next to the scene as `terrain.bin`.
 
+### Effects
+- Attachments, ParticleEmitters, Beams and Trails, drawn in the editor and in the game, with Roblox's properties (colour and size over life, spread, acceleration, drag, light emission, curved beams, scrolling textures, fading trails).
+- NumberRange, NumberSequence and ColorSequence for scripts, and editors for them: a curve with draggable points and a gradient with colour stops.
+- Ready-made Fire, Smoke, Sparkles, Magic Beam and Speed Trail in Insert > Effects; beams and trails get their attachments made and linked.
+- `ParticleEmitter:Emit(n)` and `:Clear()`.
+
 ### Materials
 - Parts get the full set of Roblox materials (Wood, Brick, Cobblestone, Granite, Marble, Slate, Fabric, Foil, Diamond Plate, Corroded Metal, Wood Planks, Pebble, Ice, Force Field, and the terrain materials), each with its own procedural look.
 
