@@ -1,9 +1,8 @@
-# Publishes website/ to GitHub Pages (https://samovr.github.io/RiftEngine/)
-# whenever something in website/ changes on main.
+# Publishes website/ to GitHub Pages (https://samovr.github.io/RiftEngine/).
 #
-# It works with either Pages setting (repository Settings > Pages > Source):
-#   "Deploy from a branch" (gh-pages, / root): the site is pushed to gh-pages;
-#   "GitHub Actions": the site is also deployed directly.
+# Repository Settings > Pages > Source: "Deploy from a branch", branch
+# gh-pages, folder / (root). This workflow copies website/ onto that branch
+# whenever website/ changes on main; GitHub then publishes it in a minute.
 # The site reads releases from the GitHub API, so a new release shows up
 # without deploying again.
 name: Website
@@ -16,41 +15,22 @@ on:
 
 permissions:
   contents: write
-  pages: write
-  id-token: write
 
 concurrency:
   group: pages
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  publish:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: https://samovr.github.io/RiftEngine/
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Push website/ to the gh-pages branch
+      - name: Copy website/ to the gh-pages branch
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git subtree split --prefix website -b gh-pages-new
           git push --force origin gh-pages-new:gh-pages
-
-      # Only when Pages is set to "GitHub Actions"; otherwise the push above publishes.
-      - id: pages
-        uses: actions/configure-pages@v5
-        continue-on-error: true
-
-      - if: steps.pages.outcome == 'success'
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: website
-
-      - if: steps.pages.outcome == 'success'
-        uses: actions/deploy-pages@v4
-        continue-on-error: true
