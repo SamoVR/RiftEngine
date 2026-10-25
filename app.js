@@ -164,6 +164,7 @@
     { image: "assets/play.jpg", title: "RIFT — playing", caption: "Press F5 to play right in the editor. Switch between the client's and the server's view to see replication at work." },
     { image: "assets/scripting.png", title: "RIFT — scripting", caption: "A Lua editor with syntax checks as you type, errors that jump to the line, and a Roblox-style API." },
     { image: "assets/models.jpg", title: "RIFT — importing", caption: "Drop in OBJ, glTF and GLB models, textures and sounds from your computer." },
+    { image: "assets/source-control.jpg", title: "RIFT — source control", caption: "Commit, branch and push to GitHub from the Source Control panel. Every project can be a git repository." },
     { image: "assets/player.jpg", title: "My Game", caption: "Build Game turns the project into a standalone .exe with its own icon and a pause menu." },
   ];
   function setupTour() {
