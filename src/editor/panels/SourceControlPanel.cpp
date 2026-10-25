@@ -170,7 +170,7 @@ void SourceControlPanel::draw(UiContext& ui, bool* open) {
             }, true);
         }
         ImGui::EndDisabled();
-        if (job_.valid()) { spinner(fs_ * 0.6f); ImGui::SameLine(); ImGui::TextDisabled("%s...", jobLabel_.c_str()); }
+        if (job_.valid() && !jobLabel_.empty()) { spinner(fs_ * 0.6f); ImGui::SameLine(); ImGui::TextDisabled("%s...", jobLabel_.c_str()); }
         ImGui::PopTextWrapPos();
         ImGui::End();
         return;

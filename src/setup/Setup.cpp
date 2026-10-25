@@ -359,7 +359,7 @@ private:
     }
 
     void title(const char* text) {
-        ImGui::PushFont(heading_, 0.0f);
+        ImGui::PushFont(heading_, 26.0f * scale_);
         ImGui::TextUnformatted(text);
         ImGui::PopFont();
     }

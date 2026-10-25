@@ -286,6 +286,11 @@ void EditorApp::frame(float dt) {
             if (ImGuiWindow* w = ImGui::FindWindowByName("###Explorer")) ImGui::SetNextWindowDockID(w->DockId, ImGuiCond_FirstUseEver);
             sourceControl_.draw(ui, &settings_.showSourceControl);
         }
+        if (focusExplorer_) {
+            ImGui::SetWindowFocus("###Explorer");
+            ImGui::SetWindowFocus("###Viewport");
+            focusExplorer_ = false;
+        }
     } else {
         drawWelcome(dockspace);
     }
@@ -330,8 +335,7 @@ void EditorApp::buildDefaultLayout(ImGuiID dockspace) {
     ImGui::DockBuilderDockWindow("###Assets", bottom);
     ImGui::DockBuilderFinish(dockspace);
     settings_.showExplorer = settings_.showProperties = settings_.showOutput = settings_.showAssets = settings_.showSourceControl = true;
-    // The Explorer is the tab in front.
-    if (ImGuiWindow* w = ImGui::FindWindowByName("###Explorer")) ImGui::FocusWindow(w);
+    focusExplorer_ = true; // in front of Source Control once both exist
 }
 
 // ============================================================================

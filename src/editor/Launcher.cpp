@@ -244,6 +244,7 @@ void EditorApp::drawHomeProjects(float width) {
 
     // ---- header: greeting + the two main actions
     const bool first = settings_.recentProjects.empty();
+    const float headerX = ImGui::GetCursorPosX();
     ImGui::BeginGroup();
     theme::pushHeading(2.0f);
     ImGui::TextUnformatted(first ? "Make your first game" : "Welcome back");
@@ -251,8 +252,8 @@ void EditorApp::drawHomeProjects(float width) {
     ImGui::TextDisabled(first ? "Start from a template below, or open one of the examples to see how things work."
                               : "Pick up where you left off, or start something new.");
     ImGui::EndGroup();
-    const float buttonsWidth = ImGui::CalcTextSize(ICON_FA_FOLDER_OPEN "  Open" ICON_FA_PLUS "  New project").x + fs_ * 5.5f;
-    ImGui::SameLine(std::max(ImGui::GetCursorPosX(), ImGui::GetCursorPosX() + width - buttonsWidth - ImGui::GetItemRectSize().x - ImGui::GetStyle().ItemSpacing.x));
+    const float buttonsWidth = ImGui::CalcTextSize(ICON_FA_FOLDER_OPEN "  Open" ICON_FA_PLUS "  New project").x + fs_ * 4.4f + ImGui::GetStyle().ItemSpacing.x;
+    ImGui::SameLine(std::max(ImGui::GetCursorPosX() + fs_, headerX + width - buttonsWidth));
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + fs_ * 0.5f);
     if (bigButton(ICON_FA_FOLDER_OPEN "  Open", false, fs_ * 2.4f)) openProjectDialog();
     theme::tooltip("Open a project folder (the one with project.json)");

@@ -60,6 +60,7 @@ private:
     float dpiScale_ = 1.0f;
     float appliedScale_ = 0.0f;
     bool resetLayout_ = false;
+    bool focusExplorer_ = false;
     bool quitConfirmed_ = false;
     std::string lastTitle_;
     std::vector<std::string> droppedFiles_;

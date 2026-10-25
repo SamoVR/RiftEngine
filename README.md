@@ -46,6 +46,7 @@ press **Play** to test it, and ship it as a standalone Windows game with one cli
 |---|---|
 | ![Launcher](docs/images/launcher.png) | ![Playing](docs/images/play.jpg) |
 | ![Scripting](docs/images/scripting.png) | ![A built game](docs/images/player.jpg) |
+| ![Source control](docs/images/source-control.jpg) | ![Setup](docs/images/setup.png) |
 
 ## Getting started
 
