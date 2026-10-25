@@ -2,10 +2,15 @@
 
 # RIFT
 
+[![Build](https://github.com/SamoVR/RiftEngine/actions/workflows/build.yml/badge.svg)](https://github.com/SamoVR/RiftEngine/actions/workflows/build.yml)
+[![Latest release](https://img.shields.io/github/v/release/SamoVR/RiftEngine?label=download)](https://github.com/SamoVR/RiftEngine/releases/latest)
+
 RIFT is a 3D game engine and editor in the spirit of Roblox Studio. Build a world
 out of parts, script it in Lua with the API you already know from Roblox
-(`workspace`, `Instance.new`, `part.Touched:Connect`, `TweenService`, ...),
+(`workspace`, `Instance.new`, `part.Touched:Connect`, `TweenService`, RemoteEvents, ...),
 press **Play** to test it, and ship it as a standalone Windows game with one click.
+
+**[Download RIFT for Windows](https://github.com/SamoVR/RiftEngine/releases/latest)** (`RIFT-Setup-<version>.exe`, no administrator rights needed) · [Website](https://samovr.github.io/RiftEngine/) · [Changelog](CHANGELOG.md)
 
 ![The RIFT editor](docs/images/editor.jpg)
 
@@ -18,10 +23,14 @@ press **Play** to test it, and ship it as a standalone Windows game with one cli
 - Properties generated from the engine's reflection data; editing several objects at once changes one axis on all of them; attributes and tags
 - Undo / redo for everything, copy / paste / duplicate (scripts are copied with their objects), group into Models
 - Script editor with Lua highlighting, live syntax checking, runtime-error markers and find / replace; files are plain `.lua`, edits from VS Code are picked up live
-- Project launcher with templates (Empty, Baseplate, Obby) and examples, autosave, crash dumps, Discord Rich Presence
+- Home screen with project cards (a picture of each scene), search, templates (Empty, Baseplate, Obby) and examples
+- **Source Control** panel: every project can be a git repository; commit, history, branches, push / pull to GitHub
+- Preferences for nearly everything (projects folder, accent colour, anti-aliasing, frame limit, script editor, play and output options), autosave, crash dumps, Discord Rich Presence
+- Updates itself from GitHub Releases; installed per user with `RIFT-Setup.exe`
 
 **Game runtime**
 - Lua 5.4 with a Roblox-style API: Instances, events, `task`, `RunService`, `UserInputService`, `TweenService`, `CollectionService`, `Debris`, `DataStoreService`, raycasts, `CFrame`, `UDim2`, `Enum`
+- Client and server like Roblox: Scripts and LocalScripts, RemoteEvent / RemoteFunction, BindableEvent / BindableFunction, replication; a Client / Server switch while playing
 - Jolt Physics: anchored and unanchored parts, welded assemblies, character controller with walking, jumping and steps
 - Humanoid characters with health, death and respawning; third- and first-person cameras
 - 2D GUI (ScreenGui, Frame, TextLabel, TextButton, ImageLabel, ImageButton) and a leaderboard from `leaderstats`
@@ -40,7 +49,7 @@ press **Play** to test it, and ship it as a standalone Windows game with one cli
 
 ## Getting started
 
-1. Build the solution (below) and run `RiftEditor.exe`.
+1. [Download](https://github.com/SamoVR/RiftEngine/releases/latest) and run `RIFT-Setup-<version>.exe` (or build the solution, below, and run `RiftEditor.exe`).
 2. Click **New Project**, pick the **Obby** template, and press **Play** (F5).
 3. Insert parts from the toolbar or the **Insert** menu, add a **Script** to a part, and write some Lua:
    ```lua
@@ -69,7 +78,22 @@ msbuild RiftEngine.sln -p:Configuration=Release -p:Platform=x64 -m
 build\bin\Release\RiftTests.exe
 ```
 
-Everything is written to `build/bin/<Configuration>/`: `RiftEditor.exe`, `RiftPlayer.exe` (the runtime that Build Game copies) and `RiftTests.exe`. Build Game uses the player next to the editor, so make release builds of games from a Release editor.
+Everything is written to `build/bin/<Configuration>/`: `RiftEditor.exe`, `RiftPlayer.exe` (the runtime that Build Game copies), `RiftSetup.exe` (the installer stub) and `RiftTests.exe`. Build Game uses the player next to the editor, so make release builds of games from a Release editor. Everything links the C runtime statically, so no Visual C++ redistributable is needed on other machines.
+
+### Making a release
+
+```
+python tools/make_installer.py
+```
+
+packs `dist/RIFT-Setup-<version>.exe` and `dist/RIFT-<version>-portable.zip` from the Release build. To publish, set the version in `src/core/Version.h`, add a section to `CHANGELOG.md`, commit, and push a tag:
+
+```
+git tag v1.1.0
+git push origin v1.1.0
+```
+
+GitHub Actions builds, tests and publishes the release with the setup attached; installed copies of RIFT then offer the update. The website in `website/` is deployed to GitHub Pages by `.github/workflows/pages.yml` and reads the releases live.
 
 ## Repository layout
 
@@ -78,6 +102,9 @@ Everything is written to `build/bin/<Configuration>/`: `RiftEditor.exe`, `RiftPl
 | `src/core`, `scene`, `render`, `physics`, `script`, `game`, `audio`, `project`, `platform`, `ui` | The engine (`RiftCore` static library) |
 | `src/editor` | RiftEditor.exe: the editor (`panels/` holds the UI panels) |
 | `src/player` | RiftPlayer.exe: runs finished games |
+| `src/setup` | RiftSetup.exe: installs, updates and uninstalls RIFT |
+| `tools/` | Release packaging (`make_installer.py`, `release_notes.py`) |
+| `website/` | The website (GitHub Pages) |
 | `data/` | Files the engine ships with: shaders, fonts, icons, built-in textures |
 | `examples/` | Example projects (open them from the launcher) |
 | `tests/` | Unit tests (doctest), including headless rendering tests |

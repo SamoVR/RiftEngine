@@ -1,8 +1,24 @@
 # RIFT user guide
 
-This guide covers the editor: projects and scenes, building worlds, scripting
-workflow, testing and shipping a game. The Lua API is in
-[SCRIPTING.md](SCRIPTING.md).
+This guide covers the editor: installing, projects and scenes, building worlds,
+scripting workflow, testing, version control and shipping a game. The Lua API is
+in [SCRIPTING.md](SCRIPTING.md).
+
+## Installing and updating
+
+Download `RIFT-Setup-<version>.exe` from the
+[releases page](https://github.com/SamoVR/RiftEngine/releases/latest) and run it.
+RIFT installs for you only (into `%LOCALAPPDATA%\Programs\RIFT` by default), so
+no administrator rights are needed. It adds Start menu and desktop shortcuts and
+an entry in Windows Settings > Apps, which is also where you uninstall it.
+Uninstalling never touches your projects.
+
+When a new version is out, RIFT says so when it starts (and in the status bar).
+**Help > Check for Updates** shows what is new; **Download and install** updates
+RIFT in place and restarts it in a few seconds. Preferences > Updates can turn
+the check off or include preview versions.
+
+There is also a portable zip: unzip it anywhere and run `RiftEditor.exe`.
 
 ## Projects and scenes
 
@@ -21,13 +37,22 @@ My Game/
     Builds/               File > Build Game puts games here by default
 ```
 
-Everything is plain text (JSON and Lua), so projects work well with git. Paths in
-scenes are relative to the project, so the folder can be moved or shared.
+Everything is plain text (JSON and Lua), so projects work well with git (see
+[Source control](#source-control)). Paths in scenes are relative to the project,
+so the folder can be moved or shared.
 
-The **launcher** opens when no project is open: create a project from a template
-(Empty, Baseplate, Obby), open a folder with a `project.json`, reopen a recent
-project, or open a copy of an example. Dropping a project folder onto the window
-opens it too.
+The scenes do not have to live in `scenes/`: File > Project Settings > **Scenes
+folder** points the project at any folder inside it (`Levels`, `Content/Scenes`,
+...) and can move the existing scenes there.
+
+The **home screen** opens when no project is open. Recent projects are shown as
+cards with a picture of the scene as it was last saved (right-click a card to
+show it in Explorer or remove it from the list); search and sort them at the top.
+**New project** creates one from a template (Empty, Baseplate, Obby) in your
+projects folder (`Documents\RIFT Projects` unless you choose another in
+Preferences); the template tiles and the examples start one directly. Opening an
+example asks where to put your copy. The **Learn** page links to the guides.
+Dropping a project folder onto the window opens it too.
 
 **Scenes**: File > New Scene (Ctrl+N), File > Open Scene, File > Save Scene As
 (Ctrl+Shift+S). The start scene (the one a built game begins with) is set in
@@ -167,6 +192,20 @@ thrown away on **Stop** (Shift+F5). **Pause** (F6) freezes the game.
 
 ![Playing in the editor](images/play.jpg)
 
+## Source control
+
+RIFT works with **Git** (install [Git for Windows](https://git-scm.com/download/win)
+once). The **Source Control** panel (a tab next to the Explorer; View > Source
+Control) shows the project's repository:
+
+- **Initialize repository** turns a project into one, with a `.gitignore` that leaves out builds and autosaves. New projects can start as repositories (the checkbox in New Project, or Preferences > Source Control).
+- **Changes** lists the files that differ from the last commit. Write a message and **Commit** (Ctrl+Enter): the scene is saved first and every change is recorded. Right-click a file to discard its changes.
+- **History** lists the commits; right-click one to copy its id or open it on GitHub.
+- The **branch** box switches branches or creates a new one; the project reloads with that branch's files.
+- **Push** and **Pull** send and get commits. To back the project up on GitHub, create an empty repository there and paste its address under "Connect to GitHub". Signing in happens in Git's own window the first time.
+
+The first commit asks for your name and email if git does not know them yet.
+
 ## Building a game
 
 **File > Build Game** (Ctrl+B) creates a folder (by default `Builds/<Game>` in
@@ -190,9 +229,22 @@ Alt+Enter toggles fullscreen. Saves made with DataStoreService go to
 
 ## Preferences
 
-Edit > Preferences (Ctrl+,): interface size, script text size, reopening the last
-project, autosave interval, Discord presence, viewport options, camera speed and
-mouse sensitivity, snapping steps. They are stored in `%APPDATA%\RIFT\settings.json`.
+Edit > Preferences (Ctrl+,), by category:
+
+| Category | Settings |
+|---|---|
+| General | Projects folder, reopening the last project, autosave interval, asking before deleting, Discord presence |
+| Appearance | Interface size, accent colour, tooltips, statistics, which panels are shown, resetting the layout |
+| Viewport | Grid, GUI preview, shadows, wireframe, anti-aliasing, V-Sync, frame rate limit, slowing down in the background, camera speed, sensitivity, field of view, inverted mouse |
+| Editing | Snapping and its steps, local axes |
+| Scripts | Text size, tab width, whitespace, mini map, closing brackets, the external editor (for example VS Code) |
+| Playing | Clearing the Output, saving before playing, pausing on script errors |
+| Output | Game time on each line, how many lines to keep |
+| Source Control | Where git is, git for new projects, pushing after each commit |
+| Updates | Checking at start-up, preview versions, checking now |
+
+**Reset to defaults** keeps your recent projects and layout. Preferences are
+stored in `%APPDATA%\RIFT\settings.json`.
 
 ## Keyboard shortcuts
 
