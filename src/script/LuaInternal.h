@@ -62,6 +62,8 @@ const EnumType* enumType(const std::string& name);          // nullptr if unknow
 const std::vector<const EnumType*>& allEnumTypes();
 
 struct Inst { uint64_t id = 0; };
+struct AnimTrack { uint64_t id = 0; };   // an AnimationTrack (GameSession::animation())
+struct KeyframeSequenceProvider {};
 
 // ============================================================================
 //  Signals
@@ -221,6 +223,13 @@ struct LuaRuntime::Impl : public SceneObserver {
     int mouseBehavior = 0; // Enum.MouseBehavior
     std::unordered_map<std::string, uint64_t> renderBindings; // RunService:BindToRenderStep name -> connection id
     std::unordered_map<uint64_t, uint64_t> primaryParts; // Model id -> part id
+    // AnimationTrack events (Stopped, Ended, DidLoop, KeyframeReached, "Marker:<name>"), by track id.
+    std::unordered_map<uint64_t, std::unordered_map<std::string, std::shared_ptr<lua::SignalState>>> trackSignals;
+    std::shared_ptr<lua::SignalState> trackSignal(uint64_t track, const std::string& name) {
+        auto& s = trackSignals[track][name];
+        if (!s) s = std::make_shared<lua::SignalState>();
+        return s;
+    }
 
     // ---- remotes and bindables
     // OnServerInvoke / OnClientInvoke / OnInvoke callbacks, by (instance, name).

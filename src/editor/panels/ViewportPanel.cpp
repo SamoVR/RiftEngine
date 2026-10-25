@@ -437,7 +437,20 @@ void ViewportPanel::drawGizmo(UiContext& ui, const glm::mat4& view, const glm::m
     const bool scaling = editor.tool == Tool::Scale;
     if (scaling && !primary->isBasePart()) return; // models and lights have no size
 
-    if (!gizmoDragging_) gizmoMatrix_ = scaling ? primary->worldTransform() : primary->worldFrame();
+    if (!gizmoDragging_) {
+        gizmoMatrix_ = scaling ? primary->worldTransform() : primary->worldFrame();
+        // Posing in the Animation Editor: a limb turns around its joint.
+        if (!scaling && editor.animatingRig && primary->isBasePart()) {
+            if (Instance* rig = scene.find(editor.animatingRig); rig && primary->isDescendantOf(rig)) {
+                for (const auto& [name, motor] : rigJoints(*rig)) {
+                    if (motor->attachment1.id != primary->id) continue;
+                    if (const Instance* part0 = scene.find(motor->attachment0.id))
+                        gizmoMatrix_ = part0->worldFrame() * motor->c0.matrix() * motor->jointTransform.matrix();
+                    break;
+                }
+            }
+        }
+    }
     const glm::mat4 before = gizmoMatrix_;
 
     ImGuizmo::OPERATION op = editor.tool == Tool::Move ? ImGuizmo::TRANSLATE : editor.tool == Tool::Rotate ? ImGuizmo::ROTATE : ImGuizmo::BOUNDS;

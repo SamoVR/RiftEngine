@@ -1,0 +1,35 @@
+{
+  "format": "rift-animation",
+  "version": 1,
+  "name": "ToolNone",
+  "loop": true,
+  "priority": "Idle",
+  "keyframes": [
+    {
+      "time": 0.0,
+      "poses": {
+        "Right Arm": [
+          0,
+          0,
+          0,
+          90,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "time": 1.0,
+      "poses": {
+        "Right Arm": [
+          0,
+          0,
+          0,
+          90,
+          0,
+          0
+        ]
+      }
+    }
+  ]
+}

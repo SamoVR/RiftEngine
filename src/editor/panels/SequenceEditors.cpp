@@ -387,21 +387,23 @@ bool colorSequenceEditor(ColorSequence& seq, bool& discrete) {
 // ============================================================================
 //  Instance references
 // ============================================================================
-bool attachmentPicker(const char* id, const Scene& scene, InstanceRef& ref, uint64_t near) {
+bool attachmentPicker(const char* id, const Scene& scene, InstanceRef& ref, uint64_t near, bool parts) {
+    auto fits = [parts](const Instance& i) { return parts ? i.isBasePart() : i.cls == ClassId::Attachment; };
+    const char* icon = parts ? ICON_FA_CUBE : ICON_FA_LOCATION_DOT;
     const Instance* current = ref.id ? scene.find(ref.id) : nullptr;
     auto labelOf = [](const Instance& a) {
         std::string s = a.name;
         if (a.parent) s = a.parent->name + " " ICON_FA_ANGLE_RIGHT " " + s;
         return s;
     };
-    const std::string preview = current ? std::string(ICON_FA_LOCATION_DOT "  ") + labelOf(*current) : std::string("(none)");
+    const std::string preview = current ? std::string(icon) + "  " + labelOf(*current) : std::string("(none)");
     bool changed = false;
     ImGui::SetNextItemWidth(-FLT_MIN);
     if (ImGui::BeginCombo(id, preview.c_str(), ImGuiComboFlags_HeightLarge)) {
         if (ImGui::Selectable("(none)", ref.id == 0)) { ref.id = 0; changed = true; }
         // Attachments on the same part (or model) first: the usual choice.
         std::vector<const Instance*> list;
-        Scene::forEachDescendant(const_cast<Instance&>(scene.workspace()), [&](Instance& i) { if (i.cls == ClassId::Attachment) list.push_back(&i); });
+        Scene::forEachDescendant(const_cast<Instance&>(scene.workspace()), [&](Instance& i) { if (fits(i)) list.push_back(&i); });
         const Instance* home = near ? scene.find(near) : nullptr;
         const Instance* homeRoot = home && home->parent ? home->parent : nullptr;
         std::stable_sort(list.begin(), list.end(), [&](const Instance* x, const Instance* y) {
@@ -410,11 +412,11 @@ bool attachmentPicker(const char* id, const Scene& scene, InstanceRef& ref, uint
         });
         for (const Instance* a : list) {
             ImGui::PushID(static_cast<int>(a->id ^ (a->id >> 32)));
-            const std::string label = std::string(ICON_FA_LOCATION_DOT "  ") + labelOf(*a);
+            const std::string label = std::string(icon) + "  " + labelOf(*a);
             if (ImGui::Selectable(label.c_str(), a->id == ref.id)) { ref.id = a->id; changed = true; }
             ImGui::PopID();
         }
-        if (list.empty()) ImGui::TextDisabled("No Attachments yet: insert one into a part.");
+        if (list.empty()) ImGui::TextDisabled(parts ? "No parts in the Workspace." : "No Attachments yet: insert one into a part.");
         ImGui::EndCombo();
     }
     // Dropping an Attachment from the Explorer.
@@ -424,7 +426,7 @@ bool attachmentPicker(const char* id, const Scene& scene, InstanceRef& ref, uint
             const size_t count = static_cast<size_t>(p->DataSize) / sizeof(uint64_t);
             for (size_t k = 0; k < count; ++k) {
                 const Instance* i = scene.find(ids[k]);
-                if (i && i->cls == ClassId::Attachment) { ref.id = i->id; changed = true; break; }
+                if (i && fits(*i)) { ref.id = i->id; changed = true; break; }
             }
         }
         ImGui::EndDragDropTarget();

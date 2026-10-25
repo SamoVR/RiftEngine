@@ -1,4 +1,5 @@
 #include "scene/Value.h"
+#include "core/TransformUtil.h"
 
 #include <nlohmann/json.hpp>
 #include <algorithm>
@@ -43,8 +44,18 @@ const char* typeName(ValueType t) {
         case ValueType::NumberSequence: return "NumberSequence";
         case ValueType::ColorSequence: return "ColorSequence";
         case ValueType::Ref: return "Instance";
+        case ValueType::CFrame: return "CFrame";
     }
     return "?";
+}
+
+glm::mat4 CFrameValue::matrix() const { return TransformUtil::compose(position, rotation, glm::vec3(1.0f)); }
+
+CFrameValue CFrameValue::fromMatrix(const glm::mat4& m) {
+    CFrameValue c;
+    glm::vec3 scale;
+    TransformUtil::decompose(m, c.position, c.rotation, scale);
+    return c;
 }
 
 // ============================================================================
@@ -100,7 +111,7 @@ Color3 ColorSequence::at(float t) const {
 }
 
 ValueType valueTypeFromName(const std::string& name) {
-    for (int i = 0; i <= static_cast<int>(ValueType::Ref); ++i) {
+    for (int i = 0; i <= static_cast<int>(ValueType::CFrame); ++i) {
         if (name == typeName(static_cast<ValueType>(i))) return static_cast<ValueType>(i);
     }
     return ValueType::None;
@@ -141,6 +152,10 @@ nlohmann::json toJson(const Value& v) {
             char buf[20];
             std::snprintf(buf, sizeof(buf), "%016llx", static_cast<unsigned long long>(id));
             return std::string(buf);
+        }
+        case ValueType::CFrame: {
+            const auto& c = std::get<CFrameValue>(v);
+            return J::array({ round5(c.position.x), round5(c.position.y), round5(c.position.z), round5(c.rotation.x), round5(c.rotation.y), round5(c.rotation.z) });
         }
     }
     return nullptr;
@@ -189,6 +204,14 @@ Value fromJson(const nlohmann::json& j, ValueType type) {
                 if (end && *end == 0) return InstanceRef{ static_cast<uint64_t>(id) };
             }
             break;
+        case ValueType::CFrame:
+            if (isNumberArray(j, 6)) {
+                CFrameValue c;
+                c.position = { j[0].get<float>(), j[1].get<float>(), j[2].get<float>() };
+                c.rotation = { j[3].get<float>(), j[4].get<float>(), j[5].get<float>() };
+                return c;
+            }
+            break;
     }
     return {};
 }
@@ -223,6 +246,10 @@ std::string toDisplayString(const Value& v) {
         }
         case ValueType::ColorSequence: return std::to_string(std::get<ColorSequence>(v).keys.size()) + " colours";
         case ValueType::Ref: return std::get<InstanceRef>(v).id ? "Instance" : "nil";
+        case ValueType::CFrame: {
+            const auto& c = std::get<CFrameValue>(v);
+            return num(c.position.x) + ", " + num(c.position.y) + ", " + num(c.position.z) + "  (" + num(c.rotation.x) + ", " + num(c.rotation.y) + ", " + num(c.rotation.z) + ")";
+        }
     }
     return "?";
 }

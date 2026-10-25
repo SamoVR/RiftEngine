@@ -38,7 +38,11 @@ bool hasEvent(const Instance& i, const std::string& name) {
                                     "AncestryChanged", "Destroying", "AttributeChanged" };
     for (const char* e : common) if (name == e) return true;
     if (i.isBasePart()) return name == "Touched" || name == "TouchEnded";
-    if (i.cls == ClassId::Humanoid) return name == "Died" || name == "HealthChanged" || name == "Jumping" || name == "Running";
+    if (i.cls == ClassId::Humanoid) {
+        return name == "Died" || name == "HealthChanged" || name == "Jumping" || name == "Running" || name == "StateChanged"
+            || name == "FreeFalling" || name == "Swimming" || name == "AnimationPlayed";
+    }
+    if (i.cls == ClassId::Animator) return name == "AnimationPlayed";
     if (i.cls == ClassId::Sound) return name == "Ended";
     if (i.cls == ClassId::TextButton || i.cls == ClassId::ImageButton) {
         return name == "Activated" || name == "MouseButton1Click" || name == "MouseButton1Down" || name == "MouseButton1Up"
@@ -88,6 +92,9 @@ bool methodApplies(const std::string& name, const Instance& i) {
         { "Fire", [](const Instance& x) { return x.cls == ClassId::BindableEvent; } },
         { "Invoke", [](const Instance& x) { return x.cls == ClassId::BindableFunction; } },
         { "Activate", [](const Instance& x) { return x.cls == ClassId::Tool; } },
+        { "LoadAnimation", [](const Instance& x) { return x.cls == ClassId::Animator || x.cls == ClassId::Humanoid || x.cls == ClassId::AnimationController; } },
+        { "GetPlayingAnimationTracks", [](const Instance& x) { return x.cls == ClassId::Animator || x.cls == ClassId::Humanoid || x.cls == ClassId::AnimationController; } },
+        { "GetState", [](const Instance& x) { return x.cls == ClassId::Humanoid; } },
         { "Emit", [](const Instance& x) { return x.cls == ClassId::ParticleEmitter; } },
         { "FillBlock", [](const Instance& x) { return x.cls == ClassId::Terrain; } },
         { "FillBall", [](const Instance& x) { return x.cls == ClassId::Terrain; } },
@@ -139,6 +146,50 @@ void LuaRuntime::Impl::registerInstance() {
             sig.s->waiters.push_back(ts.L);
         }),
         sol::meta_function::to_string, [](const Signal&) { return std::string("Signal"); });
+
+    // ------------------------------------------------------------ AnimationTrack
+    auto anim = [this]() -> AnimationSystem& { return session.animation(); };
+    auto trackEvent = [this](const AnimTrack& t, const char* name) { return Signal{ trackSignal(t.id, name) }; };
+    lua.new_usertype<AnimTrack>("AnimationTrack", sol::no_constructor,
+        "Play", [anim](const AnimTrack& t, sol::optional<double> fade, sol::optional<double> weight, sol::optional<double> speed) {
+            anim().play(t.id, static_cast<float>(fade.value_or(0.1)), static_cast<float>(weight.value_or(1.0)), static_cast<float>(speed.value_or(1.0)));
+        },
+        "Stop", [anim](const AnimTrack& t, sol::optional<double> fade) { anim().stop(t.id, static_cast<float>(fade.value_or(0.1))); },
+        "AdjustSpeed", [anim](const AnimTrack& t, sol::optional<double> speed) { anim().adjustSpeed(t.id, static_cast<float>(speed.value_or(1.0))); },
+        "AdjustWeight", [anim](const AnimTrack& t, sol::optional<double> weight, sol::optional<double> fade) {
+            anim().adjustWeight(t.id, static_cast<float>(weight.value_or(1.0)), static_cast<float>(fade.value_or(0.1)));
+        },
+        "GetTimeOfKeyframe", [anim](const AnimTrack& t, const std::string& name) {
+            const float time = anim().timeOfKeyframe(t.id, name);
+            if (time < 0.0f) fail("GetTimeOfKeyframe: no keyframe named \"" + name + "\"");
+            return time;
+        },
+        "GetMarkerReachedSignal", [this](const AnimTrack& t, const std::string& name) { return Signal{ trackSignal(t.id, "Marker:" + name) }; },
+        "Destroy", [anim](const AnimTrack& t) { anim().stop(t.id, 0.0f); },
+        "Animation", sol::property([this, anim](const AnimTrack& t) { return instanceOrNil(scene.find(anim().info(t.id).animation)); }),
+        "Name", sol::property([anim](const AnimTrack& t) { return anim().info(t.id).name; }),
+        "IsPlaying", sol::property([anim](const AnimTrack& t) { return anim().info(t.id).playing; }),
+        "Length", sol::property([anim](const AnimTrack& t) { return anim().info(t.id).length; }),
+        "Speed", sol::property([anim](const AnimTrack& t) { return anim().info(t.id).speed; }),
+        "WeightCurrent", sol::property([anim](const AnimTrack& t) { return anim().info(t.id).weightCurrent; }),
+        "WeightTarget", sol::property([anim](const AnimTrack& t) { return anim().info(t.id).weightTarget; }),
+        "Looped", sol::property([anim](const AnimTrack& t) { return anim().info(t.id).looped; },
+                                [anim](const AnimTrack& t, bool looped) { anim().setLooped(t.id, looped); }),
+        "TimePosition", sol::property([anim](const AnimTrack& t) { return anim().info(t.id).timePosition; },
+                                      [anim](const AnimTrack& t, double time) { anim().setTimePosition(t.id, static_cast<float>(time)); }),
+        "Priority", sol::property(
+            [anim](const AnimTrack& t) { return EnumItem{ enumType("AnimationPriority"), static_cast<int>(anim().info(t.id).priority) }; },
+            [anim](const AnimTrack& t, const sol::object& v) {
+                if (!v.is<EnumItem>() || !v.as<EnumItem>().type || v.as<EnumItem>().type->name != "AnimationPriority") fail("Priority expects an Enum.AnimationPriority");
+                anim().setPriority(t.id, static_cast<AnimationPriority>(v.as<EnumItem>().value));
+            }),
+        "Stopped", sol::property([trackEvent](const AnimTrack& t) { return trackEvent(t, "Stopped"); }),
+        "Ended", sol::property([trackEvent](const AnimTrack& t) { return trackEvent(t, "Ended"); }),
+        "DidLoop", sol::property([trackEvent](const AnimTrack& t) { return trackEvent(t, "DidLoop"); }),
+        "KeyframeReached", sol::property([trackEvent](const AnimTrack& t) { return trackEvent(t, "KeyframeReached"); }),
+        "ClassName", sol::property([](const AnimTrack&) { return std::string("AnimationTrack"); }),
+        sol::meta_function::equal_to, [](const AnimTrack& a, const AnimTrack& b) { return a.id == b.id; },
+        sol::meta_function::to_string, [anim](const AnimTrack& t) { return anim().info(t.id).name; });
 
     // ------------------------------------------------------------ methods
     sol::table m = lua.create_table();
@@ -369,6 +420,39 @@ void LuaRuntime::Impl::registerInstance() {
         if (t == 2) return me().backpackBar;
         if (t == 4) return me().playerList && me().backpackBar;
         return true;
+    };
+
+    // ---- animation
+    // A Humanoid's / AnimationController's Animator, made on demand (Roblox does too).
+    auto animatorOf = [this](Instance& i, bool create) -> Instance* {
+        if (i.cls == ClassId::Animator) return &i;
+        for (Instance* c : i.children) if (c->cls == ClassId::Animator) return c;
+        return create ? scene.create(ClassId::Animator, &i) : nullptr;
+    };
+    m["LoadAnimation"] = [this, animatorOf](const Inst& h, const Inst& animation) {
+        Instance* i = need(h);
+        if (i->cls != ClassId::Animator && i->cls != ClassId::Humanoid && i->cls != ClassId::AnimationController) fail(memberError("LoadAnimation", *i));
+        Instance* anim = need(animation);
+        if (anim->cls != ClassId::Animation) fail("LoadAnimation expects an Animation, got a " + classInfo(anim->cls).name);
+        Instance* animator = animatorOf(*i, true);
+        if (!animator->isDescendantOf(&scene.workspace())) fail("LoadAnimation: the model must be in the Workspace");
+        std::string error;
+        const uint64_t id = session.animation().load(isClient() ? client : -1, scene, *animator, *anim, error);
+        if (!id) fail("LoadAnimation: " + error);
+        return AnimTrack{ id };
+    };
+    m["GetPlayingAnimationTracks"] = [this, animatorOf](const Inst& h) {
+        Instance* animator = animatorOf(*need(h), false);
+        sol::table out = lua.create_table();
+        if (!animator) return out;
+        int n = 0;
+        for (uint64_t id : session.animation().playingTracks(animator->id)) out[++n] = AnimTrack{ id };
+        return out;
+    };
+    m["GetState"] = [this](const Inst& h) {
+        Instance* i = need(h);
+        if (i->cls != ClassId::Humanoid) fail(memberError("GetState", *i));
+        return EnumItem{ enumType("HumanoidStateType"), static_cast<int>(session.humanoidState(i->id)) };
     };
 
     // ---- particles

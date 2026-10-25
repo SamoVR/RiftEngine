@@ -193,6 +193,13 @@ const char* classIcon(ClassId cls) {
         case ClassId::ParticleEmitter: return ICON_FA_FIRE;
         case ClassId::Beam: return ICON_FA_BOLT;
         case ClassId::Trail: return ICON_FA_WIND;
+        case ClassId::Motor6D: return ICON_FA_LINK;
+        case ClassId::Animator: case ClassId::AnimationController: return ICON_FA_PERSON_RUNNING;
+        case ClassId::Animation: return ICON_FA_FILM;
+        case ClassId::KeyframeSequence: return ICON_FA_CLAPPERBOARD;
+        case ClassId::Keyframe: return ICON_FA_DIAMOND;
+        case ClassId::Pose: return ICON_FA_BONE;
+        case ClassId::KeyframeMarker: return ICON_FA_BOOKMARK;
         case ClassId::ScriptService: return ICON_FA_SCROLL;
         case ClassId::StarterGui: return ICON_FA_TABLE_COLUMNS;
         case ClassId::StarterPlayer: return ICON_FA_PERSON;
@@ -256,6 +263,10 @@ ImVec4 classColor(ClassId cls) {
         case ClassId::ParticleEmitter: return { 1.00f, 0.58f, 0.25f, 1.0f };
         case ClassId::Beam: return { 0.70f, 0.50f, 1.00f, 1.0f };
         case ClassId::Trail: return { 0.55f, 0.80f, 1.00f, 1.0f };
+        case ClassId::Motor6D: return { 0.75f, 0.78f, 0.85f, 1.0f };
+        case ClassId::Animator: case ClassId::AnimationController: case ClassId::Animation:
+        case ClassId::KeyframeSequence: case ClassId::Keyframe: case ClassId::Pose: case ClassId::KeyframeMarker:
+            return { 1.00f, 0.55f, 0.62f, 1.0f };
         case ClassId::LocalScript: return { 0.40f, 0.70f, 1.00f, 1.0f };
         case ClassId::RemoteEvent: case ClassId::RemoteFunction: return { 1.00f, 0.62f, 0.35f, 1.0f };
         case ClassId::BindableEvent: case ClassId::BindableFunction: return { 0.95f, 0.85f, 0.40f, 1.0f };

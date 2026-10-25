@@ -10,6 +10,7 @@
 //   ScriptEditorPanel  Lua editing, one dockable tab per script
 //   AssetBrowserPanel  the project's files, drag them into the scene
 //   TerrainPanel       Terrain Editor: generate, brushes, material colours
+//   AnimationPanel     Animation Editor: pose a rig on a timeline, save .anim files
 //
 #include "editor/Editor.h"
 #include "game/GameSession.h"
@@ -128,6 +129,46 @@ private:
     void drawOverlays(UiContext& ui, const glm::mat4& view, const glm::mat4& proj);
     void handleTerrainBrush(UiContext& ui, const glm::mat4& view, const glm::mat4& proj);
     void endStroke(Editor& editor);
+};
+
+// ---------------------------------------------------------------------------
+// The Animation Editor: a rig (a model with Motor6D joints) posed at a time on
+// a timeline. Moving or turning a limb with the editor's tools keys that joint
+// at the current time; keyframes can be dragged, eased, named and played, and
+// the clip is saved as a .anim file whose path is its AnimationId.
+class AnimationPanel {
+public:
+    void draw(UiContext& ui, bool* open);
+    bool attached() const { return rigId_ != 0; }
+    void close(Editor& editor) { detach(editor); }
+
+private:
+    uint64_t rigId_ = 0;
+    std::vector<std::string> joints_;      // the rig's joints (by Part1 name), in display order
+    AnimClip clip_;
+    std::string name_ = "NewAnimation";
+    bool dirty_ = false, playing_ = false, loopPreview_ = true;
+    float time_ = 0.0f, selectedTime_ = -1.0f;
+    std::string selectedJoint_;            // "" = the whole keyframe
+    bool scrubbing_ = false, draggingKey_ = false, dragSnapshot_ = false;
+    float dragFrom_ = 0.0f;
+    std::vector<AnimClip> undo_, redo_;
+    std::unordered_map<std::string, glm::mat4> applied_; // each Part1's world frame after the last posing
+
+    Instance* rig(Editor& editor) const;
+    void attach(Editor& editor, Instance* model);
+    void detach(Editor& editor);
+    void newClip();
+    void changed();
+    void snapshot();
+    AnimKeyframe* keyframeAt(float time, bool create);
+    void pose(Editor& editor);
+    std::filesystem::path fileFor(Editor& editor, const std::string& name) const;
+    bool save(Editor& editor);
+    void open(Editor& editor, const std::filesystem::path& file);
+    void deleteSelected();
+    void drawToolbar(UiContext& ui);
+    void drawTimeline(UiContext& ui);
 };
 
 // ---------------------------------------------------------------------------

@@ -27,6 +27,7 @@ namespace rift {
 class GameSession;
 struct Instance;
 struct TouchEvent;
+struct AnimEvent;
 enum class GuiEvent;
 
 // What a Tool reports to the scripts (GameSession decides when).
@@ -57,6 +58,11 @@ public:
     void onHealthChanged(Instance& humanoid, float health);
     void onJumping(Instance& humanoid);
     void onRunning(Instance& humanoid, float speed);
+    void onSwimming(Instance& humanoid, float speed);
+    // Enum.HumanoidStateType values (also fires FreeFalling when the fall starts / ends).
+    void onHumanoidStateChanged(Instance& humanoid, int oldState, int newState);
+    // An AnimationTrack this side loaded: Stopped, Ended, DidLoop, KeyframeReached, markers.
+    void onAnimationEvent(const AnimEvent& e);
     void onGuiEvent(Instance& element, GuiEvent e);
     void onSoundEnded(Instance& sound);
     // A RemoteEvent / RemoteFunction message for this side (GameSession delivers them).

@@ -100,10 +100,22 @@ struct InstanceRef {
     bool operator!=(const InstanceRef& o) const { return !(*this == o); }
 };
 
-enum class ValueType : uint8_t { None, Bool, Int, Float, String, Vector3, Vector2, Color3, UDim2, Enum, Asset, NumberRange, NumberSequence, ColorSequence, Ref };
+// A position and rotation (Roblox CFrame) as properties store it: Euler
+// degrees applied X, then Y, then Z, like Instance::rotation. Motor6D.C0,
+// Pose.CFrame, ...
+struct CFrameValue {
+    glm::vec3 position{ 0.0f };
+    glm::vec3 rotation{ 0.0f };
+    bool operator==(const CFrameValue& o) const { return position == o.position && rotation == o.rotation; }
+    bool operator!=(const CFrameValue& o) const { return !(*this == o); }
+    glm::mat4 matrix() const;
+    static CFrameValue fromMatrix(const glm::mat4& m);
+};
+
+enum class ValueType : uint8_t { None, Bool, Int, Float, String, Vector3, Vector2, Color3, UDim2, Enum, Asset, NumberRange, NumberSequence, ColorSequence, Ref, CFrame };
 
 using Value = std::variant<std::monostate, bool, int, float, std::string, glm::vec3, glm::vec2, Color3, UDim2, EnumValue, AssetPath,
-                           NumberRange, NumberSequence, ColorSequence, InstanceRef>;
+                           NumberRange, NumberSequence, ColorSequence, InstanceRef, CFrameValue>;
 
 inline ValueType typeOf(const Value& v) { return static_cast<ValueType>(v.index()); }
 const char* typeName(ValueType t);

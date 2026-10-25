@@ -33,6 +33,10 @@ public:
     const std::string& root() const { return root_; }
     // The project folder: "project:scripts/X.lua" paths live there (shared modules).
     static constexpr const char* kProjectPrefix = "project:";
+    // "engine:scripts/X.lua": a built-in script shipped with RIFT (data/scripts),
+    // read-only (the default character's Animate).
+    static constexpr const char* kEnginePrefix = "engine:";
+    static bool isEnginePath(const std::string& path) { return path.rfind(kEnginePrefix, 0) == 0; }
     void setProjectRoot(const std::string& projectDir) { projectRoot_ = projectDir; }
     const std::string& projectRoot() const { return projectRoot_; }
 

@@ -23,6 +23,9 @@ const std::vector<std::string> kScaleTypes = { "Stretch", "Fit", "Crop" };
 const std::vector<std::string> kNormalIds = { "Right", "Top", "Back", "Left", "Bottom", "Front" };
 const std::vector<std::string> kParticleOrientations = { "FacingCamera", "FacingCameraWorldUp", "VelocityParallel", "VelocityPerpendicular" };
 const std::vector<std::string> kTextureModes = { "Stretch", "Wrap", "Static" };
+const std::vector<std::string> kAnimationPriorities = { "Idle", "Movement", "Action", "Action2", "Action3", "Action4", "Core" };
+const std::vector<std::string> kPoseEasingStyles = { "Linear", "Constant", "Elastic", "Cubic", "Bounce", "CubicV2" };
+const std::vector<std::string> kPoseEasingDirections = { "In", "Out", "InOut" };
 
 // ---------------------------------------------------------------- field accessors
 template <class T> constexpr ValueType valueTypeOf() {
@@ -39,6 +42,7 @@ template <class T> constexpr ValueType valueTypeOf() {
     else if constexpr (std::is_same_v<T, NumberSequence>) return ValueType::NumberSequence;
     else if constexpr (std::is_same_v<T, ColorSequence>) return ValueType::ColorSequence;
     else if constexpr (std::is_same_v<T, InstanceRef>) return ValueType::Ref;
+    else if constexpr (std::is_same_v<T, CFrameValue>) return ValueType::CFrame;
     else if constexpr (std::is_enum_v<T>) return ValueType::Enum;
     else static_assert(sizeof(T) == 0, "unsupported property field type");
 }
@@ -350,6 +354,42 @@ std::vector<ClassInfo> buildClasses() {
         c.props.push_back(field<&Instance::sizeSequence>("WidthScale", "Shape").range(0.0f, 10.0f).tip("Width along the trail as a fraction of the distance between the attachments."));
         c.props.push_back(field<&Instance::faceCamera>("FaceCamera", "Shape"));
     }
+    // ------------------------------------------------------------ animation
+    {
+        ClassInfo& c = def(ClassId::Motor6D, "Motor6D", "A joint that holds Part1 to Part0 and that animations turn: Part1 = Part0 * C0 * Transform * C1:Inverse().", true);
+        c.props.push_back(field<&Instance::attachment0>("Part0", "Parts").tip("The part the joint hangs from (the Torso for a shoulder)."));
+        c.props.push_back(field<&Instance::attachment1>("Part1", "Parts").tip("The part the joint moves (the arm). Animations name their poses after it."));
+        c.props.push_back(field<&Instance::c0>("C0", "Joint").tip("Where the joint is, in Part0's space."));
+        c.props.push_back(field<&Instance::c1>("C1", "Joint").tip("Where the joint is, in Part1's space."));
+        c.props.push_back(field<&Instance::enabled>("Enabled", "Joint"));
+        c.props.push_back(field<&Instance::jointTransform>("Transform", "Joint").flagsSet(PF_ScriptRead | PF_ScriptWrite | PF_Runtime));
+    }
+    def(ClassId::Animator, "Animator", "Plays animations on its model: put it in a Humanoid or an AnimationController. Scripts call animator:LoadAnimation(animation).", true);
+    def(ClassId::AnimationController, "AnimationController", "Lets a model without a Humanoid play animations (a door, a creature): it holds an Animator.", true);
+    {
+        ClassInfo& c = def(ClassId::Animation, "Animation", "Points at an animation (AnimationId). Load it with animator:LoadAnimation(animation) to get a track to Play().", true);
+        c.props.push_back(field<&Instance::animationId>("AnimationId", "Animation").tip("A .anim file made with the Animation Editor (assets/animations/Wave.anim), an engine animation (engine:animations/walk.anim), or a KeyframeSequence registered with KeyframeSequenceProvider."));
+    }
+    {
+        ClassInfo& c = def(ClassId::KeyframeSequence, "KeyframeSequence", "An animation as objects: Keyframes with Poses. The Animation Editor keeps its work here.", true);
+        c.props.push_back(field<&Instance::looped>("Loop", "Animation"));
+        c.props.push_back(field<&Instance::priority>("Priority", "Animation").enums("AnimationPriority").tip("Higher priorities override lower ones on the joints they move (Core < Idle < Movement < Action)."));
+    }
+    {
+        ClassInfo& c = def(ClassId::Keyframe, "Keyframe", "One moment of a KeyframeSequence; its Poses say where each joint is then.", true);
+        c.props.push_back(field<&Instance::keyframeTime>("Time", "Keyframe").range(0.0f, 1000.0f).speed(0.01f));
+    }
+    {
+        ClassInfo& c = def(ClassId::Pose, "Pose", "Where one joint is in a Keyframe: named after the joint's Part1, with the offset in CFrame.", true);
+        c.props.push_back(field<&Instance::c0>("CFrame", "Pose"));
+        c.props.push_back(field<&Instance::poseWeight>("Weight", "Pose").range(0.0f, 1.0f).speed(0.01f));
+        c.props.push_back(field<&Instance::easingStyle>("EasingStyle", "Pose").enums("PoseEasingStyle").tip("How it moves towards the next keyframe."));
+        c.props.push_back(field<&Instance::easingDirection>("EasingDirection", "Pose").enums("PoseEasingDirection"));
+    }
+    {
+        ClassInfo& c = def(ClassId::KeyframeMarker, "KeyframeMarker", "A named event in a Keyframe: track:GetMarkerReachedSignal(name) fires when the animation passes it.", true);
+        c.props.push_back(field<&Instance::text>("Value", "Marker"));
+    }
     {
         ClassInfo& c = def(ClassId::Sound, "Sound", "Plays an audio file. Inside a part it is 3D (quieter with distance).", true);
         c.props.push_back(field<&Instance::soundId>("SoundId", "Sound").tip("Audio file (.wav, .mp3, .ogg, .flac) in the project's assets."));
@@ -556,6 +596,9 @@ void applyClassDefaults(Instance& i) {
         case ClassId::Trail:
             i.transparencySequence = NumberSequence(0.5f);
             break;
+        case ClassId::Keyframe:
+        case ClassId::Pose:
+            break;
         case ClassId::Frame:
             i.color = { 1.0f, 1.0f, 1.0f };
             i.guiSize = { 0.0f, 100.0f, 0.0f, 100.0f };
@@ -694,6 +737,9 @@ const std::vector<std::pair<std::string, std::vector<std::string>>>& allEnums() 
         { "NormalId", kNormalIds },
         { "ParticleOrientation", kParticleOrientations },
         { "TextureMode", kTextureModes },
+        { "AnimationPriority", kAnimationPriorities },
+        { "PoseEasingStyle", kPoseEasingStyles },
+        { "PoseEasingDirection", kPoseEasingDirections },
     };
     return table;
 }

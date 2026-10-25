@@ -292,6 +292,12 @@ void EditorApp::frame(float dt) {
             terrain_.draw(ui, &settings_.showTerrain);
         }
         if (!settings_.showTerrain) editor_->terrainTool.active = false;
+        if (settings_.showAnimation) {
+            // First shown: a tab next to the Output (it needs the width).
+            if (ImGuiWindow* w = ImGui::FindWindowByName("###Output")) ImGui::SetNextWindowDockID(w->DockId, ImGuiCond_FirstUseEver);
+            animation_.draw(ui, &settings_.showAnimation);
+        }
+        if (!settings_.showAnimation && animation_.attached()) animation_.close(*editor_);
         if (focusExplorer_) {
             ImGui::SetWindowFocus("###Explorer");
             ImGui::SetWindowFocus("###Properties");
@@ -341,6 +347,7 @@ void EditorApp::buildDefaultLayout(ImGuiID dockspace) {
     ImGui::DockBuilderDockWindow("###Terrain", rightBottom);
     ImGui::DockBuilderDockWindow("###Output", bottom);
     ImGui::DockBuilderDockWindow("###Assets", bottom);
+    ImGui::DockBuilderDockWindow("###Animation", bottom);
     ImGui::DockBuilderFinish(dockspace);
     settings_.showExplorer = settings_.showProperties = settings_.showOutput = settings_.showAssets = settings_.showSourceControl = true;
     focusExplorer_ = true; // in front of Source Control once both exist
@@ -530,6 +537,7 @@ void EditorApp::drawMenuBar() {
         ImGui::MenuItem(ICON_FA_FOLDER_OPEN "  Assets", nullptr, &settings_.showAssets);
         ImGui::MenuItem(ICON_FA_CODE_BRANCH "  Source Control", nullptr, &settings_.showSourceControl);
         ImGui::MenuItem(ICON_FA_MOUNTAIN_SUN "  Terrain Editor", nullptr, &settings_.showTerrain);
+        ImGui::MenuItem(ICON_FA_PERSON_RUNNING "  Animation Editor", nullptr, &settings_.showAnimation);
         ImGui::Separator();
         ImGui::MenuItem(ICON_FA_TABLE_CELLS "  Grid", nullptr, &settings_.showGrid);
         ImGui::MenuItem(ICON_FA_DESKTOP "  GUI While Editing", nullptr, &settings_.showGui);
@@ -628,6 +636,11 @@ void EditorApp::drawToolbar() {
             settings_.showTerrain = true;
             ImGui::SetWindowFocus("###Terrain");
         }
+    }
+    ImGui::SameLine(0.0f, 2.0f);
+    if (theme::iconButton(ICON_FA_PERSON_RUNNING, "Animation Editor: pose a character on a timeline", settings_.showAnimation, button) && !e.playing()) {
+        settings_.showAnimation = !settings_.showAnimation;
+        if (settings_.showAnimation) ImGui::SetWindowFocus("###Animation");
     }
     separator();
     if (theme::iconButton(s.localSpace ? ICON_FA_CUBE : ICON_FA_GLOBE, s.localSpace ? "Local axes (Ctrl+L to switch to world)" : "World axes (Ctrl+L to switch to local)", false, button))

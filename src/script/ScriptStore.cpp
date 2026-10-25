@@ -21,6 +21,10 @@ std::string ScriptStore::normalize(const std::string& relPath) {
         const std::string rest = normalize(relPath.substr(std::char_traits<char>::length(kProjectPrefix)));
         return rest.empty() ? std::string() : std::string(kProjectPrefix) + rest;
     }
+    if (isEnginePath(relPath)) {
+        const std::string rest = normalize(relPath.substr(std::char_traits<char>::length(kEnginePrefix)));
+        return rest.empty() ? std::string() : std::string(kEnginePrefix) + rest;
+    }
     std::string p = relPath;
     std::replace(p.begin(), p.end(), '\\', '/');
     if (p.empty() || p.front() == '/' || p.find(':') != std::string::npos) return "";
@@ -45,6 +49,7 @@ fs::path ScriptStore::diskPath(const std::string& relPath) const {
     if (relPath.rfind(kProjectPrefix, 0) == 0) {
         return fs::path(Paths::fromUtf8(projectRoot_)) / Paths::fromUtf8(relPath.substr(std::char_traits<char>::length(kProjectPrefix)));
     }
+    if (isEnginePath(relPath)) return Paths::engineData() / Paths::fromUtf8(relPath.substr(std::char_traits<char>::length(kEnginePrefix)));
     return fs::path(Paths::fromUtf8(root_)) / Paths::fromUtf8(relPath);
 }
 
@@ -88,7 +93,7 @@ bool ScriptStore::load(const std::string& relPath) {
     const fs::path p = diskPath(key);
     // An unsaved scene has no folder yet, so there is nothing on disk to read
     // (and a relative path would wrongly resolve against the working directory).
-    const bool hasRoot = key.rfind(kProjectPrefix, 0) == 0 ? !projectRoot_.empty() : !root_.empty();
+    const bool hasRoot = isEnginePath(key) || (key.rfind(kProjectPrefix, 0) == 0 ? !projectRoot_.empty() : !root_.empty());
     if (!hasRoot || !readFile(p, e.text)) {
         LOG_WARN("ScriptStore", "Script file not found: " + p.string());
         return false;
@@ -102,6 +107,7 @@ bool ScriptStore::load(const std::string& relPath) {
 }
 
 std::string* ScriptStore::editableText(const std::string& relPath) {
+    if (isEnginePath(relPath)) return nullptr; // built-in scripts are read-only
     auto it = entries_.find(normalize(relPath));
     return it == entries_.end() ? nullptr : &it->second.text;
 }
@@ -148,6 +154,7 @@ bool ScriptStore::save(const std::string& relPath) {
     auto it = entries_.find(normalize(relPath));
     if (it == entries_.end()) return false;
     Entry& e = it->second;
+    if (isEnginePath(it->first)) return true; // read-only, nothing to write
     if (root_.empty()) {
         LOG_WARN("ScriptStore", "Cannot save " + it->first + ": the scene has no folder yet.");
         return false;
@@ -170,7 +177,7 @@ bool ScriptStore::saveAll(const std::string& sceneDir) {
     if (reroot) root_ = sceneDir;
     bool ok = true;
     for (auto& [path, e] : entries_) {
-        if (!reroot && !e.dirty && e.onDisk) continue;
+        if (isEnginePath(path) || (!reroot && !e.dirty && e.onDisk)) continue;
         ok = save(path) && ok;
     }
     return ok;

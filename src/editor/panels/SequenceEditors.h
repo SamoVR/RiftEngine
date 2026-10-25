@@ -23,8 +23,8 @@ bool colorSequencePreview(const char* id, const ColorSequence& seq);
 // A gradient bar with colour stops, a colour picker for the selected stop, presets.
 bool colorSequenceEditor(ColorSequence& seq, bool& discrete);
 
-// A combo of the scene's Attachments (those near `near` first); also accepts
-// an Attachment dragged from the Explorer.
-bool attachmentPicker(const char* id, const Scene& scene, InstanceRef& ref, uint64_t near);
+// A combo of the scene's Attachments (or parts, for Motor6D.Part0 / Part1),
+// those near `near` first; also accepts one dragged from the Explorer.
+bool attachmentPicker(const char* id, const Scene& scene, InstanceRef& ref, uint64_t near, bool parts = false);
 
 } // namespace rift

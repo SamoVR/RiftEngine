@@ -149,6 +149,20 @@ Terrain Editor:
 Every stroke, Generate and Clear is one undo step (Ctrl+Z). Terrain is saved
 next to the scene as `terrain.bin`.
 
+### Animations
+
+The running-figure button in the toolbar (or **View > Animation Editor**)
+opens the Animation Editor under the viewport. **Insert > Animation >
+Character Rig** adds a body shaped like the players' characters to practise on.
+
+1. Select the rig (any model with a Humanoid or AnimationController and Motor6D joints) and click **Edit**.
+2. Move the red line on the timeline to a time and pose the rig with the **Rotate** and **Move** tools: limbs turn around their joints, and every change is keyed at that time (diamonds appear on the joint's row).
+3. Drag diamonds to move keys (Shift: no snapping), right-click one for its easing, Delete removes the selected key. **Key All** keys every joint as it is now. Name a keyframe to get `KeyframeReached` events.
+4. Set the **Priority** and **Loop**, press Play to preview, and **Save**: the animation goes to `assets/animations/<Name>.anim`, which is its AnimationId. The **+** button also adds an Animation object with that id to ReplicatedStorage.
+
+The open button lists the game's animations and the built-in ones (opening a
+built-in one makes a copy to change).
+
 ### Assets
 
 The Assets panel shows the project folder. Drag files from Windows Explorer onto

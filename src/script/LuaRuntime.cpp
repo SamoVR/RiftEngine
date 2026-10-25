@@ -768,6 +768,54 @@ void LuaRuntime::onRunning(Instance& humanoid, float speed) {
     impl_->queueInstanceEvent(humanoid.id, "Running", [speed](lua_State* T) { lua_pushnumber(T, speed); return 1; });
 }
 
+void LuaRuntime::onSwimming(Instance& humanoid, float speed) {
+    impl_->queueInstanceEvent(humanoid.id, "Swimming", [speed](lua_State* T) { lua_pushnumber(T, speed); return 1; });
+}
+
+void LuaRuntime::onHumanoidStateChanged(Instance& humanoid, int oldState, int newState) {
+    Impl& s = *impl_;
+    const lua::EnumType* type = lua::enumType("HumanoidStateType");
+    s.queueInstanceEvent(humanoid.id, "StateChanged", [&s, type, oldState, newState](lua_State* T) {
+        sol::make_object(s.lua, lua::EnumItem{ type, oldState }).push(T);
+        sol::make_object(s.lua, lua::EnumItem{ type, newState }).push(T);
+        return 2;
+    });
+    const int freefall = static_cast<int>(HumanoidState::Freefall);
+    if (newState == freefall || oldState == freefall) {
+        const bool falling = newState == freefall;
+        s.queueInstanceEvent(humanoid.id, "FreeFalling", [falling](lua_State* T) { lua_pushboolean(T, falling ? 1 : 0); return 1; });
+    }
+}
+
+void LuaRuntime::onAnimationEvent(const AnimEvent& e) {
+    Impl& s = *impl_;
+    auto listeners = [&](const std::string& name) -> std::shared_ptr<lua::SignalState> {
+        auto t = s.trackSignals.find(e.track);
+        if (t == s.trackSignals.end()) return nullptr;
+        auto it = t->second.find(name);
+        return it == t->second.end() ? nullptr : it->second;
+    };
+    const uint64_t track = e.track;
+    switch (e.kind) {
+        case AnimEvent::Played:
+            s.queueInstanceEvent(e.animator, "AnimationPlayed", [&s, track](lua_State* T) { sol::make_object(s.lua, lua::AnimTrack{ track }).push(T); return 1; });
+            break;
+        case AnimEvent::Stopped: s.queue(listeners("Stopped"), nullptr); break;
+        case AnimEvent::Ended: s.queue(listeners("Ended"), nullptr); break;
+        case AnimEvent::DidLoop: s.queue(listeners("DidLoop"), nullptr); break;
+        case AnimEvent::KeyframeReached: {
+            const std::string name = e.name;
+            s.queue(listeners("KeyframeReached"), [name](lua_State* T) { lua_pushstring(T, name.c_str()); return 1; });
+            break;
+        }
+        case AnimEvent::Marker: {
+            const std::string value = e.value;
+            s.queue(listeners("Marker:" + e.name), [value](lua_State* T) { lua_pushstring(T, value.c_str()); return 1; });
+            break;
+        }
+    }
+}
+
 void LuaRuntime::onGuiEvent(Instance& element, GuiEvent e) {
     Impl& s = *impl_;
     const uint64_t id = element.id;

@@ -23,18 +23,6 @@ namespace {
     constexpr int kMaxPlayers = 8;
     constexpr int kHotbarSlots = 10;
 
-    Instance* addPart(Scene& scene, Instance* parent, const char* name, PartShape shape, glm::vec3 pos, glm::vec3 size, Color3 color) {
-        Instance* p = scene.create(ClassId::Part, parent);
-        p->name = name;
-        p->shape = shape;
-        p->position = pos;
-        p->size = size;
-        p->color = color;
-        p->material = Material::SmoothPlastic;
-        p->anchored = false;
-        p->canCollide = false;
-        return p;
-    }
 
     float wrapDegrees(float a) {
         a = std::fmod(a + 180.0f, 360.0f);
@@ -69,6 +57,7 @@ GameSession::GameSession(const Scene& editScene, ScriptStore& scripts, Input& in
     : scene_(editScene.clone()), scripts_(scripts), input_(input), options_(std::move(options)) {
     scene_->ensureDefaults();
     physics_ = std::make_unique<PhysicsWorld>(*scene_);
+    animation_ = std::make_unique<AnimationSystem>();
 
     // The players (on the server first, so every client sees all of them).
     const int count = std::clamp(options_.playerCount, 1, kMaxPlayers);
@@ -81,6 +70,9 @@ GameSession::GameSession(const Scene& editScene, ScriptStore& scripts, Input& in
         c->replicator->start();
         setUpClientPlayer(*c);
     }
+    std::vector<Scene*> clientScenes;
+    for (auto& c : clients_) clientScenes.push_back(c->scene.get());
+    animation_->setScenes(scene_.get(), clientScenes);
 
     lua_ = std::make_unique<LuaRuntime>(*this, NetworkSide::Server, 0);
     for (auto& c : clients_) {
@@ -198,6 +190,11 @@ GameSession::Client* GameSession::clientOfCharacter(uint64_t characterId) {
     if (!characterId) return nullptr;
     for (auto& c : clients_) if (c->characterId == characterId) return c.get();
     return nullptr;
+}
+
+HumanoidState GameSession::humanoidState(uint64_t humanoidId) const {
+    for (const auto& c : clients_) if (humanoidId && c->humanoidId == humanoidId) return c->state;
+    return HumanoidState::Running;
 }
 
 GameSession::Client* GameSession::clientOfHumanoid(uint64_t humanoidId) {
@@ -340,23 +337,9 @@ void GameSession::spawnCharacter(Client& c) {
         else log(LogLevel::Warning, "StarterCharacter needs a HumanoidRootPart and a Humanoid; using the default character");
     }
     if (!model) {
-        model = scene_->create(ClassId::Model);
-        const Color3 shirt = starter.color;
-        const Color3 skin(0.98f, 0.82f, 0.55f);
-        const Color3 pants(0.17f, 0.20f, 0.28f);
-        Instance* root = addPart(*scene_, model, "HumanoidRootPart", PartShape::Block, { 0, 0, 0 }, { 1.0f, kCharacterHeight, 1.0f }, shirt);
-        root->transparency = 1.0f;
-        root->castShadow = false;
-        addPart(*scene_, model, "Torso", PartShape::Block, { 0, 0.15f, 0 }, { 1.0f, 0.8f, 0.55f }, shirt);
-        addPart(*scene_, model, "Head", PartShape::Ball, { 0, 0.8f, 0 }, { 0.55f, 0.55f, 0.55f }, skin);
-        addPart(*scene_, model, "Left Arm", PartShape::Block, { -0.66f, 0.12f, 0 }, { 0.3f, 0.75f, 0.32f }, skin);
-        addPart(*scene_, model, "Right Arm", PartShape::Block, { 0.66f, 0.12f, 0 }, { 0.3f, 0.75f, 0.32f }, skin);
-        addPart(*scene_, model, "Left Leg", PartShape::Block, { -0.24f, -0.625f, 0 }, { 0.42f, 0.75f, 0.45f }, pants);
-        addPart(*scene_, model, "Right Leg", PartShape::Block, { 0.24f, -0.625f, 0 }, { 0.42f, 0.75f, 0.45f }, pants);
-        Instance* eyeL = addPart(*scene_, model, "LeftEye", PartShape::Ball, { -0.1f, 0.86f, -0.24f }, { 0.08f, 0.1f, 0.06f }, { 0.08f, 0.08f, 0.1f });
-        Instance* eyeR = addPart(*scene_, model, "RightEye", PartShape::Ball, { 0.1f, 0.86f, -0.24f }, { 0.08f, 0.1f, 0.06f }, { 0.08f, 0.08f, 0.1f });
-        eyeL->castShadow = eyeR->castShadow = false;
-        scene_->create(ClassId::Humanoid, model);
+        RigColors colors;
+        colors.shirt = starter.color;
+        model = buildCharacterRig(*scene_, colors, false);
     }
     model->name = playerInst ? playerInst->name : "Player";
     // StarterCharacterScripts: LocalScripts run on the client, Scripts on the server.
@@ -370,6 +353,16 @@ void GameSession::spawnCharacter(Client& c) {
     Instance* root = model->findFirstChild("HumanoidRootPart");
     Instance* hum = nullptr;
     for (Instance* child : model->children) if (child->cls == ClassId::Humanoid) hum = child;
+    // Animations: an Animator in the Humanoid, and the default Animate script
+    // unless StarterCharacterScripts (or the StarterCharacter) brings its own.
+    bool hasAnimator = false;
+    for (Instance* child : hum->children) hasAnimator |= child->cls == ClassId::Animator;
+    if (!hasAnimator) scene_->create(ClassId::Animator, hum);
+    if (!model->findFirstChild("Animate")) {
+        Instance* animate = scene_->create(ClassId::LocalScript, model);
+        animate->name = "Animate";
+        animate->source = "engine:scripts/Animate.lua";
+    }
     hum->walkSpeed = starter.walkSpeed;
     hum->jumpPower = starter.jumpPower;
     hum->health = hum->maxHealth;
@@ -398,7 +391,9 @@ void GameSession::spawnCharacter(Client& c) {
     c.dead = false;
     c.walkTarget = false;
     c.runningSpeed = -1.0f;
-    c.armRaised = false;
+    c.state = HumanoidState::Running;
+    c.swimming = false;
+    c.swimSpeed = -1.0f;
 
     // Camera starts behind the new character.
     c.camera.yaw = c.facingYaw;
@@ -469,6 +464,7 @@ void GameSession::updateCharacter(Client& c, float dt) {
     in.walkSpeed = hum->walkSpeed;
     in.jumpSpeed = hum->jumpPower;
     in.swimming = scene_->terrain().waterAt(actual + glm::vec3(0.0f, 0.3f, 0.0f)) > 0.0f; // chest-deep in terrain water
+    c.swimming = in.swimming;
     if (!c.dead) {
         glm::vec3 wish(0.0f);
         if (c.view.keyboard) {
@@ -503,10 +499,14 @@ void GameSession::afterPhysics(float dt) {
     for (uint64_t id : physics_->takeFallenParts()) {
         if (Instance* i = scene_->find(id)) scene_->destroy(i); // fell out of the world
     }
-    for (auto& c : clients_) {
-        placeCharacter(*c, dt);
-        updateTools(*c);
+    for (auto& c : clients_) placeCharacter(*c, dt);
+    // Animations pose the rigs (limbs) before held tools follow the hands.
+    animation_->update(dt);
+    for (const AnimEvent& e : animation_->takeEvents()) {
+        if (e.owner < 0) lua_->onAnimationEvent(e);
+        else if (e.owner < clientCount()) client(e.owner).lua->onAnimationEvent(e);
     }
+    for (auto& c : clients_) updateTools(*c);
     pickUpTools();
 }
 
@@ -531,9 +531,29 @@ void GameSession::placeCharacter(Client& c, float dt) {
 
     if (c.controller->justJumped()) forAll([&](LuaRuntime& l) { l.onJumping(*hum); });
     const float speed = glm::length(glm::vec2(root->velocity.x, root->velocity.z));
-    if (std::abs(speed - c.runningSpeed) > 0.5f || (speed == 0.0f && c.runningSpeed != 0.0f)) {
+
+    // The Humanoid's state: running on the ground, jumping, falling or swimming.
+    HumanoidState state = HumanoidState::Running;
+    if (c.swimming) state = HumanoidState::Swimming;
+    else if (c.controller->justJumped()) state = HumanoidState::Jumping;
+    else if (!c.controller->onGround()) state = c.state == HumanoidState::Jumping && root->velocity.y > 0.0f ? HumanoidState::Jumping : HumanoidState::Freefall;
+    if (state != c.state) {
+        const HumanoidState old = c.state;
+        c.state = state;
+        forAll([&](LuaRuntime& l) { l.onHumanoidStateChanged(*hum, static_cast<int>(old), static_cast<int>(state)); });
+        if (state == HumanoidState::Running) c.runningSpeed = -1.0f; // landing reports the speed again
+        if (state == HumanoidState::Swimming) c.swimSpeed = -1.0f;
+    }
+    if (state == HumanoidState::Running && (std::abs(speed - c.runningSpeed) > 0.5f || (speed < 0.05f && c.runningSpeed != 0.0f))) {
         c.runningSpeed = speed < 0.05f ? 0.0f : speed;
         forAll([&](LuaRuntime& l) { l.onRunning(*hum, c.runningSpeed); });
+    }
+    if (state == HumanoidState::Swimming) {
+        const float swim = glm::length(root->velocity);
+        if (std::abs(swim - c.swimSpeed) > 0.5f) {
+            c.swimSpeed = swim;
+            forAll([&](LuaRuntime& l) { l.onSwimming(*hum, swim); });
+        }
     }
 
     // Health and death.
@@ -548,6 +568,13 @@ void GameSession::placeCharacter(Client& c, float dt) {
         c.respawnTimer = kRespawnDelay;
         c.activating = false;
         forAll([&](LuaRuntime& l) { l.onHumanoidDied(*hum); });
+        const int oldState = static_cast<int>(c.state);
+        c.state = HumanoidState::Dead;
+        forAll([&](LuaRuntime& l) { l.onHumanoidStateChanged(*hum, oldState, static_cast<int>(HumanoidState::Dead)); });
+        // The joints break, so the limbs can fall apart (Roblox's BreakJointsOnDeath).
+        std::vector<Instance*> joints;
+        Scene::forEachDescendant(*model, [&](Instance& j) { if (j.cls == ClassId::Motor6D) joints.push_back(&j); });
+        for (Instance* j : joints) scene_->destroy(j);
         c.controller->setInput({});
         // Fall apart: the limbs drop (they become ordinary unanchored parts).
         physics_->destroyCharacter(c.controller);
@@ -722,23 +749,7 @@ void GameSession::updateTools(Client& c) {
     Instance* arm = model ? model->findFirstChild("Right Arm") : nullptr;
     if (arm && !arm->isBasePart()) arm = nullptr;
 
-    // The right arm holds the tool out in front (until animations take over).
-    const bool hold = tool && !c.dead && arm;
-    if (hold && !c.armRaised) {
-        c.armRestPos = arm->position;
-        c.armRestRot = arm->rotation;
-        const float half = arm->size.y * 0.5f;
-        const glm::vec3 shoulder = arm->position + glm::vec3(0.0f, half, 0.0f);
-        arm->position = shoulder + glm::vec3(0.0f, 0.0f, -half);
-        arm->rotation = glm::vec3(90.0f, 0.0f, 0.0f);
-        c.armRaised = true;
-    } else if (!hold && c.armRaised) {
-        if (arm) {
-            arm->position = c.armRestPos;
-            arm->rotation = c.armRestRot;
-        }
-        c.armRaised = false;
-    }
+    // The arm itself is raised by the Animate script's tool animation.
     if (!tool || !model || c.dead) return;
     Instance* handle = handleOf(*tool);
     if (!handle) return;

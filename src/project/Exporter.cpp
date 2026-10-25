@@ -113,6 +113,11 @@ ExportResult exportGame(const Project& project, const ExportOptions& o) {
     const fs::path data = out / "data";
     if (!copy.copyTree(o.engineData / "shaders", data / "shaders")) return r;
     if (!copy.copyTree(o.engineData / "textures", data / "textures")) return r;
+    // Built-in scripts and animations (the default character's Animate).
+    for (const char* folder : { "scripts", "animations" }) {
+        std::error_code exists;
+        if (fs::exists(o.engineData / folder, exists) && !copy.copyTree(o.engineData / folder, data / folder)) return r;
+    }
     for (const char* f : { "Inter-Regular.ttf", "Inter-SemiBold.ttf", "Inter-LICENSE.txt" })
         if (!copy.copyFile(o.engineData / "fonts" / f, data / "fonts" / f)) return r;
     if (!copy.copyFile(o.engineData / "icons" / "rift.png", data / "icons" / "rift.png")) return r;

@@ -14,6 +14,16 @@ RIFT is in **beta**: versions are 0.x until the engine is complete.
 - Scripts: `Terrain:FillBlock`, `FillBall`, `FillCylinder`, `Clear`, `GetMaterialColor` / `SetMaterialColor`; server changes reach every client.
 - Saved next to the scene as `terrain.bin`.
 
+### Animations
+- Roblox's animation system: Animator, AnimationController, Animation, KeyframeSequence / Keyframe / Pose / KeyframeMarker and Motor6D joints. Tracks fade, loop, blend by priority and weight, and fire Stopped, Ended, DidLoop, KeyframeReached and marker events.
+- Characters are jointed now and animate with a default Animate script: idle, walk, run, jump, fall, swim, and the arm raised while holding a tool. Replace it with your own Animate in StarterCharacterScripts.
+- The **Animation Editor**: pose a rig on a timeline with the Move and Rotate tools (limbs turn around their joints, changes are keyed automatically), drag keys, set easing, name keyframes, preview, and save `.anim` files to use as AnimationIds. Insert > Animation > Character Rig to practise on.
+- Humanoid states: `GetState()`, `StateChanged`, `FreeFalling`, `Swimming`. KeyframeSequenceProvider.
+- The CFrame property type (Motor6D.C0 / C1, Pose.CFrame) with position and rotation fields in Properties.
+
+### Fixes
+- `game:GetService("ServerStorage")` returned ReplicatedStorage.
+
 ### Effects
 - Attachments, ParticleEmitters, Beams and Trails, drawn in the editor and in the game, with Roblox's properties (colour and size over life, spread, acceleration, drag, light emission, curved beams, scrolling textures, fading trails).
 - NumberRange, NumberSequence and ColorSequence for scripts, and editors for them: a curve with draggable points and a gradient with colour stops.

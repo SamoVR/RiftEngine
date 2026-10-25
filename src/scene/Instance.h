@@ -33,6 +33,8 @@ enum class ClassId : uint8_t {
     PointLight, SpotLight,
     // Effects: points on parts, and what is drawn from them
     Attachment, ParticleEmitter, Beam, Trail,
+    // Animation: joints, the player of animations, and the clips
+    Motor6D, Animator, AnimationController, Animation, KeyframeSequence, Keyframe, Pose, KeyframeMarker,
     Sound,
     Humanoid,
     // Players and their containers (made by the engine)
@@ -69,6 +71,10 @@ enum class ScaleType : int { Stretch, Fit, Crop };
 enum class NormalId : int { Right, Top, Back, Left, Bottom, Front };   // +X, +Y, +Z, -X, -Y, -Z
 enum class ParticleOrientation : int { FacingCamera, FacingCameraWorldUp, VelocityParallel, VelocityPerpendicular };
 enum class TextureMode : int { Stretch, Wrap, Static };
+// Enum.AnimationPriority (in the enum's order; Core blends lowest).
+enum class AnimationPriority : int { Idle, Movement, Action, Action2, Action3, Action4, Core };
+enum class PoseEasingStyle : int { Linear, Constant, Elastic, Cubic, Bounce, CubicV2 };
+enum class PoseEasingDirection : int { In, Out, InOut };
 
 struct Attribute {
     std::string name;
@@ -195,6 +201,17 @@ struct Instance {
     TextureMode textureMode = TextureMode::Stretch;
     float trailLifetime = 2.0f;                  // Trail.Lifetime (seconds)
     float minLength = 0.1f, maxLength = 0.0f;    // Trail: point spacing, total length (0 = no limit)
+    // ------------------------------------------------------------ animation
+    // Motor6D: Part0 / Part1 are attachment0 / attachment1. Pose.CFrame is c0.
+    CFrameValue c0, c1;                          // Motor6D: the joint in Part0's / Part1's space
+    CFrameValue jointTransform;                  // Motor6D.Transform: what animations set (runtime)
+    std::string animationId;                     // Animation.AnimationId: a .anim file or "kfs:<id>"
+    float keyframeTime = 0.0f;                   // Keyframe.Time, KeyframeMarker's time is its Keyframe's
+    float poseWeight = 1.0f;                     // Pose.Weight
+    PoseEasingStyle easingStyle = PoseEasingStyle::Linear;
+    PoseEasingDirection easingDirection = PoseEasingDirection::In;
+    AnimationPriority priority = AnimationPriority::Action; // KeyframeSequence.Priority (Loop is `looped`)
+
     // Runtime (never saved): ParticleEmitter:Emit(n) / :Clear() waiting for the renderer.
     int emitRequests = 0;
     uint32_t clearRequests = 0;

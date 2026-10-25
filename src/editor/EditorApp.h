@@ -55,6 +55,7 @@ private:
     AssetBrowserPanel assets_;
     SourceControlPanel sourceControl_;
     TerrainPanel terrain_;
+    AnimationPanel animation_;
     Updater updater_;
 
     std::string iniPath_;

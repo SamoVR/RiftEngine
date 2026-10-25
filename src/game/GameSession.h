@@ -20,6 +20,7 @@
 // Heartbeat, waits -> remote messages -> cameras -> GUI -> sounds.
 //
 #include "scene/Scene.h"
+#include "game/Animation.h"
 #include "game/GameCamera.h"
 #include "game/GuiSystem.h"
 #include "script/RemoteValue.h"
@@ -107,8 +108,11 @@ public:
         uint64_t equipped = 0;
         bool activating = false;
         std::unordered_map<uint64_t, glm::mat4> toolOffsets; // other parts of the held tool, relative to its Handle
-        bool armRaised = false;       // the right arm holds the tool out
-        glm::vec3 armRestPos{ 0.0f }, armRestRot{ 0.0f };
+
+        // Humanoid state (Enum.HumanoidStateType) for StateChanged and the Animate script.
+        HumanoidState state = HumanoidState::Running;
+        bool swimming = false;
+        float swimSpeed = -1.0f;
     };
 
     GameSession(const Scene& editScene, ScriptStore& scripts, Input& input, Options options);
@@ -144,6 +148,9 @@ public:
 
     // ---- state
     PhysicsWorld& physics() { return *physics_; }
+    AnimationSystem& animation() { return *animation_; }
+    // Humanoid:GetState() for a player's Humanoid (Running for anyone else's).
+    HumanoidState humanoidState(uint64_t humanoidId) const;
     ScriptStore& scripts() { return scripts_; }
     Input& input() { return input_; }
     GuiSystem& gui() { return *focused().gui; }
@@ -213,6 +220,7 @@ private:
     Input& input_;
     Options options_;
     std::unique_ptr<PhysicsWorld> physics_;
+    std::unique_ptr<AnimationSystem> animation_;
     std::unique_ptr<LuaRuntime> lua_;
 
     double time_ = 0.0;

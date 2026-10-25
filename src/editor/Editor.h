@@ -127,6 +127,9 @@ public:
         float planeHeight = 0.0f;
     };
     TerrainTool terrainTool;
+    // The rig the Animation Editor is posing (0 = none): the Move / Rotate
+    // gizmo then turns a limb around its joint instead of its middle.
+    uint64_t animatingRig = 0;
     // A brush stroke: dabs between begin and end go straight to the terrain
     // and become one undo step.
     void beginTerrainStroke();
@@ -152,6 +155,8 @@ public:
     // beams and trails get their two attachments made and linked. One undo step.
     Instance* insertEffect(const std::string& kind);
     static const std::vector<std::pair<std::string, std::string>>& effectPresets(); // id, title
+    // A character rig to animate (the default character's body, anchored), in front of the camera.
+    Instance* insertRig();
     // Creates `cls` under `parent` and lets `setup` fill it in: one undo step, selected.
     Instance* insertWith(ClassId cls, Instance* parent, const std::function<void(Instance&)>& setup, const std::string& label = "");
     void deleteSelection();

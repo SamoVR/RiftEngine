@@ -1,5 +1,6 @@
 #include "editor/Editor.h"
 #include "editor/Templates.h"
+#include "game/Animation.h"
 #include "render/Picking.h"
 #include "scene/SceneIO.h"
 #include "core/Log.h"
@@ -621,6 +622,16 @@ namespace {
     }
 }
 
+Instance* Editor::insertRig() {
+    Scene& s = scene();
+    Instance* rig = buildCharacterRig(s, RigColors{}, true);
+    placeAt(*rig, insertionParent(), placementPoint(glm::vec3(1.0f, 2.0f, 1.0f)));
+    const uint64_t id = rig->id;
+    execute(commitNew(s, rig, insertionParent(), "Insert Rig"));
+    selection_ = { id };
+    return s.find(id);
+}
+
 const std::vector<std::pair<std::string, std::string>>& Editor::effectPresets() {
     static const std::vector<std::pair<std::string, std::string>> list = {
         { "Fire", "Fire" }, { "Smoke", "Smoke" }, { "Sparkles", "Sparkles" }, { "MagicBeam", "Magic Beam" }, { "SpeedTrail", "Speed Trail" },
@@ -901,7 +912,7 @@ nlohmann::json Editor::freshIds(nlohmann::json snapshot) {
         }
         // References inside the copy (a Beam's attachments) follow too.
         if (e.contains("props") && e["props"].is_object()) {
-            for (const char* ref : { "Attachment0", "Attachment1" }) {
+            for (const char* ref : { "Attachment0", "Attachment1", "Part0", "Part1" }) {
                 if (!e["props"].contains(ref) || !e["props"][ref].is_string()) continue;
                 auto it = remap.find(e["props"][ref].get<std::string>());
                 if (it != remap.end()) e["props"][ref] = it->second;

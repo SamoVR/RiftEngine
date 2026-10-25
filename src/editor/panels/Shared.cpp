@@ -172,6 +172,19 @@ void drawInsertMenuItems(Editor& editor) {
         }
         ImGui::EndMenu();
     }
+    if (theme::beginMenu(ICON_FA_PERSON_RUNNING, theme::classColor(ClassId::Animation), "Animation")) {
+        if (theme::menuItem(ICON_FA_PERSON, theme::classColor(ClassId::Humanoid), "Character Rig")) editor.insertRig();
+        theme::tooltip("A body to animate, like the players' characters: open the Animation Editor with it selected.");
+        classItem(editor, ClassId::Animation, "Animation");
+        theme::tooltip("Points at an animation (AnimationId); scripts load it with animator:LoadAnimation(animation).");
+        classItem(editor, ClassId::AnimationController, "AnimationController");
+        theme::tooltip("Lets a model without a Humanoid play animations.");
+        classItem(editor, ClassId::Animator, "Animator");
+        classItem(editor, ClassId::Motor6D, "Motor6D");
+        theme::tooltip("A joint: animations turn Part1 around it.");
+        classItem(editor, ClassId::KeyframeSequence, "KeyframeSequence");
+        ImGui::EndMenu();
+    }
     if (theme::beginMenu(ICON_FA_DESKTOP, theme::classColor(ClassId::ScreenGui), "GUI")) {
         classItem(editor, ClassId::ScreenGui, "ScreenGui");
         classItem(editor, ClassId::Frame, "Frame");

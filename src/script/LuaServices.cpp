@@ -995,12 +995,31 @@ void LuaRuntime::Impl::registerServices() {
         "WorldToScreenPoint", [worldToScreen](Camera&, const Vector3L& p) { return worldToScreen(p); },
         "WorldToViewportPoint", [worldToScreen](Camera&, const Vector3L& p) { return worldToScreen(p); });
 
+    // ------------------------------------------------------------ KeyframeSequenceProvider
+    lua.new_usertype<KeyframeSequenceProvider>("KeyframeSequenceProvider", sol::no_constructor,
+        // An AnimationId that plays a KeyframeSequence from the world (Roblox gives an rbxtemp:// id).
+        "RegisterKeyframeSequence", [this](KeyframeSequenceProvider&, const Inst& h) {
+            Instance* kfs = need(h);
+            if (kfs->cls != ClassId::KeyframeSequence) fail("RegisterKeyframeSequence expects a KeyframeSequence");
+            return "kfs:" + idToString(kfs->id);
+        },
+        // A new (unparented) KeyframeSequence made from an animation.
+        "GetKeyframeSequenceAsync", [this](KeyframeSequenceProvider&, const std::string& animationId) {
+            std::string error;
+            auto clip = session.animation().clipFor(animationId, scene, error);
+            if (!clip) fail("GetKeyframeSequenceAsync: " + error);
+            Instance* kfs = scene.create(ClassId::KeyframeSequence);
+            kfs->name = clip->name.empty() ? "KeyframeSequence" : clip->name;
+            clipToSequence(*clip, scene, *kfs);
+            return instanceFor(kfs->id);
+        });
+
     // ------------------------------------------------------------ game / workspace
     auto serviceByName = [this](const std::string& name) -> sol::object {
         static const std::pair<const char*, ClassId> instanceServices[] = {
             { "Workspace", ClassId::Workspace }, { "Players", ClassId::Players }, { "Lighting", ClassId::Lighting },
             { "ReplicatedStorage", ClassId::ReplicatedStorage }, { "ScriptService", ClassId::ScriptService },
-            { "ServerScriptService", ClassId::ScriptService }, { "ServerStorage", ClassId::ReplicatedStorage },
+            { "ServerScriptService", ClassId::ScriptService }, { "ServerStorage", ClassId::ServerStorage },
             { "StarterGui", ClassId::StarterGui }, { "StarterPack", ClassId::StarterPack }, { "StarterPlayer", ClassId::StarterPlayer }, { "SoundService", ClassId::SoundService },
         };
         for (const auto& [n, cls] : instanceServices) if (name == n) return instanceFor(scene.service(cls)->id);
@@ -1010,6 +1029,7 @@ void LuaRuntime::Impl::registerServices() {
         if (name == "Debris") return sol::make_object(lua, Debris{});
         if (name == "CollectionService") return sol::make_object(lua, CollectionService{});
         if (name == "HttpService") return sol::make_object(lua, HttpService{});
+        if (name == "KeyframeSequenceProvider") return sol::make_object(lua, KeyframeSequenceProvider{});
         if (name == "DataStoreService") {
             requireSide(NetworkSide::Server, "DataStoreService");
             return sol::make_object(lua, DataStoreService{});

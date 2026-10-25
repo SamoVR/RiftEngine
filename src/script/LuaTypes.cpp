@@ -65,6 +65,8 @@ namespace {
         add("CameraType", { "Custom", "Scriptable", "Fixed" });
         add("CoreGuiType", { "PlayerList", "Health", "Backpack", "Chat", "All", "EmotesMenu" });
         add("PlaybackState", { "Begin", "Playing", "Paused", "Completed", "Cancelled", "Delayed" });
+        add("HumanoidStateType", { "FallingDown", "Running", "RunningNoPhysics", "Climbing", "StrafingNoPhysics", "Ragdoll", "GettingUp", "Jumping",
+                                   "Landed", "Flying", "Freefall", "Seated", "PlatformStanding", "Dead", "Swimming", "Physics", "None" });
         return out;
     }
     const std::vector<EnumType>& enumStorage() {
@@ -504,6 +506,7 @@ sol::object LuaRuntime::Impl::toLua(const Value& v, const PropertyInfo* prop) {
             const uint64_t id = std::get<InstanceRef>(v).id;
             return id && scene.find(id) ? instanceFor(id) : nil();
         }
+        case ValueType::CFrame: return sol::make_object(lua, CFrame::fromMat4(std::get<CFrameValue>(v).matrix()));
         case ValueType::Enum: {
             const int index = std::get<EnumValue>(v).index;
             if (prop && !prop->enumType.empty()) {
@@ -563,12 +566,18 @@ Value LuaRuntime::Impl::fromLua(const sol::object& o, const PropertyInfo& prop, 
             if (o.is<Color3>()) return ColorSequence(o.as<Color3>());
             return wrong("a ColorSequence");
         case ValueType::Ref: {
+            // Motor6D.Part0 / Part1 take parts; Beam / Trail attachments take Attachments.
+            const bool wantsPart = prop.name == "Part0" || prop.name == "Part1";
+            const char* expected = wantsPart ? "a BasePart" : "an Attachment";
             if (t == sol::type::lua_nil || t == sol::type::none) return InstanceRef{};
-            if (!o.is<Inst>()) return wrong("an Attachment");
+            if (!o.is<Inst>()) return wrong(expected);
             Instance* target = need(o.as<Inst>());
-            if (target->cls != ClassId::Attachment) return wrong("an Attachment");
+            if (wantsPart ? !target->isBasePart() : target->cls != ClassId::Attachment) return wrong(expected);
             return InstanceRef{ target->id };
         }
+        case ValueType::CFrame:
+            if (o.is<CFrame>()) return CFrameValue::fromMatrix(o.as<CFrame>().toMat4());
+            return wrong("a CFrame");
         case ValueType::Enum: {
             if (o.is<EnumItem>()) {
                 const EnumItem e = o.as<EnumItem>();

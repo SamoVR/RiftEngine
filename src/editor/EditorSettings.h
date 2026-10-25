@@ -33,6 +33,7 @@ struct EditorSettings {
     int layoutVersion = 0;
     bool showExplorer = true, showProperties = true, showOutput = true, showAssets = true, showSourceControl = true;
     bool showTerrain = false;        // the Terrain Editor
+    bool showAnimation = false;      // the Animation Editor
 
     // Viewport
     bool showGrid = true;

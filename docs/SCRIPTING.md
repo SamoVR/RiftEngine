@@ -475,6 +475,36 @@ up). `workspace:Raycast` hits terrain: `result.Instance` is the Terrain and
 `WaterTransparency` properties colour the water. Changes made by the server
 reach every client.
 
+## Animations
+
+Animations work like Roblox's. A model is animated through its **Animator**
+(inside its Humanoid, or inside an AnimationController for models without
+one), which turns the model's **Motor6D** joints:
+
+```lua
+local animation = Instance.new("Animation")
+animation.AnimationId = "assets/animations/Wave.anim"   -- made with the Animation Editor
+local track = character.Humanoid.Animator:LoadAnimation(animation)
+track:Play()                -- fade in over 0.1 s; Play(fadeTime, weight, speed)
+track:GetMarkerReachedSignal("Hit"):Connect(function(value) print("hit", value) end)
+track.Stopped:Wait()
+```
+
+- **AnimationId**: a `.anim` file saved by the Animation Editor (`assets/animations/Name.anim`), one of the engine's (`engine:animations/walk.anim`, `run`, `idle`, `jump`, `fall`, `swim`, `toolnone`), or a KeyframeSequence in the game: `game:GetService("KeyframeSequenceProvider"):RegisterKeyframeSequence(kfs)` returns an id for it.
+- **AnimationTrack**: `:Play([fadeTime, weight, speed])`, `:Stop([fadeTime])`, `:AdjustSpeed(speed)`, `:AdjustWeight(weight [, fadeTime])`, `:GetTimeOfKeyframe(name)`, `:GetMarkerReachedSignal(name)`; `Animation`, `IsPlaying`, `Length`, `Looped`, `Priority`, `Speed`, `TimePosition`, `WeightCurrent`, `WeightTarget`; events `Stopped`, `Ended` (after the fade out), `DidLoop`, `KeyframeReached(name)`.
+- **Animator**: `:LoadAnimation(animation)`, `:GetPlayingAnimationTracks()`, event `AnimationPlayed(track)`. `Humanoid:LoadAnimation` works too.
+- **Priority** (`Enum.AnimationPriority`): `Core` < `Idle` < `Movement` < `Action` < `Action2..4`. On each joint the highest priority playing wins; tracks of the same priority mix by weight. The default walk and run are Core, so anything you play goes over them.
+- **Motor6D**: `Part0`, `Part1`, `C0`, `C1`, `Transform` (what animations set); `Part1 = Part0 * C0 * Transform * C1:Inverse()`. Animations name their poses after the Part1 (`"Right Arm"`).
+- **KeyframeSequence** > **Keyframe** (`Time`) > **Pose** (named after a part; `CFrame`, `Weight`, `EasingStyle`, `EasingDirection`) and **KeyframeMarker** (`Name`, `Value`): an animation as objects.
+
+Every character gets a LocalScript named **Animate** that plays idle, walk,
+run, jump, fall, swim and the tool-holding pose. Put your own LocalScript named
+Animate in StarterPlayer > StarterCharacterScripts to replace it (its source is
+in the RIFT folder, `data/scripts/Animate.lua`). **Humanoid** also has
+`:GetState()` and the events `StateChanged(old, new)` (`Enum.HumanoidStateType`:
+Running, Jumping, Freefall, Swimming, Dead), `FreeFalling(active)` and
+`Swimming(speed)`.
+
 ## Effects
 
 An **Attachment** is a point on a part (`Position` and `Orientation` in the

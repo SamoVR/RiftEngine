@@ -444,7 +444,36 @@ void PropertiesPanel::drawProperty(UiContext& ui, const std::vector<Instance*>& 
         }
         case ValueType::Ref: {
             InstanceRef ref = mixed ? InstanceRef{} : std::get<InstanceRef>(value);
-            if (attachmentPicker("##v", editor.scene(), ref, primary.id)) editor.setProperty(ids, prop.name, ref);
+            const bool parts = prop.name == "Part0" || prop.name == "Part1";
+            if (attachmentPicker("##v", editor.scene(), ref, primary.id, parts)) editor.setProperty(ids, prop.name, ref);
+            break;
+        }
+        case ValueType::CFrame: {
+            // Position and rotation rows, like the Transform category.
+            const CFrameValue cf = std::get<CFrameValue>(value);
+            float p[3] = { cf.position.x, cf.position.y, cf.position.z };
+            float r[3] = { cf.rotation.x, cf.rotation.y, cf.rotation.z };
+            const bool none[3] = { false, false, false };
+            const float label = ImGui::CalcTextSize("Rot").x + ImGui::GetStyle().ItemInnerSpacing.x;
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextDisabled("Pos");
+            ImGui::SameLine(0.0f, 0.0f);
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.0f, label - ImGui::CalcTextSize("Pos").x));
+            const int cp = multiFloat("##p", p, 3, 0.02f, 0.0f, 0.0f, none);
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextDisabled("Rot");
+            ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
+            const int cr = multiFloat("##r", r, 3, 0.5f, 0.0f, 0.0f, none);
+            if (cp >= 0 || cr >= 0) {
+                std::vector<std::pair<uint64_t, Value>> values;
+                for (Instance* i : list) {
+                    CFrameValue o = std::get<CFrameValue>(getProperty(*i, prop));
+                    if (cp >= 0) o.position[cp] = p[cp];
+                    if (cr >= 0) o.rotation[cr] = r[cr];
+                    values.emplace_back(i->id, o);
+                }
+                editor.previewValues(prop.name, values);
+            }
             break;
         }
         default:

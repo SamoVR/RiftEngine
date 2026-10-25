@@ -1,0 +1,168 @@
+{
+  "format": "rift-animation",
+  "version": 1,
+  "name": "Idle",
+  "loop": true,
+  "priority": "Core",
+  "keyframes": [
+    {
+      "time": 0.0,
+      "poses": {
+        "Right Arm": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            3
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Left Arm": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            -3
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Head": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Torso": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        }
+      }
+    },
+    {
+      "time": 1.5,
+      "poses": {
+        "Right Arm": {
+          "cf": [
+            0,
+            0,
+            0,
+            4,
+            0,
+            5
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Left Arm": {
+          "cf": [
+            0,
+            0,
+            0,
+            4,
+            0,
+            -5
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Head": {
+          "cf": [
+            0,
+            0,
+            0,
+            -3,
+            0,
+            0
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Torso": {
+          "cf": [
+            0,
+            0.02,
+            0,
+            0,
+            0,
+            0
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        }
+      }
+    },
+    {
+      "time": 3.0,
+      "poses": {
+        "Right Arm": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            3
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Left Arm": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            -3
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Head": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Torso": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        }
+      }
+    }
+  ]
+}
