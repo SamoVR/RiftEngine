@@ -157,6 +157,7 @@ namespace rift {
 struct LuaRuntime::Impl : public SceneObserver {
     GameSession& session;
     NetworkSide side;
+    int client = 0;        // the player whose client this is (Client side)
     Scene& scene;          // this side's world
     GameCamera serverCamera; // workspace.CurrentCamera on the server (the client uses the session's)
 
@@ -225,10 +226,11 @@ struct LuaRuntime::Impl : public SceneObserver {
     // OnServerInvoke / OnClientInvoke / OnInvoke callbacks, by (instance, name).
     std::unordered_map<lua::SignalKey, sol::main_protected_function, lua::SignalKeyHash> callbacks;
     std::unordered_map<uint64_t, lua_State*> pendingCalls; // InvokeServer / InvokeClient waiting for the answer
+    std::unordered_map<uint64_t, int> replyTo;             // server: which client an Invoke came from (by call id)
     sol::main_protected_function remoteRunner;              // runs a RemoteFunction handler and replies
     uint64_t nextCall = 1;
 
-    Impl(GameSession& s, NetworkSide side);
+    Impl(GameSession& s, NetworkSide side, int client);
     ~Impl() override;
 
     lua_State* L() { return lua.lua_state(); }
@@ -236,6 +238,11 @@ struct LuaRuntime::Impl : public SceneObserver {
     const char* sideName() const { return isClient() ? "client" : "server"; }
     // Fails with a clear message when an API is used on the wrong side.
     void requireSide(NetworkSide wanted, const char* what) const;
+    GameSession::Client& me() const { return session.client(client); } // this client's player (Client side)
+    // The view and camera this runtime's input and Camera API use (the server
+    // borrows the focused player's, for workspace.CurrentCamera queries).
+    const ViewportInput& view() const { return isClient() ? me().view : session.viewport(); }
+    int viewClient() const { return isClient() ? client : session.focus(); }
     Instance* localPlayer() const;     // this side's Player (nil on the server, like Roblox)
     Instance* localCharacter() const;  // the character as this side sees it
     GameCamera& cam();                 // workspace.CurrentCamera
@@ -301,7 +308,7 @@ struct LuaRuntime::Impl : public SceneObserver {
     sol::object fromRemote(const RemoteValue& v);
     int pushRemoteArgs(lua_State* T, const std::vector<RemoteValue>& args);
     void handleRemote(const RemoteMessage& m);
-    void reply(uint64_t call, NetworkSide to, bool ok, std::string error, std::vector<RemoteValue> results);
+    void reply(uint64_t call, NetworkSide to, int toClient, bool ok, std::string error, std::vector<RemoteValue> results);
 
     // ---- SceneObserver
     void onInstanceAdded(Instance& i) override;

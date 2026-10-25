@@ -29,11 +29,14 @@ struct Instance;
 struct TouchEvent;
 enum class GuiEvent;
 
+// What a Tool reports to the scripts (GameSession decides when).
+enum class ToolEvent { Equipped, Unequipped, Activated, Deactivated };
+
 class LuaRuntime {
 public:
-    // `side`: the server runs Scripts on the server's world, the client
-    // LocalScripts on the client's (see GameSession).
-    LuaRuntime(GameSession& session, NetworkSide side);
+    // `side`: the server runs Scripts on the server's world, a client the
+    // LocalScripts of player `client` on that player's world (see GameSession).
+    LuaRuntime(GameSession& session, NetworkSide side, int client = 0);
     ~LuaRuntime();
     LuaRuntime(const LuaRuntime&) = delete;
     LuaRuntime& operator=(const LuaRuntime&) = delete;
@@ -47,8 +50,9 @@ public:
 
     // Events from the session.
     void onTouch(const TouchEvent& e);
-    void onCharacterAdded(Instance& character);
-    void onCharacterRemoving(Instance& character);
+    void onCharacterAdded(uint64_t player, Instance& character);
+    void onCharacterRemoving(uint64_t player, Instance& character);
+    void onToolEvent(Instance& tool, ToolEvent e);
     void onHumanoidDied(Instance& humanoid);
     void onHealthChanged(Instance& humanoid, float health);
     void onJumping(Instance& humanoid);
@@ -58,6 +62,7 @@ public:
     // A RemoteEvent / RemoteFunction message for this side (GameSession delivers them).
     void onRemoteMessage(const RemoteMessage& message);
     NetworkSide side() const;
+    int client() const; // which player's client (Client side)
 
     // Diagnostics.
     size_t threadCount() const;

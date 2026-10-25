@@ -6,6 +6,7 @@
 #include "audio/AudioSystem.h"
 #include "platform/Input.h"
 #include "core/Paths.h"
+#include "core/TransformUtil.h"
 
 #include <GLFW/glfw3.h>
 #include <glm/gtc/matrix_transform.hpp>
@@ -19,6 +20,8 @@ namespace {
     constexpr float kCharacterRadius = 0.45f;
     constexpr float kRespawnDelay = 3.0f;
     constexpr size_t kMaxLogLines = 2000;
+    constexpr int kMaxPlayers = 8;
+    constexpr int kHotbarSlots = 10;
 
     Instance* addPart(Scene& scene, Instance* parent, const char* name, PartShape shape, glm::vec3 pos, glm::vec3 size, Color3 color) {
         Instance* p = scene.create(ClassId::Part, parent);
@@ -38,96 +41,173 @@ namespace {
         if (a < 0.0f) a += 360.0f;
         return a - 180.0f;
     }
+
+    Instance* handleOf(const Instance& tool) {
+        Instance* h = tool.findFirstChild("Handle");
+        return h && h->isBasePart() ? h : nullptr;
+    }
+
+    void setWorldMatrix(Instance& part, const glm::mat4& world) {
+        glm::vec3 p, r, s;
+        TransformUtil::decompose(world, p, r, s);
+        part.setWorldFrame(p, r);
+    }
 }
 
 // ============================================================================
 //  Lifetime
 // ============================================================================
-template <class F> void GameSession::forBoth(F&& f) {
+GameSession::Client::Client() = default;
+GameSession::Client::~Client() = default;
+
+template <class F> void GameSession::forAll(F&& f) {
     f(*lua_);
-    f(*clientLua_);
+    for (auto& c : clients_) f(*c->lua);
 }
 
 GameSession::GameSession(const Scene& editScene, ScriptStore& scripts, Input& input, Options options)
-    : scene_(editScene.clone()), client_(std::make_unique<Scene>()), scripts_(scripts), input_(input), options_(std::move(options)) {
+    : scene_(editScene.clone()), scripts_(scripts), input_(input), options_(std::move(options)) {
     scene_->ensureDefaults();
     physics_ = std::make_unique<PhysicsWorld>(*scene_);
 
-    // The player and the containers Roblox gives it.
-    Instance* player = scene_->create(ClassId::Player, scene_->service(ClassId::Players));
-    player->name = options_.playerName;
-    playerId_ = player->id;
-    Instance* playerGui = scene_->create(ClassId::PlayerGui, player);
-    playerGui->name = "PlayerGui";
-    playerGuiId_ = playerGui->id;
-    scene_->create(ClassId::Backpack, player)->name = "Backpack";
+    // The players (on the server first, so every client sees all of them).
+    const int count = std::clamp(options_.playerCount, 1, kMaxPlayers);
+    for (int i = 0; i < count; ++i) addClient(i);
 
-    // The client starts as a copy of the server's world.
-    replicator_ = std::make_unique<Replicator>(*scene_, *client_);
-    replicator_->start();
-    setUpClientPlayer();
+    // Each client starts as a copy of the server's world.
+    for (auto& c : clients_) {
+        c->scene = std::make_unique<Scene>();
+        c->replicator = std::make_unique<Replicator>(*scene_, *c->scene);
+        c->replicator->start();
+        setUpClientPlayer(*c);
+    }
 
-    lua_ = std::make_unique<LuaRuntime>(*this, NetworkSide::Server);
-    clientLua_ = std::make_unique<LuaRuntime>(*this, NetworkSide::Client);
-    gui_ = std::make_unique<GuiSystem>(*client_);
-    gui_->setRoot(playerGuiId_);
-    gui_->onEvent = [this](Instance& element, GuiEvent e) { clientLua_->onGuiEvent(element, e); };
-
-    // Where the camera starts is the host's business; by default look at the
-    // world from a little above.
-    camera_.lookAt({ 0.0f, 12.0f, 24.0f }, { 0.0f, 0.0f, 0.0f });
+    lua_ = std::make_unique<LuaRuntime>(*this, NetworkSide::Server, 0);
+    for (auto& c : clients_) {
+        Client* client = c.get();
+        client->lua = std::make_unique<LuaRuntime>(*this, NetworkSide::Client, client->index);
+        client->gui = std::make_unique<GuiSystem>(*client->scene);
+        client->gui->setRoot(client->playerGuiId);
+        client->gui->onEvent = [client](Instance& element, GuiEvent e) { client->lua->onGuiEvent(element, e); };
+        // Where the camera starts is the host's business; by default look at
+        // the world from a little above.
+        client->camera.lookAt({ 0.0f, 12.0f, 24.0f }, { 0.0f, 0.0f, 0.0f });
+    }
 }
 
 GameSession::~GameSession() {
-    if (options_.audio) {
-        for (auto& [id, s] : sounds_) options_.audio->stop(s.handle);
-    }
-    sounds_.clear();
-    gui_.reset();
-    clientLua_.reset(); // the runtimes observe the scenes; they go first
+    stopAllSounds();
+    for (auto& c : clients_) c->gui.reset();
+    for (auto& c : clients_) c->lua.reset(); // the runtimes observe the scenes; they go first
     lua_.reset();
-    replicator_.reset();
+    for (auto& c : clients_) c->replicator.reset();
     physics_.reset();
 }
 
-void GameSession::setUpClientPlayer() {
+void GameSession::addClient(int index) {
+    auto c = std::make_unique<Client>();
+    c->index = index;
+    Instance* player = scene_->create(ClassId::Player, scene_->service(ClassId::Players));
+    player->name = options_.playerCount > 1 ? options_.playerName + std::to_string(index + 1) : options_.playerName;
+    c->playerId = player->id;
+    Instance* playerGui = scene_->create(ClassId::PlayerGui, player);
+    playerGui->name = "PlayerGui";
+    c->playerGuiId = playerGui->id;
+    Instance* backpack = scene_->create(ClassId::Backpack, player);
+    backpack->name = "Backpack";
+    c->backpackId = backpack->id;
+    clients_.push_back(std::move(c));
+}
+
+void GameSession::setUpClientPlayer(Client& c) {
     // PlayerScripts exists only on the client: copies of StarterPlayerScripts.
-    Instance* player = client_->find(playerId_);
+    Scene& scene = *c.scene;
+    Instance* player = scene.find(c.playerId);
     if (!player) return;
-    Instance* scriptsFolder = client_->create(ClassId::PlayerScripts, player);
+    Instance* scriptsFolder = scene.create(ClassId::PlayerScripts, player);
     scriptsFolder->name = "PlayerScripts";
-    for (Instance* c : std::vector<Instance*>(client_->starterPlayer().children)) {
-        if (c->cls != ClassId::StarterPlayerScripts) continue;
-        for (Instance* item : std::vector<Instance*>(c->children)) {
-            if (Instance* copy = client_->cloneSubtree(*item)) client_->setParent(copy, scriptsFolder);
+    for (Instance* folder : std::vector<Instance*>(scene.starterPlayer().children)) {
+        if (folder->cls != ClassId::StarterPlayerScripts) continue;
+        for (Instance* item : std::vector<Instance*>(folder->children)) {
+            if (Instance* copy = scene.cloneSubtree(*item)) scene.setParent(copy, scriptsFolder);
         }
     }
 }
 
-void GameSession::fillPlayerGui(bool respawn) {
+void GameSession::fillPlayerGui(Client& c, bool respawn) {
     // StarterGui is copied into PlayerGui (on the server, so it replicates).
     // On respawn, ScreenGuis with ResetOnSpawn off keep their old copy.
-    Instance* gui = scene_->find(playerGuiId_);
+    Instance* gui = scene_->find(c.playerGuiId);
     Instance* starter = scene_->service(ClassId::StarterGui);
     if (!gui || !starter) return;
-    for (Instance* c : std::vector<Instance*>(gui->children)) {
-        const bool keep = respawn && c->cls == ClassId::ScreenGui && !c->resetOnSpawn;
-        if (!keep) scene_->destroy(c);
+    for (Instance* item : std::vector<Instance*>(gui->children)) {
+        const bool keep = respawn && item->cls == ClassId::ScreenGui && !item->resetOnSpawn;
+        if (!keep) scene_->destroy(item);
     }
-    for (Instance* c : std::vector<Instance*>(starter->children)) {
-        if (respawn && c->cls == ClassId::ScreenGui && !c->resetOnSpawn) continue;
-        if (Instance* copy = scene_->cloneSubtree(*c)) scene_->setParent(copy, gui);
+    for (Instance* item : std::vector<Instance*>(starter->children)) {
+        if (respawn && item->cls == ClassId::ScreenGui && !item->resetOnSpawn) continue;
+        if (Instance* copy = scene_->cloneSubtree(*item)) scene_->setParent(copy, gui);
     }
+}
+
+void GameSession::fillBackpack(Client& c) {
+    // A fresh Backpack with copies of StarterPack every spawn, like Roblox.
+    Instance* backpack = scene_->find(c.backpackId);
+    Instance* starter = scene_->service(ClassId::StarterPack);
+    if (!backpack || !starter) return;
+    for (Instance* item : std::vector<Instance*>(backpack->children)) scene_->destroy(item);
+    for (Instance* item : std::vector<Instance*>(starter->children)) {
+        if (Instance* copy = scene_->cloneSubtree(*item)) scene_->setParent(copy, backpack);
+    }
+    c.slots.clear();
+    c.equipped = 0;
+    updateSlots(c);
 }
 
 void GameSession::start() {
     if (started_) return;
     started_ = true;
-    if (options_.spawnCharacter) spawnCharacter();
-    else fillPlayerGui(false);
+    for (auto& c : clients_) {
+        if (options_.spawnCharacter) spawnCharacter(*c);
+        else {
+            fillPlayerGui(*c, false);
+            fillBackpack(*c);
+        }
+    }
     lua_->start();
-    clientLua_->start();
-    gui_->layout(view_.size);
+    for (auto& c : clients_) {
+        c->lua->start();
+        c->gui->layout(c->view.size);
+    }
+}
+
+void GameSession::setFocus(int index) {
+    index = std::clamp(index, 0, clientCount() - 1);
+    if (index == focus_) return;
+    stopAllSounds(); // the new player hears its own world
+    for (auto& c : clients_) c->activating = false;
+    focus_ = index;
+}
+
+GameSession::Client* GameSession::clientOfPlayer(uint64_t playerId) {
+    for (auto& c : clients_) if (c->playerId == playerId) return c.get();
+    return nullptr;
+}
+
+GameSession::Client* GameSession::clientOfCharacter(uint64_t characterId) {
+    if (!characterId) return nullptr;
+    for (auto& c : clients_) if (c->characterId == characterId) return c.get();
+    return nullptr;
+}
+
+GameSession::Client* GameSession::clientOfHumanoid(uint64_t humanoidId) {
+    if (!humanoidId) return nullptr;
+    for (auto& c : clients_) if (c->humanoidId == humanoidId) return c.get();
+    return nullptr;
+}
+
+void GameSession::setMouseLockRequested(int client, bool lock) {
+    if (client >= 0 && client < clientCount()) clients_[static_cast<size_t>(client)]->scriptMouseLock = lock;
 }
 
 void GameSession::postRemote(RemoteMessage message) { remotes_.push_back(std::move(message)); }
@@ -135,48 +215,102 @@ void GameSession::postRemote(RemoteMessage message) { remotes_.push_back(std::mo
 void GameSession::deliverRemotes() {
     std::vector<RemoteMessage> batch;
     batch.swap(remotes_);
-    for (const RemoteMessage& m : batch) (m.to == NetworkSide::Server ? *lua_ : *clientLua_).onRemoteMessage(m);
+    for (const RemoteMessage& m : batch) {
+        if (m.to == NetworkSide::Server) lua_->onRemoteMessage(m);
+        else if (m.client >= 0 && m.client < clientCount()) clients_[static_cast<size_t>(m.client)]->lua->onRemoteMessage(m);
+    }
 }
 
 // ============================================================================
 //  Frame
 // ============================================================================
 void GameSession::update(float dt, const ViewportInput& view) {
-    view_ = view;
+    for (auto& c : clients_) {
+        if (c->index == focus_) c->view = view;
+        else {
+            // Players not in focus share the view's size but get no input.
+            c->view = view;
+            c->view.hovered = false;
+            c->view.keyboard = false;
+            c->view.mouse = view.size * 0.5f;
+        }
+    }
     if (!started_) return;
     if (messageTimer_ > 0.0f) {
         messageTimer_ -= dt;
         if (messageTimer_ <= 0.0f && outcome_ == Outcome::None) message_.clear();
     }
-    gui_->layout(view.size);
+    for (auto& c : clients_) c->gui->layout(c->view.size);
     if (paused_ || outcome_ != Outcome::None) {
-        updateCamera(0.0f);
+        for (auto& c : clients_) updateCamera(*c, 0.0f);
         return;
     }
     time_ += dt;
 
-    gui_->handleMouse(view.mouse, view.hovered, view.hovered && input_.mouseDown(GLFW_MOUSE_BUTTON_LEFT));
-    clientLua_->beforePhysics(dt);
+    for (auto& c : clients_) c->gui->handleMouse(c->view.mouse, c->view.hovered, c->view.hovered && input_.mouseDown(GLFW_MOUSE_BUTTON_LEFT));
+    handleInput(focused());
+    for (auto& c : clients_) c->lua->beforePhysics(dt);
     lua_->beforePhysics(dt);
-    updateCharacter(dt);
+    for (auto& c : clients_) updateCharacter(*c, dt);
     physics_->step(dt);
     afterPhysics(dt);
-    replicator_->syncTransforms();
+    for (auto& c : clients_) c->replicator->syncTransforms();
     lua_->afterPhysics(dt);
-    clientLua_->afterPhysics(dt);
+    for (auto& c : clients_) c->lua->afterPhysics(dt);
     deliverRemotes();
-    updateCamera(dt);
+    for (auto& c : clients_) updateCamera(*c, dt);
     updateSounds();
-    gui_->layout(view.size); // scripts may have changed the GUI this frame
+    for (auto& c : clients_) {
+        c->gui->layout(c->view.size); // scripts may have changed the GUI this frame
+        updateSlots(*c);
+    }
+}
+
+// The Backpack bar: number keys and clicks equip, the left button uses the
+// tool, Backspace drops it.
+void GameSession::handleInput(Client& c) {
+    updateSlots(c);
+    const std::vector<HotbarSlot> bar = hotbar(c.index);
+    auto toggle = [&](const HotbarSlot& slot) {
+        if (slot.equipped) unequipTools(c.index);
+        else equipTool(c.index, slot.tool);
+    };
+    if (c.view.keyboard && !c.dead) {
+        for (const HotbarSlot& slot : bar) {
+            const int key = slot.number == 0 ? GLFW_KEY_0 : GLFW_KEY_1 + slot.number - 1;
+            if (input_.keyPressed(key)) toggle(slot);
+        }
+        if (input_.keyPressed(GLFW_KEY_BACKSPACE) && c.equipped) dropTool(c.index);
+    }
+    bool overBar = false;
+    if (c.view.hovered) {
+        for (const HotbarSlot& slot : bar) {
+            const glm::vec2 m = c.view.mouse;
+            if (m.x < slot.pos.x || m.y < slot.pos.y || m.x > slot.pos.x + slot.size.x || m.y > slot.pos.y + slot.size.y) continue;
+            overBar = true;
+            if (input_.mousePressed(GLFW_MOUSE_BUTTON_LEFT) && !c.dead) toggle(slot);
+        }
+    }
+    // Using the held tool.
+    Instance* tool = c.equipped ? scene_->find(c.equipped) : nullptr;
+    if (tool && !c.activating && c.view.hovered && input_.mousePressed(GLFW_MOUSE_BUTTON_LEFT) && !overBar && !c.gui->mouseOverGui()
+        && tool->enabled && !tool->manualActivationOnly) {
+        c.activating = true;
+        activateTool(tool->id, true);
+    }
+    if (c.activating && !input_.mouseDown(GLFW_MOUSE_BUTTON_LEFT)) {
+        c.activating = false;
+        if (tool) activateTool(tool->id, false);
+    }
 }
 
 // ============================================================================
 //  Player / character
 // ============================================================================
-Instance* GameSession::player() const { return scene_->find(playerId_); }
-Instance* GameSession::character() const { return characterId_ ? scene_->find(characterId_) : nullptr; }
-Instance* GameSession::humanoid() const { return humanoidId_ ? scene_->find(humanoidId_) : nullptr; }
-Instance* GameSession::rootPart() const { return rootPartId_ ? scene_->find(rootPartId_) : nullptr; }
+Instance* GameSession::player() const { return scene_->find(focused().playerId); }
+Instance* GameSession::character() const { return focused().characterId ? scene_->find(focused().characterId) : nullptr; }
+Instance* GameSession::humanoid() const { return focused().humanoidId ? scene_->find(focused().humanoidId) : nullptr; }
+Instance* GameSession::rootPart() const { return focused().rootPartId ? scene_->find(focused().rootPartId) : nullptr; }
 
 glm::vec3 GameSession::spawnPosition() const {
     std::vector<Instance*> spawns;
@@ -189,11 +323,11 @@ glm::vec3 GameSession::spawnPosition() const {
     return top + glm::vec3(0.0f, 0.05f, 0.0f);
 }
 
-void GameSession::spawnCharacter() {
-    destroyCharacter();
-    for (uint64_t id : deathPieces_) if (Instance* piece = scene_->find(id)) scene_->destroy(piece);
-    deathPieces_.clear();
-    Instance* playerInst = player();
+void GameSession::spawnCharacter(Client& c) {
+    destroyCharacter(c);
+    for (uint64_t id : c.deathPieces) if (Instance* piece = scene_->find(id)) scene_->destroy(piece);
+    c.deathPieces.clear();
+    Instance* playerInst = scene_->find(c.playerId);
     Instance& starter = scene_->starterPlayer();
     Instance* model = nullptr;
 
@@ -201,7 +335,7 @@ void GameSession::spawnCharacter() {
     if (Instance* custom = starter.findFirstChild("StarterCharacter"); custom && custom->cls == ClassId::Model) {
         Instance* root = custom->findFirstChild("HumanoidRootPart");
         bool hasHumanoid = false;
-        for (Instance* c : custom->children) hasHumanoid |= c->cls == ClassId::Humanoid;
+        for (Instance* child : custom->children) hasHumanoid |= child->cls == ClassId::Humanoid;
         if (root && root->isBasePart() && hasHumanoid) model = scene_->cloneSubtree(*custom);
         else log(LogLevel::Warning, "StarterCharacter needs a HumanoidRootPart and a Humanoid; using the default character");
     }
@@ -226,103 +360,118 @@ void GameSession::spawnCharacter() {
     }
     model->name = playerInst ? playerInst->name : "Player";
     // StarterCharacterScripts: LocalScripts run on the client, Scripts on the server.
-    for (Instance* c : std::vector<Instance*>(starter.children)) {
-        if (c->cls != ClassId::StarterCharacterScripts) continue;
-        for (Instance* item : std::vector<Instance*>(c->children)) {
+    for (Instance* folder : std::vector<Instance*>(starter.children)) {
+        if (folder->cls != ClassId::StarterCharacterScripts) continue;
+        for (Instance* item : std::vector<Instance*>(folder->children)) {
             if (Instance* copy = scene_->cloneSubtree(*item)) scene_->setParent(copy, model);
         }
     }
 
     Instance* root = model->findFirstChild("HumanoidRootPart");
     Instance* hum = nullptr;
-    for (Instance* c : model->children) if (c->cls == ClassId::Humanoid) hum = c;
+    for (Instance* child : model->children) if (child->cls == ClassId::Humanoid) hum = child;
     hum->walkSpeed = starter.walkSpeed;
     hum->jumpPower = starter.jumpPower;
     hum->health = hum->maxHealth;
 
     // The model's frame is the root part's centre; the parts hang off it.
-    const glm::vec3 feet = spawnPosition();
+    // Several players spawn side by side.
+    const glm::vec3 feet = spawnPosition() + glm::vec3(static_cast<float>(c.index) * 1.6f, 0.0f, 0.0f);
     model->position = feet + glm::vec3(0.0f, kCharacterHeight * 0.5f, 0.0f);
-    model->rotation = glm::vec3(0.0f, facingYaw_, 0.0f);
+    model->rotation = glm::vec3(0.0f, c.facingYaw, 0.0f);
     if (root->position != glm::vec3(0.0f)) {
         // Custom characters: whatever layout they have, the root is the reference.
         model->position -= root->position;
     }
     physics_->setIgnored(model->id, true); // the controller moves it, not rigid-body physics
     scene_->setParent(model, &scene_->workspace());
-    replicator_->setLocalCharacter(model->id); // the client owns its character
-    fillPlayerGui(guiFilled_);
-    guiFilled_ = true;
+    c.replicator->setLocalCharacter(model->id); // the client owns its character
+    fillPlayerGui(c, c.guiFilled);
+    c.guiFilled = true;
+    fillBackpack(c);
 
-    characterId_ = model->id;
-    humanoidId_ = hum->id;
-    rootPartId_ = root->id;
-    controller_ = physics_->createCharacter(root->id, feet, kCharacterRadius, kCharacterHeight);
-    lastHealth_ = hum->health;
-    dead_ = false;
-    walkTarget_ = false;
-    runningSpeed_ = -1.0f;
+    c.characterId = model->id;
+    c.humanoidId = hum->id;
+    c.rootPartId = root->id;
+    c.controller = physics_->createCharacter(root->id, feet, kCharacterRadius, kCharacterHeight);
+    c.lastHealth = hum->health;
+    c.dead = false;
+    c.walkTarget = false;
+    c.runningSpeed = -1.0f;
+    c.armRaised = false;
 
     // Camera starts behind the new character.
-    camera_.yaw = facingYaw_;
-    if (started_) forBoth([&](LuaRuntime& l) { l.onCharacterAdded(*model); });
-}
-
-void GameSession::destroyCharacter() {
-    if (controller_) {
-        physics_->destroyCharacter(controller_);
-        controller_ = nullptr;
+    c.camera.yaw = c.facingYaw;
+    if (started_) {
+        const uint64_t playerId = c.playerId;
+        forAll([&](LuaRuntime& l) { l.onCharacterAdded(playerId, *model); });
     }
-    if (Instance* c = character()) {
-        forBoth([&](LuaRuntime& l) { l.onCharacterRemoving(*c); });
-        scene_->destroy(c);
+}
+
+void GameSession::destroyCharacter(Client& c) {
+    if (c.controller) {
+        physics_->destroyCharacter(c.controller);
+        c.controller = nullptr;
     }
-    replicator_->setLocalCharacter(0);
-    characterId_ = humanoidId_ = rootPartId_ = 0;
+    if (Instance* model = c.characterId ? scene_->find(c.characterId) : nullptr) {
+        const uint64_t playerId = c.playerId;
+        forAll([&](LuaRuntime& l) { l.onCharacterRemoving(playerId, *model); });
+        scene_->destroy(model);
+    }
+    c.replicator->setLocalCharacter(0);
+    c.characterId = c.humanoidId = c.rootPartId = 0;
+    c.equipped = 0;
+    c.activating = false;
+    c.toolOffsets.clear();
 }
 
-void GameSession::loadCharacter() { spawnCharacter(); }
-
-void GameSession::moveCharacterTo(const glm::vec3& target) {
-    walkTarget_ = true;
-    walkTo_ = target;
+void GameSession::loadCharacter(uint64_t playerId) {
+    if (Client* c = playerId ? clientOfPlayer(playerId) : &focused()) spawnCharacter(*c);
 }
 
-void GameSession::updateCharacter(float dt) {
-    (void)dt;
-    if (!controller_) {
-        if (dead_ && options_.spawnCharacter) {
-            respawnTimer_ -= dt;
-            if (respawnTimer_ <= 0.0f) spawnCharacter();
+void GameSession::moveCharacterTo(uint64_t humanoidId, const glm::vec3& target) {
+    if (Client* c = clientOfHumanoid(humanoidId)) {
+        c->walkTarget = true;
+        c->walkTo = target;
+    }
+}
+
+void GameSession::updateCharacter(Client& c, float dt) {
+    if (!c.controller) {
+        if (c.dead && options_.spawnCharacter) {
+            c.respawnTimer -= dt;
+            if (c.respawnTimer <= 0.0f) spawnCharacter(c);
         }
         return;
     }
-    Instance* model = character();
-    Instance* hum = humanoid();
-    Instance* root = rootPart();
+    Instance* model = scene_->find(c.characterId);
+    Instance* hum = scene_->find(c.humanoidId);
+    Instance* root = scene_->find(c.rootPartId);
     if (!model || !hum || !root) { // a script destroyed (part of) the character
-        if (controller_) { physics_->destroyCharacter(controller_); controller_ = nullptr; }
-        if (Instance* m = character()) scene_->destroy(m);
-        characterId_ = humanoidId_ = rootPartId_ = 0;
-        dead_ = true;
-        respawnTimer_ = kRespawnDelay;
+        physics_->destroyCharacter(c.controller);
+        c.controller = nullptr;
+        if (model) scene_->destroy(model);
+        c.characterId = c.humanoidId = c.rootPartId = 0;
+        c.equipped = 0;
+        c.dead = true;
+        c.respawnTimer = kRespawnDelay;
         return;
     }
 
     // A script moved the character (CFrame / PivotTo / Position): teleport the capsule.
-    const glm::vec3 expected = controller_->feetPosition() + glm::vec3(0.0f, kCharacterHeight * 0.5f, 0.0f);
+    const glm::vec3 expected = c.controller->feetPosition() + glm::vec3(0.0f, kCharacterHeight * 0.5f, 0.0f);
     const glm::vec3 actual = root->worldPosition();
-    if (glm::length(actual - expected) > 0.01f) controller_->teleport(actual - glm::vec3(0.0f, kCharacterHeight * 0.5f, 0.0f));
+    if (glm::length(actual - expected) > 0.01f) c.controller->teleport(actual - glm::vec3(0.0f, kCharacterHeight * 0.5f, 0.0f));
     // A script set the root part's velocity (jump pads, knock-back).
-    if (glm::length(root->velocity - controller_->velocity()) > 0.01f) controller_->setVelocity(root->velocity);
+    if (glm::length(root->velocity - c.controller->velocity()) > 0.01f) c.controller->setVelocity(root->velocity);
 
     CharacterController::Input in;
     in.walkSpeed = hum->walkSpeed;
     in.jumpSpeed = hum->jumpPower;
-    if (!dead_) {
+    if (!c.dead) {
         glm::vec3 wish(0.0f);
-        if (view_.keyboard) {
-            glm::vec3 forward = camera_.lookVector();
+        if (c.view.keyboard) {
+            glm::vec3 forward = c.camera.lookVector();
             forward.y = 0.0f;
             forward = glm::length(forward) > 1e-4f ? glm::normalize(forward) : glm::vec3(0.0f, 0.0f, -1.0f);
             const glm::vec3 right = glm::normalize(glm::cross(forward, glm::vec3(0.0f, 1.0f, 0.0f)));
@@ -334,81 +483,302 @@ void GameSession::updateCharacter(float dt) {
         }
         if (glm::length(wish) > 1e-4f) {
             wish = glm::normalize(wish);
-            walkTarget_ = false;
-        } else if (walkTarget_) {
-            glm::vec3 to = walkTo_ - controller_->feetPosition();
+            c.walkTarget = false;
+        } else if (c.walkTarget) {
+            glm::vec3 to = c.walkTo - c.controller->feetPosition();
             to.y = 0.0f;
-            if (glm::length(to) < 0.3f) walkTarget_ = false;
+            if (glm::length(to) < 0.3f) c.walkTarget = false;
             else wish = glm::normalize(to);
         }
         if (hum->jump) { in.jump = true; hum->jump = false; }
         in.moveDirection = wish;
     }
     hum->moveDirection = in.moveDirection;
-    controller_->setInput(in);
+    c.controller->setInput(in);
 }
 
 void GameSession::afterPhysics(float dt) {
-    for (const TouchEvent& e : physics_->takeTouchEvents()) forBoth([&](LuaRuntime& l) { l.onTouch(e); });
+    for (const TouchEvent& e : physics_->takeTouchEvents()) forAll([&](LuaRuntime& l) { l.onTouch(e); });
     for (uint64_t id : physics_->takeFallenParts()) {
         if (Instance* i = scene_->find(id)) scene_->destroy(i); // fell out of the world
     }
+    for (auto& c : clients_) {
+        placeCharacter(*c, dt);
+        updateTools(*c);
+    }
+    pickUpTools();
+}
 
-    Instance* model = character();
-    Instance* hum = humanoid();
-    Instance* root = rootPart();
-    if (!controller_ || !model || !hum || !root) return;
+void GameSession::placeCharacter(Client& c, float dt) {
+    Instance* model = c.characterId ? scene_->find(c.characterId) : nullptr;
+    Instance* hum = c.humanoidId ? scene_->find(c.humanoidId) : nullptr;
+    Instance* root = c.rootPartId ? scene_->find(c.rootPartId) : nullptr;
+    if (!c.controller || !model || !hum || !root) return;
 
     // Place the model on the capsule and turn it towards where it walks.
-    const glm::vec3 feet = controller_->feetPosition();
+    const glm::vec3 feet = c.controller->feetPosition();
     const glm::vec3 move = hum->moveDirection;
-    const bool firstPerson = scene_->starterPlayer().cameraMode == CameraMode::FirstPerson || camera_.zoom < 1.0f;
-    float targetYaw = facingYaw_;
-    if (firstPerson) targetYaw = camera_.yaw;
+    const bool firstPerson = scene_->starterPlayer().cameraMode == CameraMode::FirstPerson || c.camera.zoom < 1.0f;
+    float targetYaw = c.facingYaw;
+    if (firstPerson) targetYaw = c.camera.yaw;
     else if (glm::length(move) > 0.1f) targetYaw = glm::degrees(std::atan2(-move.x, -move.z));
-    const float turn = wrapDegrees(targetYaw - facingYaw_);
-    facingYaw_ = wrapDegrees(facingYaw_ + turn * std::min(1.0f, dt * 12.0f));
+    const float turn = wrapDegrees(targetYaw - c.facingYaw);
+    c.facingYaw = wrapDegrees(c.facingYaw + turn * std::min(1.0f, dt * 12.0f));
     const glm::vec3 rootOffset = root->position; // custom characters may have an offset root
-    model->setWorldFrame(feet + glm::vec3(0.0f, kCharacterHeight * 0.5f, 0.0f) - rootOffset, glm::vec3(0.0f, facingYaw_, 0.0f));
-    root->velocity = controller_->velocity();
+    model->setWorldFrame(feet + glm::vec3(0.0f, kCharacterHeight * 0.5f, 0.0f) - rootOffset, glm::vec3(0.0f, c.facingYaw, 0.0f));
+    root->velocity = c.controller->velocity();
 
-    if (controller_->justJumped()) forBoth([&](LuaRuntime& l) { l.onJumping(*hum); });
+    if (c.controller->justJumped()) forAll([&](LuaRuntime& l) { l.onJumping(*hum); });
     const float speed = glm::length(glm::vec2(root->velocity.x, root->velocity.z));
-    if (std::abs(speed - runningSpeed_) > 0.5f || (speed == 0.0f && runningSpeed_ != 0.0f)) {
-        runningSpeed_ = speed < 0.05f ? 0.0f : speed;
-        forBoth([&](LuaRuntime& l) { l.onRunning(*hum, runningSpeed_); });
+    if (std::abs(speed - c.runningSpeed) > 0.5f || (speed == 0.0f && c.runningSpeed != 0.0f)) {
+        c.runningSpeed = speed < 0.05f ? 0.0f : speed;
+        forAll([&](LuaRuntime& l) { l.onRunning(*hum, c.runningSpeed); });
     }
 
     // Health and death.
     if (feet.y < scene_->workspace().fallenPartsHeight && hum->health > 0.0f) scene_->setProperty(*hum, "Health", 0.0f);
     if (hum->health > hum->maxHealth) hum->health = hum->maxHealth;
-    if (hum->health != lastHealth_) {
-        lastHealth_ = hum->health;
-        forBoth([&](LuaRuntime& l) { l.onHealthChanged(*hum, hum->health); });
+    if (hum->health != c.lastHealth) {
+        c.lastHealth = hum->health;
+        forAll([&](LuaRuntime& l) { l.onHealthChanged(*hum, hum->health); });
     }
-    if (hum->health <= 0.0f && !dead_) {
-        dead_ = true;
-        respawnTimer_ = kRespawnDelay;
-        forBoth([&](LuaRuntime& l) { l.onHumanoidDied(*hum); });
-        controller_->setInput({});
+    if (hum->health <= 0.0f && !c.dead) {
+        c.dead = true;
+        c.respawnTimer = kRespawnDelay;
+        c.activating = false;
+        forAll([&](LuaRuntime& l) { l.onHumanoidDied(*hum); });
+        c.controller->setInput({});
         // Fall apart: the limbs drop (they become ordinary unanchored parts).
-        physics_->destroyCharacter(controller_);
-        controller_ = nullptr;
+        physics_->destroyCharacter(c.controller);
+        c.controller = nullptr;
         physics_->setIgnored(model->id, false);
-        for (Instance* c : model->children) {
-            if (!c->isBasePart()) continue;
-            c->canCollide = c->name != "HumanoidRootPart";
-            c->velocity = glm::vec3(std::sin(c->position.x * 7.0f), 3.0f, std::cos(c->position.x * 5.0f)) * 2.0f;
+        for (Instance* part : model->children) {
+            if (!part->isBasePart()) continue;
+            part->canCollide = part->name != "HumanoidRootPart";
+            part->velocity = glm::vec3(std::sin(part->position.x * 7.0f), 3.0f, std::cos(part->position.x * 5.0f)) * 2.0f;
         }
         // Detach the parts so each falls on its own; they are removed when
         // the next character spawns.
-        for (Instance* c : std::vector<Instance*>(model->children)) {
-            if (!c->isBasePart() || c->name == "HumanoidRootPart") continue;
-            const glm::mat4 world = c->worldFrame();
-            scene_->setParent(c, &scene_->workspace());
-            c->setWorldTransform(world * glm::scale(glm::mat4(1.0f), c->size));
-            c->archivable = false;
-            deathPieces_.push_back(c->id);
+        for (Instance* part : std::vector<Instance*>(model->children)) {
+            if (!part->isBasePart() || part->name == "HumanoidRootPart") continue;
+            const glm::mat4 world = part->worldFrame();
+            scene_->setParent(part, &scene_->workspace());
+            part->setWorldTransform(world * glm::scale(glm::mat4(1.0f), part->size));
+            part->archivable = false;
+            c.deathPieces.push_back(part->id);
+        }
+        c.equipped = 0;
+        c.toolOffsets.clear();
+    }
+}
+
+// ============================================================================
+//  Tools
+// ============================================================================
+Instance* GameSession::toolOwnerCharacter(const Instance& tool) const {
+    for (const auto& c : clients_) {
+        if (tool.parent && tool.parent->id == c->characterId && c->characterId) return tool.parent;
+    }
+    return nullptr;
+}
+
+void GameSession::updateSlots(Client& c) {
+    // The bar keeps the order tools arrived in; new ones go at the end.
+    std::vector<uint64_t> present;
+    uint64_t held = 0;
+    if (Instance* backpack = scene_->find(c.backpackId)) {
+        for (Instance* item : backpack->children) if (item->cls == ClassId::Tool) present.push_back(item->id);
+    }
+    if (Instance* model = c.characterId ? scene_->find(c.characterId) : nullptr) {
+        for (Instance* item : model->children) {
+            if (item->cls != ClassId::Tool) continue;
+            present.push_back(item->id);
+            if (!held) held = item->id;
+        }
+    }
+    c.slots.erase(std::remove_if(c.slots.begin(), c.slots.end(), [&](uint64_t id) {
+        return std::find(present.begin(), present.end(), id) == present.end();
+    }), c.slots.end());
+    for (uint64_t id : present) {
+        if (std::find(c.slots.begin(), c.slots.end(), id) == c.slots.end()) c.slots.push_back(id);
+    }
+    if (held != c.equipped) {
+        // A script parented a tool into (or out of) the character.
+        c.equipped = held;
+        c.toolOffsets.clear();
+        if (Instance* tool = held ? scene_->find(held) : nullptr) {
+            if (Instance* handle = handleOf(*tool)) {
+                const glm::mat4 inv = glm::inverse(handle->worldFrame());
+                Scene::forEachDescendant(*tool, [&](Instance& part) {
+                    if (part.isBasePart() && &part != handle && !part.isDescendantOf(handle)) c.toolOffsets[part.id] = inv * part.worldFrame();
+                });
+            }
+        }
+    }
+}
+
+std::vector<GameSession::HotbarSlot> GameSession::hotbar(int client) const {
+    std::vector<HotbarSlot> bar;
+    if (client < 0 || client >= clientCount()) return bar;
+    const Client& c = *clients_[static_cast<size_t>(client)];
+    if (!c.backpackBar || c.slots.empty()) return bar;
+    const int count = std::min(static_cast<int>(c.slots.size()), kHotbarSlots);
+    // Slots grow with the view (about 60 px on a 1080p screen).
+    const float size = std::clamp(c.view.size.y * 0.058f, 40.0f, 84.0f);
+    const float gap = size * 0.1f, margin = size * 0.25f;
+    const float width = count * size + (count - 1) * gap;
+    const glm::vec2 start((c.view.size.x - width) * 0.5f, c.view.size.y - size - margin);
+    for (int k = 0; k < count; ++k) {
+        HotbarSlot slot;
+        slot.tool = c.slots[static_cast<size_t>(k)];
+        slot.number = (k + 1) % 10;
+        slot.equipped = slot.tool == c.equipped;
+        slot.pos = start + glm::vec2(k * (size + gap), 0.0f);
+        slot.size = glm::vec2(size);
+        bar.push_back(slot);
+    }
+    return bar;
+}
+
+void GameSession::equipTool(int client, uint64_t toolId) {
+    if (client < 0 || client >= clientCount()) return;
+    Client& c = *clients_[static_cast<size_t>(client)];
+    Instance* tool = scene_->find(toolId);
+    Instance* model = c.characterId ? scene_->find(c.characterId) : nullptr;
+    if (!tool || tool->cls != ClassId::Tool || !model || c.dead || tool->parent == model) return;
+    // Only its own tools, or one lying in the world.
+    if (Instance* owner = toolOwnerCharacter(*tool); owner && owner != model) return;
+    if (tool->parent && tool->parent->cls == ClassId::Backpack && tool->parent->id != c.backpackId) return;
+    unequipTools(client);
+    if (tool->requiresHandle && !handleOf(*tool)) log(LogLevel::Warning, tool->fullName() + " has no Handle part to hold (or set RequiresHandle off)");
+    scene_->setParent(tool, model);
+    updateSlots(c);
+    forAll([&](LuaRuntime& l) {
+        if (l.side() == NetworkSide::Server || l.client() == client) l.onToolEvent(*tool, ToolEvent::Equipped);
+    });
+}
+
+void GameSession::unequipTools(int client) {
+    if (client < 0 || client >= clientCount()) return;
+    Client& c = *clients_[static_cast<size_t>(client)];
+    Instance* tool = c.equipped ? scene_->find(c.equipped) : nullptr;
+    Instance* backpack = scene_->find(c.backpackId);
+    if (c.activating && tool) activateTool(tool->id, false);
+    c.activating = false;
+    if (!tool || !backpack) return;
+    scene_->setParent(tool, backpack);
+    updateSlots(c);
+    forAll([&](LuaRuntime& l) {
+        if (l.side() == NetworkSide::Server || l.client() == client) l.onToolEvent(*tool, ToolEvent::Unequipped);
+    });
+}
+
+void GameSession::dropTool(int client) {
+    if (client < 0 || client >= clientCount()) return;
+    Client& c = *clients_[static_cast<size_t>(client)];
+    Instance* tool = c.equipped ? scene_->find(c.equipped) : nullptr;
+    Instance* root = c.rootPartId ? scene_->find(c.rootPartId) : nullptr;
+    if (!tool || !tool->canBeDropped || !root) return;
+    if (c.activating) activateTool(tool->id, false);
+    c.activating = false;
+    forAll([&](LuaRuntime& l) {
+        if (l.side() == NetworkSide::Server || l.client() == client) l.onToolEvent(*tool, ToolEvent::Unequipped);
+    });
+    // In front of the character, where it falls.
+    Instance* handle = handleOf(*tool);
+    const glm::mat4 before = handle ? handle->worldFrame() : glm::mat4(1.0f);
+    const float yaw = glm::radians(c.facingYaw);
+    const glm::vec3 ahead = root->worldPosition() + glm::vec3(-std::sin(yaw), 0.3f, -std::cos(yaw)) * 2.5f;
+    scene_->setParent(tool, &scene_->workspace());
+    if (handle) {
+        const glm::mat4 after = glm::translate(glm::mat4(1.0f), ahead) * glm::mat4(glm::mat3(before));
+        Scene::forEachDescendant(*tool, [&](Instance& part) {
+            if (!part.isBasePart() || part.parent != tool) return;
+            setWorldMatrix(part, after * glm::inverse(before) * part.worldFrame());
+            if (const PropertyInfo* p = findProperty(part.cls, "Position")) scene_->notifyPropertyChanged(part, *p);
+        });
+    }
+    pickupBlockedUntil_[tool->id] = time_ + 2.0;
+    c.equipped = 0;
+    c.toolOffsets.clear();
+    updateSlots(c);
+}
+
+void GameSession::activateTool(uint64_t toolId, bool down) {
+    Instance* tool = scene_->find(toolId);
+    if (!tool || tool->cls != ClassId::Tool) return;
+    Instance* owner = toolOwnerCharacter(*tool);
+    Client* c = owner ? clientOfCharacter(owner->id) : nullptr;
+    if (down && !tool->enabled) return;
+    forAll([&](LuaRuntime& l) {
+        if (l.side() == NetworkSide::Server || (c && l.client() == c->index)) l.onToolEvent(*tool, down ? ToolEvent::Activated : ToolEvent::Deactivated);
+    });
+}
+
+void GameSession::updateTools(Client& c) {
+    Instance* model = c.characterId ? scene_->find(c.characterId) : nullptr;
+    Instance* tool = c.equipped ? scene_->find(c.equipped) : nullptr;
+    Instance* arm = model ? model->findFirstChild("Right Arm") : nullptr;
+    if (arm && !arm->isBasePart()) arm = nullptr;
+
+    // The right arm holds the tool out in front (until animations take over).
+    const bool hold = tool && !c.dead && arm;
+    if (hold && !c.armRaised) {
+        c.armRestPos = arm->position;
+        c.armRestRot = arm->rotation;
+        const float half = arm->size.y * 0.5f;
+        const glm::vec3 shoulder = arm->position + glm::vec3(0.0f, half, 0.0f);
+        arm->position = shoulder + glm::vec3(0.0f, 0.0f, -half);
+        arm->rotation = glm::vec3(90.0f, 0.0f, 0.0f);
+        c.armRaised = true;
+    } else if (!hold && c.armRaised) {
+        if (arm) {
+            arm->position = c.armRestPos;
+            arm->rotation = c.armRestRot;
+        }
+        c.armRaised = false;
+    }
+    if (!tool || !model || c.dead) return;
+    Instance* handle = handleOf(*tool);
+    if (!handle) return;
+
+    // Roblox's grip: the bottom of the arm, turned so the tool points forward,
+    // then the tool's Grip (where the Handle sits in the hand).
+    const glm::mat4 hand = arm ? arm->worldFrame() * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -arm->size.y * 0.5f, 0.0f))
+                                     * glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f))
+                               : model->worldFrame();
+    const glm::mat4 grip = TransformUtil::compose(tool->gripPos, tool->gripRotation, glm::vec3(1.0f));
+    const glm::mat4 handleWorld = hand * glm::inverse(grip);
+    setWorldMatrix(*handle, handleWorld);
+    for (const auto& [id, offset] : c.toolOffsets) {
+        if (Instance* part = scene_->find(id)) setWorldMatrix(*part, handleWorld * offset);
+    }
+}
+
+void GameSession::pickUpTools() {
+    // Walking into a tool lying in the world picks it up (and holds it if the hand is free).
+    for (auto& cp : clients_) {
+        Client& c = *cp;
+        Instance* root = c.rootPartId && !c.dead ? scene_->find(c.rootPartId) : nullptr;
+        if (!root) continue;
+        for (uint64_t id : physics_->partsInBox(root->worldPosition(), glm::vec3(2.2f, kCharacterHeight + 0.4f, 2.2f))) {
+            Instance* part = scene_->find(id);
+            if (!part || part->name != "Handle" || !part->parent || part->parent->cls != ClassId::Tool) continue;
+            Instance* tool = part->parent;
+            if (!tool->isDescendantOf(&scene_->workspace()) || toolOwnerCharacter(*tool)) continue;
+            bool insideCharacter = false;
+            for (const auto& other : clients_) insideCharacter |= other->characterId && tool->isDescendantOf(scene_->find(other->characterId));
+            if (insideCharacter) continue;
+            auto blocked = pickupBlockedUntil_.find(tool->id);
+            if (blocked != pickupBlockedUntil_.end()) {
+                if (blocked->second > time_) continue;
+                pickupBlockedUntil_.erase(blocked);
+            }
+            if (!c.equipped) equipTool(c.index, tool->id);
+            else if (Instance* backpack = scene_->find(c.backpackId)) {
+                scene_->setParent(tool, backpack);
+                updateSlots(c);
+            }
         }
     }
 }
@@ -416,48 +786,51 @@ void GameSession::afterPhysics(float dt) {
 // ============================================================================
 //  Camera
 // ============================================================================
-void GameSession::updateCamera(float dt) {
+void GameSession::updateCamera(Client& c, float dt) {
     (void)dt;
+    GameCamera& camera = c.camera;
     const bool firstPersonMode = scene_->starterPlayer().cameraMode == CameraMode::FirstPerson;
     const float maxZoom = std::max(1.0f, scene_->starterPlayer().cameraMaxZoom);
-    if (firstPersonMode) camera_.zoom = 0.5f;
-    const bool firstPerson = camera_.zoom < 1.0f;
-    const bool rotating = view_.hovered && input_.mouseDown(GLFW_MOUSE_BUTTON_RIGHT);
-    mouseLock_ = (firstPerson && view_.hovered) || scriptMouseLock_;
+    if (firstPersonMode) camera.zoom = 0.5f;
+    const bool firstPerson = camera.zoom < 1.0f;
+    const bool rotating = c.view.hovered && input_.mouseDown(GLFW_MOUSE_BUTTON_RIGHT);
+    c.mouseLock = (firstPerson && c.view.hovered) || (c.scriptMouseLock && c.index == focus_);
 
-    if (camera_.type == CameraType::Custom) {
-        if (rotating || mouseLock_) {
+    if (camera.type == CameraType::Custom) {
+        if (rotating || (c.mouseLock && c.index == focus_)) {
             const glm::vec2 d = input_.mouseDelta();
-            camera_.yaw = wrapDegrees(camera_.yaw - d.x * 0.3f);
-            camera_.pitch = std::clamp(camera_.pitch - d.y * 0.3f, -80.0f, 80.0f);
+            camera.yaw = wrapDegrees(camera.yaw - d.x * 0.3f);
+            camera.pitch = std::clamp(camera.pitch - d.y * 0.3f, -80.0f, 80.0f);
         }
-        if (view_.hovered && input_.scroll() != 0.0f && !firstPersonMode) {
-            camera_.zoom = std::clamp(camera_.zoom * (1.0f - input_.scroll() * 0.12f), 0.5f, maxZoom);
-            if (camera_.zoom < 1.0f && input_.scroll() < 0.0f) camera_.zoom = 1.0f; // zoom back out of first person
+        if (c.view.hovered && input_.scroll() != 0.0f && !firstPersonMode) {
+            camera.zoom = std::clamp(camera.zoom * (1.0f - input_.scroll() * 0.12f), 0.5f, maxZoom);
+            if (camera.zoom < 1.0f && input_.scroll() < 0.0f) camera.zoom = 1.0f; // zoom back out of first person
         }
-        const Instance* root = rootPart();
-        glm::vec3 focus = root ? root->worldPosition() + glm::vec3(0.0f, 0.8f, 0.0f) : camera_.position;
-        if (!root && dead_) focus = camera_.position + camera_.lookVector() * camera_.zoom;
-        const float yaw = glm::radians(camera_.yaw), pitch = glm::radians(camera_.pitch);
+        const Instance* root = c.rootPartId ? scene_->find(c.rootPartId) : nullptr;
+        glm::vec3 focus = root ? root->worldPosition() + glm::vec3(0.0f, 0.8f, 0.0f) : camera.position;
+        if (!root && c.dead) focus = camera.position + camera.lookVector() * camera.zoom;
+        const float yaw = glm::radians(camera.yaw), pitch = glm::radians(camera.pitch);
         const glm::vec3 forward(-std::sin(yaw) * std::cos(pitch), std::sin(pitch), -std::cos(yaw) * std::cos(pitch));
-        float distance = firstPerson ? 0.0f : camera_.zoom;
+        float distance = firstPerson ? 0.0f : camera.zoom;
         if (distance > 0.0f && root) {
             // Walls between the character and the camera pull it closer.
             RaycastFilter filter;
             filter.respectCanCollide = true;
-            if (Instance* c = character()) filter.instances.push_back(c->id);
+            if (c.characterId) filter.instances.push_back(c.characterId);
             if (auto hit = physics_->raycast(focus, -forward * (distance + 0.3f), filter)) distance = std::max(0.3f, hit->distance - 0.3f);
         }
-        camera_.position = focus - forward * distance;
-        camera_.lookAt(camera_.position, camera_.position + forward);
+        camera.position = focus - forward * distance;
+        camera.lookAt(camera.position, camera.position + forward);
     }
-    if (options_.audio) options_.audio->setListener(camera_.position, camera_.lookVector(), camera_.upVector());
+    if (options_.audio && c.index == focus_) options_.audio->setListener(camera.position, camera.lookVector(), camera.upVector());
 }
 
-bool GameSession::screenPointToRay(const glm::vec2& point, glm::vec3& origin, glm::vec3& direction) const {
-    if (view_.size.x <= 0.0f || view_.size.y <= 0.0f) return false;
-    const glm::vec2 ndc(2.0f * point.x / view_.size.x - 1.0f, 1.0f - 2.0f * point.y / view_.size.y);
-    const glm::mat4 inv = glm::inverse(camera_.projection(view_.size.x / view_.size.y) * camera_.view());
+bool GameSession::screenPointToRay(int client, const glm::vec2& point, glm::vec3& origin, glm::vec3& direction) const {
+    if (client < 0 || client >= clientCount()) return false;
+    const Client& c = *clients_[static_cast<size_t>(client)];
+    if (c.view.size.x <= 0.0f || c.view.size.y <= 0.0f) return false;
+    const glm::vec2 ndc(2.0f * point.x / c.view.size.x - 1.0f, 1.0f - 2.0f * point.y / c.view.size.y);
+    const glm::mat4 inv = glm::inverse(c.camera.projection(c.view.size.x / c.view.size.y) * c.camera.view());
     glm::vec4 nearP = inv * glm::vec4(ndc, -1.0f, 1.0f);
     glm::vec4 farP = inv * glm::vec4(ndc, 1.0f, 1.0f);
     nearP /= nearP.w;
@@ -467,18 +840,20 @@ bool GameSession::screenPointToRay(const glm::vec2& point, glm::vec3& origin, gl
     return true;
 }
 
-glm::vec3 GameSession::worldToScreen(const glm::vec3& world) const {
-    const glm::vec4 clip = camera_.projection(view_.size.x / std::max(1.0f, view_.size.y)) * camera_.view() * glm::vec4(world, 1.0f);
+glm::vec3 GameSession::worldToScreen(int client, const glm::vec3& world) const {
+    if (client < 0 || client >= clientCount()) return glm::vec3(0.0f);
+    const Client& c = *clients_[static_cast<size_t>(client)];
+    const glm::vec4 clip = c.camera.projection(c.view.size.x / std::max(1.0f, c.view.size.y)) * c.camera.view() * glm::vec4(world, 1.0f);
     if (std::abs(clip.w) < 1e-6f) return { 0.0f, 0.0f, 0.0f };
     const glm::vec3 ndc = glm::vec3(clip) / clip.w;
-    return { (ndc.x + 1.0f) * 0.5f * view_.size.x, (1.0f - ndc.y) * 0.5f * view_.size.y, clip.w };
+    return { (ndc.x + 1.0f) * 0.5f * c.view.size.x, (1.0f - ndc.y) * 0.5f * c.view.size.y, clip.w };
 }
 
 // ============================================================================
 //  Output
 // ============================================================================
-void GameSession::log(LogLevel level, const std::string& text, uint64_t script, NetworkSide side) {
-    log_.push_back({ text, level, time_, script, side });
+void GameSession::log(LogLevel level, const std::string& text, uint64_t script, NetworkSide side, int client) {
+    log_.push_back({ text, level, time_, script, side, client });
     ++logCounter_;
     while (log_.size() > kMaxLogLines) log_.pop_front();
     if (level != LogLevel::Info) Log::write(level, "Script", text);
@@ -500,9 +875,10 @@ void GameSession::finish(bool won, const std::string& text) {
 // ============================================================================
 //  Sounds: the Playing property drives playback (scripts call :Play() /
 //  :Stop(), which set it; Playing = true in the editor means autoplay).
+//  What plays is the focused player's world.
 // ============================================================================
 void GameSession::playSound(Instance& sound) {
-    if (sound.scene) sound.scene->setProperty(sound, "Playing", true); // a server sound replicates to the client
+    if (sound.scene) sound.scene->setProperty(sound, "Playing", true); // a server sound replicates to the clients
     auto it = sounds_.find(sound.id);
     if (it != sounds_.end() && options_.audio) {
         options_.audio->stop(it->second.handle); // :Play() restarts from the beginning
@@ -541,16 +917,23 @@ float GameSession::soundLength(const Instance& sound) const {
     return it != sounds_.end() && options_.audio ? options_.audio->length(it->second.handle) : 0.0f;
 }
 
+void GameSession::stopAllSounds() {
+    if (options_.audio) {
+        for (auto& [id, s] : sounds_) options_.audio->stop(s.handle);
+    }
+    sounds_.clear();
+}
+
 void GameSession::updateSounds() {
-    // The client's world is what the player hears.
     AudioSystem* audio = options_.audio;
-    const Instance* soundService = client_->service(ClassId::SoundService);
+    Scene& world = clientScene();
+    const Instance* soundService = world.service(ClassId::SoundService);
     const float master = soundService ? soundService->volume : 1.0f;
     if (audio) audio->setMasterVolume(master);
 
     // Start sounds whose Playing is on.
     std::vector<Instance*> wanted;
-    client_->forEachInTree([&](Instance& i) { if (i.cls == ClassId::Sound && i.playing) wanted.push_back(&i); });
+    world.forEachInTree([&](Instance& i) { if (i.cls == ClassId::Sound && i.playing) wanted.push_back(&i); });
     for (Instance* s : wanted) {
         if (sounds_.count(s->id)) continue;
         SoundState state;
@@ -568,7 +951,7 @@ void GameSession::updateSounds() {
     }
     // Update / stop / finish.
     for (auto it = sounds_.begin(); it != sounds_.end();) {
-        Instance* s = client_->find(it->first);
+        Instance* s = world.find(it->first);
         if (!s || !s->playing) {
             if (audio) audio->stop(it->second.handle);
             it = sounds_.erase(it);
@@ -583,7 +966,7 @@ void GameSession::updateSounds() {
                 audio->stop(it->second.handle); // release the voice
                 s->playing = false;             // ended
                 if (Instance* server = scene_->find(s->id)) server->playing = false;
-                forBoth([&](LuaRuntime& l) { l.onSoundEnded(*s); });
+                forAll([&](LuaRuntime& l) { l.onSoundEnded(*s); });
                 it = sounds_.erase(it);
                 continue;
             }
@@ -591,7 +974,7 @@ void GameSession::updateSounds() {
             // No audio device (or no file): the sound "ends" at once, so scripts waiting on Ended continue.
             s->playing = false;
             if (Instance* server = scene_->find(s->id)) server->playing = false;
-            forBoth([&](LuaRuntime& l) { l.onSoundEnded(*s); });
+            forAll([&](LuaRuntime& l) { l.onSoundEnded(*s); });
             it = sounds_.erase(it);
             continue;
         }

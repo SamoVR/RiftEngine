@@ -5,6 +5,7 @@
 // player):
 //   * the game's GUI (ScreenGuis in StarterGui) laid out by GuiSystem,
 //   * the leaderboard (each player's "leaderstats" folder of values),
+//   * the Backpack bar (the player's tools, keys 1-9),
 //   * game:Message() banners and the win / lose screen.
 //
 #include <glm/glm.hpp>
@@ -29,6 +30,7 @@ struct OverlayFonts {
 void drawGameGui(GameSession& session, TextureCache& textures, ImDrawList* draw, const glm::vec2& origin, const OverlayFonts& fonts);
 // The same for any scene laid out by `gui` (the editor previews StarterGui while editing).
 void drawGui(const Scene& scene, const GuiSystem& gui, TextureCache& textures, ImDrawList* draw, const glm::vec2& origin, const OverlayFonts& fonts);
-void drawGameHud(GameSession& session, ImDrawList* draw, const glm::vec2& origin, const glm::vec2& size, const OverlayFonts& fonts);
+// Leaderboard, Backpack bar, messages and the respawn notice of the player in focus.
+void drawGameHud(GameSession& session, TextureCache& textures, ImDrawList* draw, const glm::vec2& origin, const glm::vec2& size, const OverlayFonts& fonts);
 
 } // namespace rift

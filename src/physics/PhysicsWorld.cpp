@@ -433,6 +433,13 @@ struct PhysicsWorld::Impl {
         return false;
     }
 
+    // The ignored subtree (a character) a part belongs to, or 0.
+    uint64_t ignoredRoot(const Instance* part) const {
+        if (ignored.empty()) return 0;
+        for (const Instance* p = part; p; p = p->parent) if (ignored.count(p->id)) return p->id;
+        return 0;
+    }
+
     void buildFor(Instance* part) {
         if (isIgnored(part)) return;
         Instance* root = rootOf(part);
@@ -676,6 +683,8 @@ struct PhysicsWorld::Impl {
             if (sameAssembly(partId, other)) continue;
             const Instance* o = scene.find(other);
             if (!o || (o->isBasePart() && !o->canTouch)) continue;
+            // A tool held by a character does not touch that character.
+            if (const uint64_t group = ignoredRoot(part); group && group == ignoredRoot(o)) continue;
             seen.insert(other);
             out.push_back(other);
         }

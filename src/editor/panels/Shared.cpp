@@ -83,6 +83,26 @@ void drawSideSwitch(Editor& editor, float height) {
         theme::tooltip(o.tip);
     }
     ImGui::PopStyleVar();
+
+    // Several test players: which one you are.
+    GameSession* s = editor.session();
+    if (s && s->clientCount() > 1) {
+        ImGui::SameLine();
+        const Instance* current = s->player();
+        const std::string label = std::string(ICON_FA_USER "  ") + (current ? current->name : std::string("Player"));
+        ImGui::SetNextItemWidth(ImGui::CalcTextSize(label.c_str()).x + ImGui::GetFrameHeight() * 1.6f);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x, (h - ImGui::GetFontSize()) * 0.5f));
+        if (ImGui::BeginCombo("##player", label.c_str())) {
+            for (int k = 0; k < s->clientCount(); ++k) {
+                const Instance* p = s->scene().find(s->client(k).playerId);
+                const std::string name = p ? p->name : "Player" + std::to_string(k + 1);
+                if (ImGui::Selectable(name.c_str(), k == s->focus())) editor.setViewPlayer(k);
+            }
+            ImGui::EndCombo();
+        }
+        ImGui::PopStyleVar();
+        theme::tooltip("Which test player you control and see (the others stand still).");
+    }
 }
 
 void drawInsertMenuItems(Editor& editor) {
@@ -104,6 +124,8 @@ void drawInsertMenuItems(Editor& editor) {
     classItem(editor, ClassId::PointLight, "Point Light");
     classItem(editor, ClassId::SpotLight, "Spot Light");
     classItem(editor, ClassId::Sound, "Sound");
+    classItem(editor, ClassId::Tool, "Tool");
+    theme::tooltip("Something players hold: goes into StarterPack with a Handle part. Click activates it.");
     if (ImGui::BeginMenu(ICON_FA_HASHTAG "  Values")) {
         classItem(editor, ClassId::IntValue, "IntValue");
         classItem(editor, ClassId::NumberValue, "NumberValue");

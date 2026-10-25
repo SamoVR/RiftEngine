@@ -254,8 +254,8 @@ void LuaRuntime::Impl::updateDebris() {
 // ============================================================================
 void LuaRuntime::Impl::fireInput() {
     const Input& in = session.input();
-    const ViewportInput& view = session.viewport();
-    const bool overGui = session.gui().mouseOverGui();
+    const ViewportInput& view = me().view;
+    const bool overGui = me().gui->mouseOverGui();
 
     auto pushInput = [this](InputObject io, bool processed) {
         return [this, io, processed](lua_State* T) {
@@ -378,10 +378,11 @@ int LuaRuntime::Impl::pushRemoteArgs(lua_State* T, const std::vector<RemoteValue
     return static_cast<int>(args.size());
 }
 
-void LuaRuntime::Impl::reply(uint64_t call, NetworkSide to, bool ok, std::string error, std::vector<RemoteValue> results) {
+void LuaRuntime::Impl::reply(uint64_t call, NetworkSide to, int toClient, bool ok, std::string error, std::vector<RemoteValue> results) {
     RemoteMessage msg;
     msg.kind = RemoteMessage::Kind::Reply;
     msg.to = to;
+    msg.client = toClient;
     msg.call = call;
     msg.ok = ok;
     msg.error = std::move(error);
@@ -398,7 +399,7 @@ void LuaRuntime::Impl::handleRemote(const RemoteMessage& m) {
                 queueInstanceEvent(m.remote, "OnClientEvent", [this, args](lua_State* T) { return pushRemoteArgs(T, *args); });
             } else {
                 // The server learns who sent it.
-                const uint64_t player = session.playerId();
+                const uint64_t player = m.client >= 0 && m.client < session.clientCount() ? session.client(m.client).playerId : 0;
                 queueInstanceEvent(m.remote, "OnServerEvent", [this, args, player](lua_State* T) {
                     pushInstance(T, player);
                     return 1 + pushRemoteArgs(T, *args);
@@ -411,7 +412,7 @@ void LuaRuntime::Impl::handleRemote(const RemoteMessage& m) {
             auto it = callbacks.find(SignalKey{ m.remote, name });
             if (it == callbacks.end()) {
                 const Instance* r = scene.find(m.remote);
-                reply(m.call, other, false, name + " is not set for " + (r ? r->fullName() : std::string("the RemoteFunction")), {});
+                reply(m.call, other, isClient() ? client : m.client, false, name + " is not set for " + (r ? r->fullName() : std::string("the RemoteFunction")), {});
                 break;
             }
             // The handler runs in its own thread (it may yield); its results go back.
@@ -420,7 +421,11 @@ void LuaRuntime::Impl::handleRemote(const RemoteMessage& m) {
             lua_pushinteger(T, static_cast<lua_Integer>(m.call));
             it->second.push(T);
             int n = 2;
-            if (!isClient()) { pushInstance(T, session.playerId()); ++n; }
+            if (!isClient()) {
+                replyTo[m.call] = m.client;
+                pushInstance(T, m.client >= 0 && m.client < session.clientCount() ? session.client(m.client).playerId : 0);
+                ++n;
+            }
             n += pushRemoteArgs(T, m.args);
             resume(T, n);
             break;
@@ -458,7 +463,12 @@ void LuaRuntime::Impl::registerServices() {
                 sol::object e = packed[2];
                 error = e.is<std::string>() ? e.as<std::string>() : std::string("error in the remote handler");
             }
-            reply(static_cast<uint64_t>(call), isClient() ? NetworkSide::Server : NetworkSide::Client, ok, error, std::move(results));
+            int to = client;
+            if (!isClient()) {
+                auto it = replyTo.find(static_cast<uint64_t>(call));
+                if (it != replyTo.end()) { to = it->second; replyTo.erase(it); }
+            }
+            reply(static_cast<uint64_t>(call), isClient() ? NetworkSide::Server : NetworkSide::Client, to, ok, error, std::move(results));
         };
         sol::protected_function maker = lua.safe_script(R"LUA(
             return function(reply)
@@ -871,18 +881,18 @@ void LuaRuntime::Impl::registerServices() {
     };
     lua.new_usertype<UserInputService>("UserInputService", sol::no_constructor,
         // Input exists only on the client: on the server nothing is ever pressed.
-        "IsKeyDown", [this, keyOf](UserInputService&, sol::object key) { return isClient() && session.viewport().keyboard && session.input().keyDown(keyOf(key)); },
+        "IsKeyDown", [this, keyOf](UserInputService&, sol::object key) { return isClient() && view().keyboard && session.input().keyDown(keyOf(key)); },
         "IsMouseButtonPressed", [this](UserInputService&, const EnumItem& type) {
             const int button = type.value - 2; // MouseButton1 = 2 in Enum.UserInputType
-            return isClient() && session.viewport().hovered && session.input().mouseDown(button);
+            return isClient() && view().hovered && session.input().mouseDown(button);
         },
-        "GetMouseLocation", [this](UserInputService&) { return Vector2L{ session.viewport().mouse }; },
+        "GetMouseLocation", [this](UserInputService&) { return Vector2L{ view().mouse }; },
         "GetMouseDelta", [this](UserInputService&) { return Vector2L{ session.input().mouseDelta() }; },
         "GetKeysPressed", [this](UserInputService&) {
             sol::table t = lua.create_table();
             int n = 0;
             for (const auto& [name, code] : keyCodeTable()) {
-                if (session.input().keyDown(code)) t[++n] = InputObject{ code, 1, 0 };
+                if (isClient() && view().keyboard && session.input().keyDown(code)) t[++n] = InputObject{ code, 1, 0 };
             }
             return t;
         },
@@ -890,7 +900,7 @@ void LuaRuntime::Impl::registerServices() {
             [this](UserInputService&) { return EnumItem{ enumType("MouseBehavior"), mouseBehavior }; },
             [this](UserInputService&, const EnumItem& e) {
                 mouseBehavior = e.value;
-                if (isClient()) session.setMouseLockRequested(e.value == 1);
+                if (isClient()) session.setMouseLockRequested(client, e.value == 1);
             }),
         "MouseIconEnabled", sol::property([](UserInputService&) { return true; }, [](UserInputService&, bool) {}),
         "KeyboardEnabled", sol::property([](UserInputService&) { return true; }),
@@ -902,16 +912,16 @@ void LuaRuntime::Impl::registerServices() {
         "InputChanged", sol::property([this](UserInputService&) { return Signal{ inputChanged }; }));
 
     // ------------------------------------------------------------ Mouse (Player:GetMouse())
-    auto mouseRay = [this](glm::vec3& origin, glm::vec3& dir) { return session.screenPointToRay(session.viewport().mouse, origin, dir); };
+    auto mouseRay = [this](glm::vec3& origin, glm::vec3& dir) { return session.screenPointToRay(viewClient(), view().mouse, origin, dir); };
     auto mouseHit = [this, mouseRay](uint64_t* target) -> CFrame {
         glm::vec3 origin, dir;
         CFrame cf;
         if (!mouseRay(origin, dir)) return cf;
         RaycastFilter filter;
-        if (Instance* character = session.character()) filter.instances.push_back(character->id);
+        if (const uint64_t character = session.client(viewClient()).characterId) filter.instances.push_back(character);
         const auto hit = session.physics().raycast(origin, dir * 1000.0f, filter);
         cf.p = hit ? hit->position : origin + dir * 1000.0f;
-        cf.r = glm::mat3_cast(session.camera().rotation); // faces the way the camera looks
+        cf.r = glm::mat3_cast(session.client(viewClient()).camera.rotation); // faces the way the camera looks
         if (target) *target = hit ? hit->instance : 0;
         return cf;
     };
@@ -922,10 +932,10 @@ void LuaRuntime::Impl::registerServices() {
             mouseHit(&target);
             return target ? instanceFor(target) : nil();
         }),
-        "X", sol::property([this](Mouse&) { return session.viewport().mouse.x; }),
-        "Y", sol::property([this](Mouse&) { return session.viewport().mouse.y; }),
-        "ViewSizeX", sol::property([this](Mouse&) { return session.viewport().size.x; }),
-        "ViewSizeY", sol::property([this](Mouse&) { return session.viewport().size.y; }),
+        "X", sol::property([this](Mouse&) { return view().mouse.x; }),
+        "Y", sol::property([this](Mouse&) { return view().mouse.y; }),
+        "ViewSizeX", sol::property([this](Mouse&) { return view().size.x; }),
+        "ViewSizeY", sol::property([this](Mouse&) { return view().size.y; }),
         "UnitRay", sol::property([this, mouseRay](Mouse&) {
             glm::vec3 origin(0.0f), dir(0.0f, 0.0f, -1.0f);
             mouseRay(origin, dir);
@@ -946,15 +956,15 @@ void LuaRuntime::Impl::registerServices() {
     // ------------------------------------------------------------ Camera (workspace.CurrentCamera)
     auto screenRay = [this](float x, float y) {
         glm::vec3 origin(0.0f), dir(0.0f, 0.0f, -1.0f);
-        session.screenPointToRay({ x, y }, origin, dir);
+        session.screenPointToRay(viewClient(), { x, y }, origin, dir);
         sol::table ray = lua.create_table();
         ray["Origin"] = Vector3L{ origin };
         ray["Direction"] = Vector3L{ dir };
         return ray;
     };
     auto worldToScreen = [this](const Vector3L& p) {
-        const glm::vec3 s = session.worldToScreen(p.v);
-        const glm::vec2 size = session.viewport().size;
+        const glm::vec3 s = session.worldToScreen(viewClient(), p.v);
+        const glm::vec2 size = view().size;
         const bool onScreen = s.z > 0.0f && s.x >= 0.0f && s.y >= 0.0f && s.x <= size.x && s.y <= size.y;
         return std::make_tuple(Vector3L{ s }, onScreen);
     };
@@ -964,7 +974,8 @@ void LuaRuntime::Impl::registerServices() {
             [this](Camera&, const CFrame& cf) { cam().setFrame(cf.toMat4()); }),
         "Focus", sol::property([this](Camera&) {
             CFrame cf;
-            Instance* root = session.rootPart();
+            const uint64_t rootId = session.client(viewClient()).rootPartId;
+            Instance* root = rootId ? session.scene().find(rootId) : nullptr;
             cf.p = root ? root->worldPosition() : cam().position + cam().lookVector() * 10.0f;
             return cf;
         }),
@@ -974,8 +985,11 @@ void LuaRuntime::Impl::registerServices() {
         "CameraType", sol::property(
             [this](Camera&) { return EnumItem{ enumType("CameraType"), static_cast<int>(cam().type) }; },
             [this](Camera&, const EnumItem& e) { cam().type = static_cast<CameraType>(e.value); }),
-        "CameraSubject", sol::property([this](Camera&) { return instanceOrNil(session.humanoid()); }, [](Camera&, sol::object) {}),
-        "ViewportSize", sol::property([this](Camera&) { return Vector2L{ session.viewport().size }; }),
+        "CameraSubject", sol::property([this](Camera&) {
+            const uint64_t hum = session.client(viewClient()).humanoidId;
+            return hum ? instanceOrNil(scene.find(hum)) : nil();
+        }, [](Camera&, sol::object) {}),
+        "ViewportSize", sol::property([this](Camera&) { return Vector2L{ view().size }; }),
         "ScreenPointToRay", [screenRay](Camera&, float x, float y) { return screenRay(x, y); },
         "ViewportPointToRay", [screenRay](Camera&, float x, float y) { return screenRay(x, y); },
         "WorldToScreenPoint", [worldToScreen](Camera&, const Vector3L& p) { return worldToScreen(p); },
@@ -987,7 +1001,7 @@ void LuaRuntime::Impl::registerServices() {
             { "Workspace", ClassId::Workspace }, { "Players", ClassId::Players }, { "Lighting", ClassId::Lighting },
             { "ReplicatedStorage", ClassId::ReplicatedStorage }, { "ScriptService", ClassId::ScriptService },
             { "ServerScriptService", ClassId::ScriptService }, { "ServerStorage", ClassId::ReplicatedStorage },
-            { "StarterGui", ClassId::StarterGui }, { "StarterPlayer", ClassId::StarterPlayer }, { "SoundService", ClassId::SoundService },
+            { "StarterGui", ClassId::StarterGui }, { "StarterPack", ClassId::StarterPack }, { "StarterPlayer", ClassId::StarterPlayer }, { "SoundService", ClassId::SoundService },
         };
         for (const auto& [n, cls] : instanceServices) if (name == n) return instanceFor(scene.service(cls)->id);
         if (name == "RunService") return sol::make_object(lua, RunService{});

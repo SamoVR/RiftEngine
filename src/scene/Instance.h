@@ -27,9 +27,9 @@ class Scene;
 
 enum class ClassId : uint8_t {
     // Services: exactly one of each per scene, always at the root.
-    Workspace, Players, Lighting, ReplicatedStorage, ServerStorage, ScriptService, StarterGui, StarterPlayer, SoundService,
+    Workspace, Players, Lighting, ReplicatedStorage, ServerStorage, ScriptService, StarterGui, StarterPack, StarterPlayer, SoundService,
     // World
-    Part, SpawnLocation, MeshPart, Model, Folder,
+    Part, SpawnLocation, MeshPart, Model, Folder, Tool,
     PointLight, SpotLight,
     Sound,
     Humanoid,
@@ -131,6 +131,13 @@ struct Instance {
     float maxHealth = 100.0f;
     glm::vec3 moveDirection{ 0.0f };      // Humanoid (runtime): where the character is walking
     bool jump = false;                    // Humanoid (runtime): set to make it jump
+
+    // Tool (ToolTip is `text`, TextureId is `texture`, Enabled is `enabled`)
+    bool requiresHandle = true;           // a Part named Handle is what the hand holds
+    bool canBeDropped = true;             // Backspace drops it into the world
+    bool manualActivationOnly = false;    // clicks do not activate it (scripts call :Activate())
+    glm::vec3 gripPos{ 0.0f };            // where the hand holds the Handle (Handle space, studs)
+    glm::vec3 gripRotation{ 0.0f };       // how the Handle is turned in the hand (degrees)
 
     // Value objects (IntValue.Value, ...). StringValue uses `text`, Color3Value `color`.
     int intValue = 0;

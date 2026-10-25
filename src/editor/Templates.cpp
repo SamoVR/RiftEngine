@@ -236,6 +236,67 @@ const std::vector<PartTemplate>& partTemplates() {
             "end)\n";
         t.push_back(finish);
 
+        PartTemplate sword;
+        sword.id = "Sword";
+        sword.title = "Sword";
+        sword.description = "A tool for StarterPack: click to swing, it hurts other characters it hits.";
+        sword.tool = true;
+        sword.size = { 0.15f, 0.45f, 0.15f }; // the grip (Handle)
+        sword.color = { 0.36f, 0.22f, 0.12f };
+        sword.material = Material::Wood;
+        sword.anchored = false;
+        sword.gripPos = { 0.0f, -0.1f, 0.0f };
+        sword.build = [](Scene& scene, Instance& handle) {
+            Instance* guard = scene.create(ClassId::Part, &handle);
+            guard->name = "Guard";
+            guard->position = { 0.0f, 0.25f, 0.0f };
+            guard->size = { 0.5f, 0.06f, 0.14f };
+            guard->color = { 0.75f, 0.62f, 0.25f };
+            guard->material = Material::Metal;
+            guard->anchored = false;
+            guard->canCollide = false;
+            Instance* blade = scene.create(ClassId::Part, &handle);
+            blade->name = "Blade";
+            blade->position = { 0.0f, 0.95f, 0.0f };
+            blade->size = { 0.13f, 1.35f, 0.04f };
+            blade->color = { 0.82f, 0.84f, 0.88f };
+            blade->material = Material::Metal;
+            blade->reflectance = 0.3f;
+            blade->anchored = false;
+            blade->canCollide = false;
+        };
+        sword.scriptName = "SwordScript";
+        sword.scriptSource =
+            "-- A sword. Click to swing; while swinging, the blade hurts\n"
+            "-- the characters it touches (but not the one holding it).\n"
+            "local tool = script.Parent\n"
+            "local blade = tool.Handle.Blade\n"
+            "local damage = 25\n"
+            "local swinging = false\n"
+            "local hit = {}\n"
+            "\n"
+            "tool.Activated:Connect(function()\n"
+            "    if swinging then return end\n"
+            "    swinging = true\n"
+            "    hit = {}\n"
+            "    -- Swing: bring the blade down in front, then back up.\n"
+            "    tool.GripRotation = Vector3.new(80, 0, 0)\n"
+            "    task.wait(0.25)\n"
+            "    tool.GripRotation = Vector3.new(0, 0, 0)\n"
+            "    swinging = false\n"
+            "end)\n"
+            "\n"
+            "blade.Touched:Connect(function(other)\n"
+            "    if not swinging then return end\n"
+            "    local character = other.Parent\n"
+            "    local humanoid = character and character:FindFirstChildOfClass(\"Humanoid\")\n"
+            "    if humanoid and character ~= tool.Parent and not hit[humanoid] then\n"
+            "        hit[humanoid] = true\n"
+            "        humanoid:TakeDamage(damage)\n"
+            "    end\n"
+            "end)\n";
+        t.push_back(sword);
+
         PartTemplate leaderboard;
         leaderboard.id = "Leaderboard";
         leaderboard.title = "Leaderboard Script";

@@ -178,6 +178,7 @@ std::vector<ClassInfo> buildClasses() {
     def(ClassId::ServerStorage, "ServerStorage", "Server-only storage: never sent to the client. Scripts here do not run.", false);
     def(ClassId::ScriptService, "ScriptService", "Server scripts that run for the whole game (Roblox: ServerScriptService). Never sent to the client.", false);
     def(ClassId::StarterGui, "StarterGui", "Copied into each player's PlayerGui when the game starts (and on respawn): ScreenGuis and the LocalScripts that drive them.", false);
+    def(ClassId::StarterPack, "StarterPack", "Tools here go into every player's Backpack each time the character spawns.", false);
     {
         ClassInfo& c = def(ClassId::StarterPlayer, "StarterPlayer", "Player character and camera settings.", false);
         c.props.push_back(field<&Instance::walkSpeed>("WalkSpeed", "Character").range(0.0f, 200.0f));
@@ -217,6 +218,17 @@ std::vector<ClassInfo> buildClasses() {
         addTransform(c.props, false);
     }
     def(ClassId::Folder, "Folder", "Organises instances. Has no position of its own.", true);
+    {
+        ClassInfo& c = def(ClassId::Tool, "Tool", "Something a player holds: a Part named Handle inside, the tool in StarterPack (or lying in the world to be picked up).", true);
+        c.props.push_back(field<&Instance::enabled>("Enabled", "Behavior").tip("Off: clicking does not activate it."));
+        c.props.push_back(field<&Instance::requiresHandle>("RequiresHandle", "Behavior").tip("Off: a tool with no Handle (a spell, an ability)."));
+        c.props.push_back(field<&Instance::canBeDropped>("CanBeDropped", "Behavior").tip("On: Backspace drops it into the world."));
+        c.props.push_back(field<&Instance::manualActivationOnly>("ManualActivationOnly", "Behavior").tip("On: clicks do not activate it; scripts call :Activate()."));
+        c.props.push_back(field<&Instance::text>("ToolTip", "Appearance").tip("Shown when the mouse is over its slot in the backpack bar."));
+        c.props.push_back(field<&Instance::texture>("TextureId", "Appearance").tip("Icon in the backpack bar (an image file). Without one the bar shows the name."));
+        c.props.push_back(field<&Instance::gripPos>("GripPos", "Grip").speed(0.02f).tip("Where the hand holds the Handle, in the Handle's own space (studs)."));
+        c.props.push_back(field<&Instance::gripRotation>("GripRotation", "Grip").speed(0.5f).tip("How the Handle is turned in the hand (degrees)."));
+    }
     {
         ClassInfo& c = def(ClassId::PointLight, "PointLight", "Light shining in every direction.", true);
         c.props.push_back(field<&Instance::position>("Position", "Transform").speed(0.05f));

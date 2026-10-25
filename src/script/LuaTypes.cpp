@@ -63,6 +63,7 @@ namespace {
         }
         add("MouseBehavior", { "Default", "LockCenter", "LockCurrentPosition" });
         add("CameraType", { "Custom", "Scriptable", "Fixed" });
+        add("CoreGuiType", { "PlayerList", "Health", "Backpack", "Chat", "All", "EmotesMenu" });
         add("PlaybackState", { "Begin", "Playing", "Paused", "Completed", "Cancelled", "Delayed" });
         return out;
     }

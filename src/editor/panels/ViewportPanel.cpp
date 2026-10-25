@@ -171,7 +171,7 @@ void ViewportPanel::draw(UiContext& ui) {
         // The GUI belongs to the player: the server view shows the world only.
         if (!editView) {
             drawGameGui(*s, ui.renderer.textures(), ImGui::GetWindowDrawList(), origin_, fonts);
-            drawGameHud(*s, ImGui::GetWindowDrawList(), origin_, size_, fonts);
+            drawGameHud(*s, ui.renderer.textures(), ImGui::GetWindowDrawList(), origin_, size_, fonts);
         }
     } else if (settings.showGui) {
         editGui = std::make_unique<GuiSystem>(editor.scene());

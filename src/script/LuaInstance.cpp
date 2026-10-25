@@ -48,6 +48,7 @@ bool hasEvent(const Instance& i, const std::string& name) {
     if (i.cls == ClassId::Player) return name == "CharacterAdded" || name == "CharacterRemoving";
     if (i.cls == ClassId::RemoteEvent) return name == "OnServerEvent" || name == "OnClientEvent";
     if (i.cls == ClassId::BindableEvent) return name == "Event";
+    if (i.cls == ClassId::Tool) return name == "Equipped" || name == "Unequipped" || name == "Activated" || name == "Deactivated";
     return false;
 }
 
@@ -86,6 +87,12 @@ bool methodApplies(const std::string& name, const Instance& i) {
         { "InvokeClient", [](const Instance& x) { return x.cls == ClassId::RemoteFunction; } },
         { "Fire", [](const Instance& x) { return x.cls == ClassId::BindableEvent; } },
         { "Invoke", [](const Instance& x) { return x.cls == ClassId::BindableFunction; } },
+        { "Activate", [](const Instance& x) { return x.cls == ClassId::Tool; } },
+        { "Deactivate", [](const Instance& x) { return x.cls == ClassId::Tool; } },
+        { "EquipTool", [](const Instance& x) { return x.cls == ClassId::Humanoid; } },
+        { "SetCoreGuiEnabled", [](const Instance& x) { return x.cls == ClassId::StarterGui; } },
+        { "GetCoreGuiEnabled", [](const Instance& x) { return x.cls == ClassId::StarterGui; } },
+        { "UnequipTools", [](const Instance& x) { return x.cls == ClassId::Humanoid; } },
     };
     auto it = only.find(name);
     return it == only.end() || it->second(i);
@@ -291,7 +298,7 @@ void LuaRuntime::Impl::registerInstance() {
     m["SetPrimaryPartCFrame"] = m["PivotTo"];
     m["MoveTo"] = [this, setFrame](const Inst& h, const Vector3L& position) {
         Instance* i = need(h);
-        if (i->cls == ClassId::Humanoid) { session.moveCharacterTo(position.v); return; }
+        if (i->cls == ClassId::Humanoid) { session.moveCharacterTo(i->id, position.v); return; }
         if (!i->hasTransform()) fail(memberError("MoveTo", *i));
         CFrame cf = CFrame::fromMat4(i->worldFrame());
         cf.p = position.v;
@@ -329,6 +336,62 @@ void LuaRuntime::Impl::registerInstance() {
     };
 
     // ---- humanoid, sound, player, players, workspace
+    // ---- the built-in GUI (StarterGui:SetCoreGuiEnabled)
+    auto coreGuiType = [](const sol::object& o) -> int {
+        if (o.is<EnumItem>()) return o.as<EnumItem>().value;
+        if (o.get_type() == sol::type::string) {
+            const EnumType* t = enumType("CoreGuiType");
+            if (auto item = t ? t->byName(o.as<std::string>()) : nullptr) return item->second;
+        }
+        fail("expected Enum.CoreGuiType");
+    };
+    m["SetCoreGuiEnabled"] = [this, coreGuiType](const Inst& h, sol::object type, bool enabled) {
+        Instance* i = need(h);
+        if (i->cls != ClassId::StarterGui) fail(memberError("SetCoreGuiEnabled", *i));
+        requireSide(NetworkSide::Client, "SetCoreGuiEnabled");
+        const int t = coreGuiType(type); // PlayerList, Health, Backpack, Chat, All, EmotesMenu
+        if (t == 0 || t == 4) me().playerList = enabled;
+        if (t == 2 || t == 4) me().backpackBar = enabled;
+    };
+    m["GetCoreGuiEnabled"] = [this, coreGuiType](const Inst& h, sol::object type) {
+        Instance* i = need(h);
+        if (i->cls != ClassId::StarterGui) fail(memberError("GetCoreGuiEnabled", *i));
+        requireSide(NetworkSide::Client, "GetCoreGuiEnabled");
+        const int t = coreGuiType(type);
+        if (t == 0) return me().playerList;
+        if (t == 2) return me().backpackBar;
+        if (t == 4) return me().playerList && me().backpackBar;
+        return true;
+    };
+
+    // ---- tools
+    m["Activate"] = [this](const Inst& h) {
+        Instance* i = need(h);
+        if (i->cls != ClassId::Tool) fail(memberError("Activate", *i));
+        session.activateTool(i->id, true);
+    };
+    m["Deactivate"] = [this](const Inst& h) {
+        Instance* i = need(h);
+        if (i->cls != ClassId::Tool) fail(memberError("Deactivate", *i));
+        session.activateTool(i->id, false);
+    };
+    m["EquipTool"] = [this](const Inst& h, const Inst& tool) {
+        Instance* i = need(h);
+        if (i->cls != ClassId::Humanoid) fail(memberError("EquipTool", *i));
+        if (need(tool)->cls != ClassId::Tool) fail("EquipTool expects a Tool");
+        GameSession::Client* c = session.clientOfHumanoid(i->id);
+        if (!c) fail("EquipTool only works on a player's Humanoid");
+        if (isClient() && c->index != client) fail("a LocalScript can only equip tools on its own character");
+        session.equipTool(c->index, tool.id);
+    };
+    m["UnequipTools"] = [this](const Inst& h) {
+        Instance* i = need(h);
+        if (i->cls != ClassId::Humanoid) fail(memberError("UnequipTools", *i));
+        GameSession::Client* c = session.clientOfHumanoid(i->id);
+        if (!c) return;
+        if (isClient() && c->index != client) fail("a LocalScript can only unequip tools on its own character");
+        session.unequipTools(c->index);
+    };
     m["TakeDamage"] = [this](const Inst& h, float amount) {
         Instance* i = need(h);
         if (i->cls != ClassId::Humanoid) fail(memberError("TakeDamage", *i));
@@ -342,7 +405,7 @@ void LuaRuntime::Impl::registerInstance() {
         Instance* i = need(h);
         if (i->cls != ClassId::Player) fail(memberError("LoadCharacter", *i));
         requireSide(NetworkSide::Server, "LoadCharacter");
-        session.loadCharacter();
+        session.loadCharacter(i->id);
     };
     m["Kick"] = [this](const Inst& h, sol::optional<std::string> message) {
         Instance* i = need(h);
@@ -365,8 +428,8 @@ void LuaRuntime::Impl::registerInstance() {
     m["GetPlayerFromCharacter"] = [this](const Inst& h, sol::object character) -> sol::object {
         need(h);
         if (!character.is<Inst>()) return nil();
-        const uint64_t c = session.characterId();
-        return c && c == character.as<Inst>().id ? instanceOrNil(scene.find(session.playerId())) : nil();
+        const GameSession::Client* c = session.clientOfCharacter(character.as<Inst>().id);
+        return c ? instanceOrNil(scene.find(c->playerId)) : nil();
     };
     m["Raycast"] = [this](const Inst& h, const Vector3L& origin, const Vector3L& direction, sol::optional<RaycastParams> params) -> sol::object {
         Instance* i = need(h);
@@ -425,6 +488,7 @@ void LuaRuntime::Impl::registerInstance() {
         RemoteMessage msg;
         msg.kind = RemoteMessage::Kind::Event;
         msg.to = NetworkSide::Server;
+        msg.client = client;
         msg.remote = i->id;
         msg.args = argsFrom(va, 0);
         session.postRemote(std::move(msg));
@@ -433,9 +497,12 @@ void LuaRuntime::Impl::registerInstance() {
         Instance* i = need(h);
         requireSide(NetworkSide::Server, "FireClient");
         if (need(player)->cls != ClassId::Player) fail("FireClient expects a Player as its first argument");
+        const GameSession::Client* c = session.clientOfPlayer(player.id);
+        if (!c) return; // the player left
         RemoteMessage msg;
         msg.kind = RemoteMessage::Kind::Event;
         msg.to = NetworkSide::Client;
+        msg.client = c->index;
         msg.remote = i->id;
         msg.args = argsFrom(va, 0);
         session.postRemote(std::move(msg));
@@ -443,12 +510,16 @@ void LuaRuntime::Impl::registerInstance() {
     m["FireAllClients"] = [this, argsFrom](const Inst& h, sol::variadic_args va) {
         Instance* i = need(h);
         requireSide(NetworkSide::Server, "FireAllClients");
-        RemoteMessage msg;
-        msg.kind = RemoteMessage::Kind::Event;
-        msg.to = NetworkSide::Client;
-        msg.remote = i->id;
-        msg.args = argsFrom(va, 0);
-        session.postRemote(std::move(msg));
+        const std::vector<RemoteValue> args = argsFrom(va, 0);
+        for (int k = 0; k < session.clientCount(); ++k) {
+            RemoteMessage msg;
+            msg.kind = RemoteMessage::Kind::Event;
+            msg.to = NetworkSide::Client;
+            msg.client = k;
+            msg.remote = i->id;
+            msg.args = args;
+            session.postRemote(std::move(msg));
+        }
     };
     m["Fire"] = [this, argsFrom](const Inst& h, sol::variadic_args va) {
         Instance* i = need(h);
@@ -465,11 +536,15 @@ void LuaRuntime::Impl::registerInstance() {
         msg.remote = i->id;
         if (isClient()) {
             msg.to = NetworkSide::Server;
+            msg.client = client;
             msg.args = argsFrom(va, 0);
         } else {
             sol::object player = va.size() > 0 ? sol::object(va[0]) : sol::object();
             if (!player.is<Inst>() || need(player.as<Inst>())->cls != ClassId::Player) fail("InvokeClient expects a Player as its first argument");
+            const GameSession::Client* c = session.clientOfPlayer(player.as<Inst>().id);
+            if (!c) fail("InvokeClient: that player has left");
             msg.to = NetworkSide::Client;
+            msg.client = c->index;
             msg.args = argsFrom(va, 1);
         }
         msg.call = nextCall++;
@@ -563,8 +638,14 @@ void LuaRuntime::Impl::registerInstance() {
                 Instance* root = model ? model->findFirstChild("HumanoidRootPart") : nullptr;
                 return instanceOrNil(root);
             }
+            if (i->cls == ClassId::Tool && name == "Grip") {
+                return sol::make_object(lua, CFrame::fromMat4(TransformUtil::compose(i->gripPos, i->gripRotation, glm::vec3(1.0f))));
+            }
             if (i->cls == ClassId::Player) {
-                if (name == "Character") return instanceOrNil(localCharacter());
+                if (name == "Character") {
+                    const GameSession::Client* c = session.clientOfPlayer(i->id);
+                    return c && c->characterId ? instanceOrNil(scene.find(c->characterId)) : nil();
+                }
                 if (name == "UserId") return sol::make_object(lua, 1);
                 if (name == "DisplayName") return sol::make_object(lua, i->name);
             }
@@ -608,6 +689,14 @@ void LuaRuntime::Impl::registerInstance() {
             if (name == "CFrame" && i->hasTransform()) {
                 if (!value.is<CFrame>()) fail("CFrame must be a CFrame");
                 setFrame(*i, value.as<CFrame>());
+                return;
+            }
+            if (name == "Grip" && i->cls == ClassId::Tool) {
+                if (!value.is<CFrame>()) fail("Grip must be a CFrame");
+                glm::vec3 p, r, s;
+                TransformUtil::decompose(value.as<CFrame>().toMat4(), p, r, s);
+                scene.setProperty(*i, "GripPos", p);
+                scene.setProperty(*i, "GripRotation", r);
                 return;
             }
             std::string target = name;

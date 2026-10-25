@@ -64,6 +64,7 @@ struct EditorSettings {
     std::string externalEditor;     // program for "Open in External Editor" ("" = Windows' choice for .lua)
 
     // Playing
+    int playPlayers = 1;            // simulated players when testing (Roblox's local server test)
     bool clearOutputOnPlay = true;
     bool pauseOnError = false;      // pause the game when a script error happens
     bool saveBeforePlay = false;    // save the scene when Play is pressed

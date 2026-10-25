@@ -90,7 +90,12 @@ void Editor::update(float dt) {
         const uint64_t fresh = std::min<uint64_t>(total - lastSessionLog_, lines.size());
         bool error = false;
         for (size_t k = lines.size() - fresh; k < lines.size(); ++k) {
-            addOutput(lines[k].level, lines[k].text, lines[k].script, lines[k].side == NetworkSide::Client ? "Client" : "Server");
+            std::string source = lines[k].side == NetworkSide::Server ? "Server" : "Client";
+            // Several players: say whose client printed it.
+            if (lines[k].side == NetworkSide::Client && session_->clientCount() > 1) {
+                if (const Instance* p = session_->scene().find(session_->client(lines[k].client).playerId)) source = p->name;
+            }
+            addOutput(lines[k].level, lines[k].text, lines[k].script, source);
             error |= lines[k].level == LogLevel::Error;
         }
         lastSessionLog_ = total;
@@ -541,6 +546,16 @@ Instance* Editor::insert(ClassId cls, PartShape shape) {
         const char* source = cls == ClassId::Script ? newScriptSource() : cls == ClassId::LocalScript ? newLocalScriptSource() : newModuleSource();
         i = createScript(nullptr, cls, name, source);
         parent = target;
+    } else if (cls == ClassId::Tool) {
+        // A tool with a Handle to hold, in StarterPack (or the selected container).
+        i = s.create(cls);
+        Instance* handle = s.create(ClassId::Part, i);
+        handle->name = "Handle";
+        handle->size = { 0.3f, 0.3f, 1.0f };
+        handle->anchored = false;
+        const bool container = selected && (selected->cls == ClassId::Folder || selected->cls == ClassId::Backpack || selected->isService());
+        parent = container ? selected : s.service(ClassId::StarterPack);
+        if (parent == &s.workspace()) placeAt(*handle, i, placementPoint(handle->size));
     } else if (cls == ClassId::ScreenGui) {
         i = s.create(cls);
         parent = s.service(ClassId::StarterGui);
@@ -611,6 +626,20 @@ Instance* Editor::insertTemplate(const std::string& templateId) {
         Instance* script = createScript(nullptr, ClassId::Script, t->scriptName, t->scriptSource);
         const uint64_t id = script->id;
         execute(commitNew(s, script, s.service(ClassId::ScriptService), "Insert " + t->title));
+        selection_ = { id };
+        return s.find(id);
+    }
+    if (t->tool) {
+        Instance* tool = s.create(ClassId::Tool);
+        tool->name = t->id;
+        tool->gripPos = t->gripPos;
+        Instance* handle = s.create(ClassId::Part, tool);
+        handle->name = "Handle";
+        applyTemplate(*handle, *t);
+        if (t->build) t->build(s, *handle);
+        if (!t->scriptSource.empty()) createScript(tool, ClassId::Script, t->scriptName, t->scriptSource);
+        const uint64_t id = tool->id;
+        execute(commitNew(s, tool, s.service(ClassId::StarterPack), "Insert " + t->title));
         selection_ = { id };
         return s.find(id);
     }
@@ -976,11 +1005,21 @@ void Editor::play() {
     options.isStudio = true;
     const std::string gameName = project_.isOpen() ? project_.settings().name : sceneName();
     options.dataStoreFolder = Paths::userData() / "datastores" / Paths::fromUtf8(gameName);
+    options.playerCount = std::clamp(settings_.playPlayers, 1, 8);
     session_ = std::make_unique<GameSession>(*scene_, scripts_, input_, options);
     lastSessionLog_ = 0;
     viewSide = NetworkSide::Client;
     addOutput(LogLevel::Info, "Game started", 0, "Game");
     session_->start();
+}
+
+void Editor::setViewPlayer(int index) {
+    if (!session_) return;
+    commitPreview();
+    session_->setFocus(index);
+    if (viewSide != NetworkSide::Client) setViewSide(NetworkSide::Client);
+    selection_.erase(std::remove_if(selection_.begin(), selection_.end(), [this](uint64_t id) { return !scene().find(id); }), selection_.end());
+    if (const Instance* p = session_->player()) notify("Playing as " + p->name);
 }
 
 void Editor::setViewSide(NetworkSide side) {

@@ -113,6 +113,8 @@ public:
     Tool tool = Tool::Move;
     NetworkSide viewSide = NetworkSide::Client; // which world the editor shows while playing
     void setViewSide(NetworkSide side);
+    // With several test players: which one the Client view (and the input) belongs to.
+    void setViewPlayer(int index);
     // Playing and looking at the server: the editor camera, selection and gizmos
     // work (on the server's world) and the game gets no input.
     bool serverView() const { return session_ && viewSide == NetworkSide::Server; }

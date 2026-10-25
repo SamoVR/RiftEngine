@@ -4,16 +4,20 @@
 // player). It plays on a CLONE of the scene, so the edited scene is never
 // touched and stopping is simply destroying the session.
 //
-// Like Roblox, a run has two sides in one process:
+// Like Roblox, a run has a server and clients in one process:
 //
 //   server   the authoritative world: Scripts run here, physics and the
-//            character controller simulate it, DataStores live here.
-//   client   the player's copy of the world (see Replicator): LocalScripts,
-//            input, the camera, the GUI (PlayerGui) and sounds live here.
+//            character controllers simulate it, DataStores live here.
+//   clients  one per player: a copy of the world (see Replicator) with the
+//            player's LocalScripts, GUI (PlayerGui), camera and Backpack bar.
 //
-// Each update():  input -> client RenderStepped / both Stepped -> character +
-// physics -> touches / deaths / fallen parts -> replication -> both Heartbeat,
-// waits -> remote messages -> camera -> GUI -> sounds.
+// Options::playerCount > 1 simulates several players (Roblox Studio's local
+// server test): every player has a character and a client; the one in
+// focus() gets the keyboard and mouse, is drawn, and is heard.
+//
+// Each update():  input -> clients' RenderStepped / Stepped -> characters +
+// tools + physics -> touches / deaths / fallen parts -> replication ->
+// Heartbeat, waits -> remote messages -> cameras -> GUI -> sounds.
 //
 #include "scene/Scene.h"
 #include "game/GameCamera.h"
@@ -52,7 +56,8 @@ public:
         std::filesystem::path dataStoreFolder; // DataStoreService files; empty = kept in memory
         AudioSystem* audio = nullptr;          // null: silent (tests)
         bool isStudio = true;                  // RunService:IsStudio()
-        std::string playerName = "Player";
+        std::string playerName = "Player";     // with several players: Player1, Player2, ...
+        int playerCount = 1;                   // simulated players (1..8)
         bool spawnCharacter = true;
     };
     enum class Outcome { None, Won, Lost };
@@ -62,6 +67,48 @@ public:
         double time = 0.0;
         uint64_t script = 0; // the script that printed it (0 = engine)
         NetworkSide side = NetworkSide::Server;
+        int client = 0;      // which player's client (side == Client)
+    };
+
+    // One slot of a player's Backpack bar (screen pixels, relative to the view).
+    struct HotbarSlot {
+        uint64_t tool = 0;
+        int number = 0;      // the key that equips it (1..9, 0 for the tenth)
+        bool equipped = false;
+        glm::vec2 pos{ 0.0f }, size{ 0.0f };
+    };
+
+    // One player: its client world and everything that belongs to it.
+    struct Client {
+        Client();
+        ~Client();
+        int index = 0;
+        uint64_t playerId = 0, playerGuiId = 0, backpackId = 0; // same ids on every side
+        std::unique_ptr<Scene> scene;
+        std::unique_ptr<Replicator> replicator;
+        std::unique_ptr<LuaRuntime> lua;
+        std::unique_ptr<GuiSystem> gui;
+        GameCamera camera;
+        ViewportInput view;           // only the client in focus gets the real one
+        bool mouseLock = false, scriptMouseLock = false;
+        bool backpackBar = true;      // StarterGui:SetCoreGuiEnabled(Backpack, ...)
+        bool playerList = true;       // StarterGui:SetCoreGuiEnabled(PlayerList, ...): the leaderboard
+
+        // Character (server instances)
+        uint64_t characterId = 0, humanoidId = 0, rootPartId = 0;
+        CharacterController* controller = nullptr;
+        float lastHealth = 0.0f, respawnTimer = 0.0f, facingYaw = 0.0f, runningSpeed = -1.0f;
+        bool dead = false, guiFilled = false, walkTarget = false;
+        glm::vec3 walkTo{ 0.0f };
+        std::vector<uint64_t> deathPieces;
+
+        // Tools: the order of the Backpack bar, what is held, the mouse button.
+        std::vector<uint64_t> slots;
+        uint64_t equipped = 0;
+        bool activating = false;
+        std::unordered_map<uint64_t, glm::mat4> toolOffsets; // other parts of the held tool, relative to its Handle
+        bool armRaised = false;       // the right arm holds the tool out
+        glm::vec3 armRestPos{ 0.0f }, armRestRot{ 0.0f };
     };
 
     GameSession(const Scene& editScene, ScriptStore& scripts, Input& input, Options options);
@@ -69,53 +116,73 @@ public:
     GameSession(const GameSession&) = delete;
     GameSession& operator=(const GameSession&) = delete;
 
-    // Spawns the player and starts the scripts.
+    // Spawns the players and starts the scripts.
     void start();
+    // `view` is the client in focus's view; the others get no input.
     void update(float dt, const ViewportInput& view);
 
-    // ---- the two worlds
+    // ---- players / clients
+    int clientCount() const { return static_cast<int>(clients_.size()); }
+    Client& client(int index) { return *clients_[static_cast<size_t>(index)]; }
+    const Client& client(int index) const { return *clients_[static_cast<size_t>(index)]; }
+    int focus() const { return focus_; }
+    void setFocus(int index); // which player gets input, is drawn and heard
+    Client& focused() { return client(focus_); }
+    const Client& focused() const { return client(focus_); }
+    Client* clientOfPlayer(uint64_t playerId);
+    Client* clientOfCharacter(uint64_t characterId);
+    Client* clientOfHumanoid(uint64_t humanoidId);
+
+    // ---- the worlds (client = the one in focus)
     Scene& scene() { return *scene_; }                 // the server's
     const Scene& scene() const { return *scene_; }
-    Scene& clientScene() { return *client_; }
-    const Scene& clientScene() const { return *client_; }
-    Scene& scene(NetworkSide side) { return side == NetworkSide::Server ? *scene_ : *client_; }
+    Scene& clientScene() { return *focused().scene; }
+    const Scene& clientScene() const { return *focused().scene; }
+    Scene& scene(NetworkSide side) { return side == NetworkSide::Server ? *scene_ : clientScene(); }
     LuaRuntime& lua() { return *lua_; }                // runs Scripts
-    LuaRuntime& clientLua() { return *clientLua_; }    // runs LocalScripts
+    LuaRuntime& clientLua() { return *focused().lua; } // runs the focused player's LocalScripts
 
     // ---- state
     PhysicsWorld& physics() { return *physics_; }
     ScriptStore& scripts() { return scripts_; }
     Input& input() { return input_; }
-    GuiSystem& gui() { return *gui_; }                 // the client's GUI
-    GameCamera& camera() { return camera_; }           // the client's camera
-    const GameCamera& camera() const { return camera_; }
+    GuiSystem& gui() { return *focused().gui; }
+    GameCamera& camera() { return focused().camera; }
+    const GameCamera& camera() const { return focused().camera; }
     AudioSystem* audio() const { return options_.audio; }
     const Options& options() const { return options_; }
-    const ViewportInput& viewport() const { return view_; }
+    const ViewportInput& viewport() const { return focused().view; }
     double time() const { return time_; }
     bool paused() const { return paused_; }
     void setPaused(bool paused) { paused_ = paused; }
     // First-person / MouseBehavior.LockCenter: the host should hide and lock the cursor.
-    bool wantsMouseLock() const { return mouseLock_; }
-    void setMouseLockRequested(bool lock) { scriptMouseLock_ = lock; }
+    bool wantsMouseLock() const { return focused().mouseLock; }
+    void setMouseLockRequested(int client, bool lock);
 
-    // ---- player (ids are the same on both sides)
-    uint64_t playerId() const { return playerId_; }
-    uint64_t characterId() const { return characterId_; }
-    uint64_t humanoidId() const { return humanoidId_; }
-    uint64_t rootPartId() const { return rootPartId_; }
+    // ---- the focused player (ids are the same on every side)
+    uint64_t playerId() const { return focused().playerId; }
+    uint64_t characterId() const { return focused().characterId; }
+    uint64_t humanoidId() const { return focused().humanoidId; }
+    uint64_t rootPartId() const { return focused().rootPartId; }
     Instance* player() const;     // server instances
     Instance* character() const;
     Instance* humanoid() const;
     Instance* rootPart() const;
-    void loadCharacter();           // (re)spawn now
-    void moveCharacterTo(const glm::vec3& target); // Humanoid:MoveTo
+    void loadCharacter(uint64_t playerId);                          // (re)spawn now
+    void moveCharacterTo(uint64_t humanoidId, const glm::vec3& target); // Humanoid:MoveTo
+
+    // ---- tools (server side; clients ask through these too)
+    void equipTool(int client, uint64_t tool);  // from the Backpack (or the world) into the hand
+    void unequipTools(int client);              // back into the Backpack
+    void dropTool(int client);                  // into the world (CanBeDropped)
+    void activateTool(uint64_t tool, bool down);// Activated / Deactivated on the server and its owner
+    std::vector<HotbarSlot> hotbar(int client) const;
 
     // ---- client <-> server messages (delivered next frame)
     void postRemote(RemoteMessage message);
 
     // ---- output
-    void log(LogLevel level, const std::string& text, uint64_t script = 0, NetworkSide side = NetworkSide::Server);
+    void log(LogLevel level, const std::string& text, uint64_t script = 0, NetworkSide side = NetworkSide::Server, int client = 0);
     const std::deque<LogLine>& logLines() const { return log_; }
     uint64_t logCounter() const { return logCounter_; } // grows with every line (UI auto-scroll)
     void clearLog() { log_.clear(); }
@@ -124,7 +191,7 @@ public:
     void finish(bool won, const std::string& text);
     Outcome outcome() const { return outcome_; }
 
-    // ---- sounds (Sound instances; what the client hears)
+    // ---- sounds (Sound instances; what the focused player hears)
     void playSound(Instance& sound);
     void stopSound(Instance& sound);
     void pauseSound(Instance& sound, bool paused);
@@ -133,42 +200,24 @@ public:
     float soundLength(const Instance& sound) const;
 
     // ---- camera helpers (screen = view pixels)
-    bool screenPointToRay(const glm::vec2& point, glm::vec3& origin, glm::vec3& direction) const;
-    glm::vec3 worldToScreen(const glm::vec3& world) const; // z = depth (<= 0: behind the camera)
+    bool screenPointToRay(int client, const glm::vec2& point, glm::vec3& origin, glm::vec3& direction) const;
+    glm::vec3 worldToScreen(int client, const glm::vec3& world) const; // z = depth (<= 0: behind the camera)
+    bool screenPointToRay(const glm::vec2& point, glm::vec3& origin, glm::vec3& direction) const { return screenPointToRay(focus_, point, origin, direction); }
+    glm::vec3 worldToScreen(const glm::vec3& world) const { return worldToScreen(focus_, world); }
 
 private:
     std::unique_ptr<Scene> scene_;   // server
-    std::unique_ptr<Scene> client_;
+    std::vector<std::unique_ptr<Client>> clients_;
+    int focus_ = 0;
     ScriptStore& scripts_;
     Input& input_;
     Options options_;
     std::unique_ptr<PhysicsWorld> physics_;
-    std::unique_ptr<Replicator> replicator_;
     std::unique_ptr<LuaRuntime> lua_;
-    std::unique_ptr<LuaRuntime> clientLua_;
-    std::unique_ptr<GuiSystem> gui_;
-    GameCamera camera_;
-    ViewportInput view_;
 
     double time_ = 0.0;
     bool started_ = false;
     bool paused_ = false;
-    bool mouseLock_ = false;
-    bool scriptMouseLock_ = false;
-
-    // player / character
-    uint64_t playerId_ = 0, characterId_ = 0, humanoidId_ = 0, rootPartId_ = 0;
-    uint64_t playerGuiId_ = 0;
-    CharacterController* controller_ = nullptr;
-    float lastHealth_ = 0.0f;
-    bool dead_ = false;
-    bool guiFilled_ = false;
-    float respawnTimer_ = 0.0f;
-    bool walkTarget_ = false;
-    glm::vec3 walkTo_{ 0.0f };
-    float facingYaw_ = 0.0f;
-    float runningSpeed_ = -1.0f;
-    std::vector<uint64_t> deathPieces_;     // limbs of the last character that died
 
     // client <-> server
     std::vector<RemoteMessage> remotes_;
@@ -180,22 +229,34 @@ private:
     float messageTimer_ = 0.0f;
     Outcome outcome_ = Outcome::None;
 
-    // sounds
+    // sounds of the focused client's world
     struct SoundState { uint32_t handle = 0; bool paused = false; };
     std::unordered_map<uint64_t, SoundState> sounds_;
 
-    void spawnCharacter();
-    void destroyCharacter();
-    void fillPlayerGui(bool respawn);
-    void setUpClientPlayer();
+    // tools that were just dropped: nobody picks them up again for a moment
+    std::unordered_map<uint64_t, double> pickupBlockedUntil_;
+
+    void addClient(int index);
+    void spawnCharacter(Client& c);
+    void destroyCharacter(Client& c);
+    void fillPlayerGui(Client& c, bool respawn);
+    void fillBackpack(Client& c);
+    void setUpClientPlayer(Client& c);
     glm::vec3 spawnPosition() const;
-    void updateCharacter(float dt);
+    void handleInput(Client& c);
+    void updateCharacter(Client& c, float dt);
     void afterPhysics(float dt);
-    void updateCamera(float dt);
+    void placeCharacter(Client& c, float dt);
+    void updateTools(Client& c);
+    void pickUpTools();
+    void updateSlots(Client& c);
+    void updateCamera(Client& c, float dt);
     void updateSounds();
+    void stopAllSounds();
     void deliverRemotes();
-    // Both runtimes, server first.
-    template <class F> void forBoth(F&& f);
+    Instance* toolOwnerCharacter(const Instance& tool) const;
+    // The server's runtime, then every client's.
+    template <class F> void forAll(F&& f);
 };
 
 } // namespace rift

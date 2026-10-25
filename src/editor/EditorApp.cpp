@@ -634,6 +634,9 @@ void EditorApp::drawToolbar() {
 
     // Play controls in the middle
     float playWidth = button * 3.0f + ImGui::CalcTextSize("Play").x + style.FramePadding.x * 4.0f;
+    char playersLabel[32];
+    std::snprintf(playersLabel, sizeof(playersLabel), ICON_FA_USERS "  %d", settings_.playPlayers);
+    if (!e.playing()) playWidth += ImGui::CalcTextSize(playersLabel).x + style.FramePadding.x * 2.0f + 2.0f;
     if (e.playing()) playWidth += ImGui::CalcTextSize(ICON_FA_LAPTOP "  Client" ICON_FA_SERVER "  Server").x + style.FramePadding.x * 4.0f + style.ItemSpacing.x;
     ImGui::SameLine(std::max(ImGui::GetCursorPosX() + style.ItemSpacing.x, (ImGui::GetWindowWidth() - playWidth) * 0.5f));
     if (!e.playing()) {
@@ -644,6 +647,21 @@ void EditorApp::drawToolbar() {
         ImGui::EndDisabled();
         ImGui::PopStyleColor(2);
         theme::tooltip("Play the scene (F5)");
+        // How many test players join (Roblox Studio's local server test).
+        ImGui::SameLine(0.0f, 2.0f);
+        if (ImGui::Button(playersLabel, ImVec2(0.0f, button))) ImGui::OpenPopup("##players");
+        theme::tooltip("Test players: how many simulated players join when you press Play");
+        if (ImGui::BeginPopup("##players")) {
+            ImGui::SeparatorText("Test players");
+            for (int n = 1; n <= 8; ++n) {
+                char item[32];
+                std::snprintf(item, sizeof(item), n == 1 ? "%d player" : "%d players", n);
+                if (ImGui::MenuItem(item, nullptr, n == settings_.playPlayers)) settings_.playPlayers = n;
+            }
+            ImGui::Separator();
+            ImGui::TextDisabled("Every player gets a character and a client.\nWhile playing, pick which one you are\nnext to the Client / Server switch.");
+            ImGui::EndPopup();
+        }
     } else {
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.70f, 0.22f, 0.24f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.82f, 0.28f, 0.30f, 1.0f));

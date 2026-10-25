@@ -4,7 +4,7 @@
 // the Lua script that makes it work). The scripts use the same Roblox idioms
 // tutorials teach, so they double as examples.
 //
-#include "scene/Instance.h"
+#include "scene/Scene.h"
 
 #include <string>
 #include <vector>
@@ -29,6 +29,10 @@ struct PartTemplate {
     std::string scriptName;
     std::string scriptSource;
     bool sceneScript = false;
+    // A Tool (in StarterPack): the part above is its Handle, `build` adds the rest.
+    bool tool = false;
+    glm::vec3 gripPos{ 0.0f };
+    void (*build)(Scene& scene, Instance& handle) = nullptr;
 };
 
 const std::vector<PartTemplate>& partTemplates();

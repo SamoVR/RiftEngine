@@ -89,8 +89,9 @@ void SignalState::disconnect(uint64_t id) {
 // ============================================================================
 //  Impl lifetime
 // ============================================================================
-LuaRuntime::Impl::Impl(GameSession& s, NetworkSide sd)
-    : session(s), side(sd), scene(s.scene(sd)), lua(luaPanic, limitedAlloc, this) {
+LuaRuntime::Impl::Impl(GameSession& s, NetworkSide sd, int clientIndex)
+    : session(s), side(sd), client(clientIndex),
+      scene(sd == NetworkSide::Server ? s.scene() : *s.client(clientIndex).scene), lua(luaPanic, limitedAlloc, this) {
     heartbeat = std::make_shared<SignalState>();
     stepped = std::make_shared<SignalState>();
     renderStepped = std::make_shared<SignalState>();
@@ -107,6 +108,8 @@ LuaRuntime::Impl::Impl(GameSession& s, NetworkSide sd)
     wheelBackward = std::make_shared<SignalState>();
     // The scene is observed from start() on (buildApi): the server's scripts run
     // first and already change the client's world before the client starts.
+    // Call ids are unique across all runtimes (a client's replies are routed by them).
+    if (side == NetworkSide::Client) nextCall = (static_cast<uint64_t>(client) + 1) << 40;
 }
 
 LuaRuntime::Impl::~Impl() {
@@ -139,7 +142,7 @@ std::string LuaRuntime::Impl::scriptLabel(uint64_t script) const {
 }
 
 void LuaRuntime::Impl::logScript(uint64_t script, const std::string& text, LogLevel level) {
-    session.log(level, text, script, side);
+    session.log(level, text, script, side, client);
 }
 
 void LuaRuntime::Impl::requireSide(NetworkSide wanted, const char* what) const {
@@ -148,9 +151,9 @@ void LuaRuntime::Impl::requireSide(NetworkSide wanted, const char* what) const {
                                                              : " can only be used from a Script (on the server)"));
 }
 
-Instance* LuaRuntime::Impl::localPlayer() const { return isClient() ? scene.find(session.playerId()) : nullptr; }
-Instance* LuaRuntime::Impl::localCharacter() const { return session.characterId() ? scene.find(session.characterId()) : nullptr; }
-GameCamera& LuaRuntime::Impl::cam() { return isClient() ? session.camera() : serverCamera; }
+Instance* LuaRuntime::Impl::localPlayer() const { return isClient() ? scene.find(me().playerId) : nullptr; }
+Instance* LuaRuntime::Impl::localCharacter() const { return isClient() && me().characterId ? scene.find(me().characterId) : nullptr; }
+GameCamera& LuaRuntime::Impl::cam() { return isClient() ? me().camera : serverCamera; }
 
 // ============================================================================
 //  Instances
@@ -421,8 +424,8 @@ bool LuaRuntime::Impl::shouldRun(const Instance& s) const {
         // LocalScripts run in what belongs to the local player: PlayerGui,
         // PlayerScripts, Backpack and the character.
         if (s.cls != ClassId::LocalScript) return false;
-        const Instance* player = scene.find(session.playerId());
-        const Instance* character = session.characterId() ? scene.find(session.characterId()) : nullptr;
+        const Instance* player = scene.find(me().playerId);
+        const Instance* character = me().characterId ? scene.find(me().characterId) : nullptr;
         return (player && s.isDescendantOf(player)) || (character && s.isDescendantOf(character));
     }
     // Scripts run in the world, in ScriptService and under the players
@@ -664,8 +667,9 @@ void LuaRuntime::Impl::buildApi() {
 // ============================================================================
 //  Public API
 // ============================================================================
-LuaRuntime::LuaRuntime(GameSession& session, NetworkSide side) : impl_(std::make_unique<Impl>(session, side)) {}
+LuaRuntime::LuaRuntime(GameSession& session, NetworkSide side, int client) : impl_(std::make_unique<Impl>(session, side, client)) {}
 NetworkSide LuaRuntime::side() const { return impl_->side; }
+int LuaRuntime::client() const { return impl_->client; }
 
 void LuaRuntime::onRemoteMessage(const RemoteMessage& message) {
     impl_->handleRemote(message);
@@ -682,10 +686,12 @@ void LuaRuntime::start() {
     for (Instance* script : scripts) {
         if (s.scene.find(script->id)) s.startScript(*script); // an earlier script may have destroyed it
     }
-    // Players.PlayerAdded fires for the local player once every script had the chance to connect.
-    if (Instance* player = s.scene.find(s.session.playerId())) {
-        const uint64_t id = player->id;
-        s.queue(s.playerAdded, [&s, id](lua_State* T) { return s.pushInstance(T, id); });
+    // Players.PlayerAdded fires for every player once every script had the chance to connect.
+    for (int k = 0; k < s.session.clientCount(); ++k) {
+        if (Instance* player = s.scene.find(s.session.client(k).playerId)) {
+            const uint64_t id = player->id;
+            s.queue(s.playerAdded, [&s, id](lua_State* T) { return s.pushInstance(T, id); });
+        }
     }
     s.flush();
 }
@@ -720,17 +726,32 @@ void LuaRuntime::onTouch(const TouchEvent& e) {
     s.queueInstanceEvent(e.part, e.began ? "Touched" : "TouchEnded", [&s, other](lua_State* T) { return s.pushInstance(T, other); });
 }
 
-void LuaRuntime::onCharacterAdded(Instance& character) {
+void LuaRuntime::onCharacterAdded(uint64_t player, Instance& character) {
     Impl& s = *impl_;
     const uint64_t id = character.id;
-    s.queueInstanceEvent(s.session.playerId(), "CharacterAdded", [&s, id](lua_State* T) { return s.pushInstance(T, id); });
+    s.queueInstanceEvent(player, "CharacterAdded", [&s, id](lua_State* T) { return s.pushInstance(T, id); });
     s.flush();
 }
 
-void LuaRuntime::onCharacterRemoving(Instance& character) {
+void LuaRuntime::onCharacterRemoving(uint64_t player, Instance& character) {
     Impl& s = *impl_;
     const uint64_t id = character.id;
-    s.queueInstanceEvent(s.session.playerId(), "CharacterRemoving", [&s, id](lua_State* T) { return s.pushInstance(T, id); });
+    s.queueInstanceEvent(player, "CharacterRemoving", [&s, id](lua_State* T) { return s.pushInstance(T, id); });
+}
+
+void LuaRuntime::onToolEvent(Instance& tool, ToolEvent e) {
+    Impl& s = *impl_;
+    switch (e) {
+        case ToolEvent::Equipped:
+            // The client gets the player's Mouse, like Roblox; the server nothing.
+            if (s.isClient()) s.queueInstanceEvent(tool.id, "Equipped", [&s](lua_State* T) { sol::make_object(s.lua, lua::Mouse{}).push(T); return 1; });
+            else s.queueInstanceEvent(tool.id, "Equipped", nullptr);
+            break;
+        case ToolEvent::Unequipped: s.queueInstanceEvent(tool.id, "Unequipped", nullptr); break;
+        case ToolEvent::Activated: s.queueInstanceEvent(tool.id, "Activated", nullptr); break;
+        case ToolEvent::Deactivated: s.queueInstanceEvent(tool.id, "Deactivated", nullptr); break;
+    }
+    s.flush();
 }
 
 void LuaRuntime::onHumanoidDied(Instance& humanoid) { impl_->queueInstanceEvent(humanoid.id, "Died", nullptr); }

@@ -59,10 +59,11 @@ struct Fixture {
         return script(source, folder, ClassId::LocalScript, name);
     }
 
-    GameSession& start(bool character = true, fs::path dataFolder = {}) {
+    GameSession& start(bool character = true, fs::path dataFolder = {}, int players = 1) {
         GameSession::Options options;
         options.spawnCharacter = character;
         options.dataStoreFolder = dataFolder;
+        options.playerCount = players;
         session = std::make_unique<GameSession>(scene, store, input, options);
         session->start();
         return *session;

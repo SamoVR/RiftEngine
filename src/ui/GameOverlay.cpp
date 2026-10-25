@@ -92,14 +92,57 @@ void drawGui(const Scene& scene, const GuiSystem& gui, TextureCache& textures, I
     }
 }
 
-void drawGameHud(GameSession& session, ImDrawList* draw, const glm::vec2& origin, const glm::vec2& size, const OverlayFonts& fonts) {
+void drawGameHud(GameSession& session, TextureCache& textures, ImDrawList* draw, const glm::vec2& origin, const glm::vec2& size, const OverlayFonts& fonts) {
     ImFont* font = fonts.regular ? fonts.regular : ImGui::GetFont();
     ImFont* bold = fonts.bold ? fonts.bold : font;
     const float base = ImGui::GetFontSize();
 
+    // ---- Backpack bar (bottom centre): the player's tools
+    {
+        const Scene& world = session.clientScene();
+        const glm::vec2 mouse = session.viewport().mouse;
+        const bool hoveredView = session.viewport().hovered;
+        const Instance* hoveredTool = nullptr;
+        glm::vec2 hoveredPos(0.0f);
+        for (const GameSession::HotbarSlot& slot : session.hotbar(session.focus())) {
+            const Instance* tool = world.find(slot.tool);
+            if (!tool) continue;
+            const ImVec2 a(origin.x + slot.pos.x, origin.y + slot.pos.y);
+            const ImVec2 b(a.x + slot.size.x, a.y + slot.size.y);
+            const bool over = hoveredView && mouse.x >= slot.pos.x && mouse.y >= slot.pos.y && mouse.x <= slot.pos.x + slot.size.x && mouse.y <= slot.pos.y + slot.size.y;
+            if (over) { hoveredTool = tool; hoveredPos = slot.pos; }
+            const float r = slot.size.x * 0.14f;
+            draw->AddRectFilled(a, b, slot.equipped ? IM_COL32(58, 52, 86, 220) : over ? IM_COL32(40, 40, 52, 210) : IM_COL32(20, 20, 28, 190), r);
+            draw->AddRect(a, b, slot.equipped ? IM_COL32(167, 139, 250, 255) : IM_COL32(255, 255, 255, 40), r, 0, slot.equipped ? 2.5f : 1.0f);
+            const float pad = slot.size.x * 0.12f;
+            if (auto tex = tool->texture.path.empty() ? nullptr : textures.get(tool->texture.path)) {
+                draw->AddImage(static_cast<ImTextureID>(tex->id()), ImVec2(a.x + pad, a.y + pad), ImVec2(b.x - pad, b.y - pad), ImVec2(0, 1), ImVec2(1, 0));
+            } else {
+                // No icon: the tool's name, wrapped to the slot.
+                const float textSize = base * 0.8f;
+                const float wrap = slot.size.x - pad;
+                const ImVec2 t = font->CalcTextSizeA(textSize, FLT_MAX, wrap, tool->name.c_str());
+                draw->PushClipRect(ImVec2(a.x + 2.0f, a.y + 2.0f), ImVec2(b.x - 2.0f, b.y - 2.0f), true);
+                draw->AddText(font, textSize, ImVec2(a.x + (slot.size.x - std::min(t.x, wrap)) * 0.5f, a.y + (slot.size.y - t.y) * 0.5f),
+                              IM_COL32(240, 240, 248, 255), tool->name.c_str(), nullptr, wrap);
+                draw->PopClipRect();
+            }
+            char number[4];
+            std::snprintf(number, sizeof(number), "%d", slot.number);
+            draw->AddText(bold, base * 0.72f, ImVec2(a.x + pad * 0.6f, a.y + pad * 0.35f), IM_COL32(255, 255, 255, 170), number);
+        }
+        if (hoveredTool) {
+            const std::string& tip = hoveredTool->text.empty() ? hoveredTool->name : hoveredTool->text;
+            const ImVec2 t = font->CalcTextSizeA(base * 0.9f, FLT_MAX, 0.0f, tip.c_str());
+            const ImVec2 p(origin.x + hoveredPos.x, origin.y + hoveredPos.y - t.y - base * 0.9f);
+            draw->AddRectFilled(ImVec2(p.x - 6.0f, p.y - 4.0f), ImVec2(p.x + t.x + 6.0f, p.y + t.y + 4.0f), IM_COL32(14, 14, 20, 230), 5.0f);
+            draw->AddText(font, base * 0.9f, p, IM_COL32(240, 240, 248, 255), tip.c_str());
+        }
+    }
+
     // ---- leaderboard (top right): the local player's leaderstats
     // What the client sees: its copy of the player (leaderstats replicate from the server).
-    if (Instance* player = session.clientScene().find(session.playerId())) {
+    if (Instance* player = session.focused().playerList ? session.clientScene().find(session.playerId()) : nullptr) {
         if (Instance* stats = player->findFirstChild("leaderstats")) {
             std::vector<const Instance*> values;
             for (const Instance* v : stats->children) if (v->isValueObject() && v->cls != ClassId::Vector3Value && v->cls != ClassId::Color3Value) values.push_back(v);

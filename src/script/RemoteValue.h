@@ -37,6 +37,7 @@ struct RemoteMessage {
     enum class Kind : uint8_t { Event, Invoke, Reply };
     Kind kind = Kind::Event;
     NetworkSide to = NetworkSide::Server;
+    int client = 0;       // to the client: which one; to the server: who sent it
     uint64_t remote = 0;  // the RemoteEvent / RemoteFunction
     uint64_t call = 0;    // Invoke / Reply: matches the answer to the caller waiting for it
     bool ok = true;       // Reply: false = the handler failed (error holds why)

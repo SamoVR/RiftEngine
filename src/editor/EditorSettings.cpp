@@ -59,6 +59,7 @@ namespace {
         f("showMinimap", s.showMinimap);
         f("autoClosePairs", s.autoClosePairs);
         f("externalEditor", s.externalEditor);
+        f("playPlayers", s.playPlayers);
         f("clearOutputOnPlay", s.clearOutputOnPlay);
         f("pauseOnError", s.pauseOnError);
         f("saveBeforePlay", s.saveBeforePlay);
@@ -131,6 +132,7 @@ bool EditorSettings::load() {
     msaa = msaa >= 8 ? 8 : msaa >= 4 ? 4 : msaa >= 2 ? 2 : 1;
     fpsLimit = std::clamp(fpsLimit, 0, 1000);
     outputMaxLines = std::clamp(outputMaxLines, 100, 100000);
+    playPlayers = std::clamp(playPlayers, 1, 8);
     windowWidth = std::clamp(windowWidth, 640, 16384);
     windowHeight = std::clamp(windowHeight, 400, 16384);
     return true;
