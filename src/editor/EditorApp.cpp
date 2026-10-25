@@ -141,6 +141,11 @@ bool EditorApp::init() {
     logo_ = std::make_unique<Texture>(Paths::toUtf8(Paths::icon("rift.png")));
     if (settings_.discordPresence) presence_.init(settings_.discordClientId);
     if (settings_.checkForUpdates) updater_.check(settings_.includePrereleases);
+    // Files the last update could not replace while RIFT was running.
+    std::error_code ec;
+    for (const auto& item : fs::directory_iterator(Paths::exeDir(), ec)) {
+        if (item.path().extension() == ".old") fs::remove(item.path(), ec);
+    }
 
     glfwShowWindow(window_);
     return true;

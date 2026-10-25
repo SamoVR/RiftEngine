@@ -13,6 +13,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "RiftTests", "tests\RiftTest
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "RiftPlayer", "src\player\RiftPlayer.vcxproj", "{3C8E2A71-5B94-4D2E-9F61-7A0D4C2B8E15}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "RiftSetup", "src\setup\RiftSetup.vcxproj", "{A7D3F5C2-6E1B-4B8A-9C2D-5F4E3B2A1C90}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -39,6 +41,10 @@ Global
 		{3C8E2A71-5B94-4D2E-9F61-7A0D4C2B8E15}.Debug|x64.Build.0 = Debug|x64
 		{3C8E2A71-5B94-4D2E-9F61-7A0D4C2B8E15}.Release|x64.ActiveCfg = Release|x64
 		{3C8E2A71-5B94-4D2E-9F61-7A0D4C2B8E15}.Release|x64.Build.0 = Release|x64
+		{A7D3F5C2-6E1B-4B8A-9C2D-5F4E3B2A1C90}.Debug|x64.ActiveCfg = Debug|x64
+		{A7D3F5C2-6E1B-4B8A-9C2D-5F4E3B2A1C90}.Debug|x64.Build.0 = Debug|x64
+		{A7D3F5C2-6E1B-4B8A-9C2D-5F4E3B2A1C90}.Release|x64.ActiveCfg = Release|x64
+		{A7D3F5C2-6E1B-4B8A-9C2D-5F4E3B2A1C90}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

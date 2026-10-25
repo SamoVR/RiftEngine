@@ -1,0 +1,35 @@
+# Builds RIFT and runs the tests on every push and pull request.
+name: Build
+
+on:
+  push:
+    branches: [main, engine-rework]
+    paths-ignore: ['website/**', '**.md']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: microsoft/setup-msbuild@v2
+
+      - name: Build (Release)
+        run: msbuild RiftEngine.sln -p:Configuration=Release -p:Platform=x64 -m -v:minimal -nologo
+
+      - name: Test
+        run: build\bin\Release\RiftTests.exe
+
+      - name: Package
+        run: python tools/make_installer.py
+
+      - name: Upload the setup
+        uses: actions/upload-artifact@v4
+        with:
+          name: RIFT-setup
+          path: |
+            dist/RIFT-Setup-*.exe
+            dist/RIFT-*-portable.zip
+          retention-days: 14

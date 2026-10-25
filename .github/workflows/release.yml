@@ -1,0 +1,51 @@
+# Publishes a release when a version tag is pushed:
+#
+#     git tag v1.1.0 && git push origin v1.1.0
+#
+# Builds, tests, packs RIFT-Setup-<version>.exe and the portable zip, and
+# creates the GitHub release with the CHANGELOG.md section as its notes.
+# The editor's updater and the website read these releases.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: The tag matches the version in the code
+        shell: pwsh
+        run: |
+          $v = (Select-String -Path src/core/Version.h -Pattern 'RIFT_VERSION_STRING "([^"]+)"').Matches[0].Groups[1].Value
+          if ("v$v" -ne "${{ github.ref_name }}") { throw "Tag ${{ github.ref_name }} does not match RIFT_VERSION_STRING $v in src/core/Version.h" }
+
+      - uses: microsoft/setup-msbuild@v2
+
+      - name: Build (Release)
+        run: msbuild RiftEngine.sln -p:Configuration=Release -p:Platform=x64 -m -v:minimal -nologo
+
+      - name: Test
+        run: build\bin\Release\RiftTests.exe
+
+      - name: Package
+        run: python tools/make_installer.py
+
+      - name: Release notes
+        run: python tools/release_notes.py ${{ github.ref_name }} > notes.md
+
+      - name: Publish
+        uses: softprops/action-gh-release@v2
+        with:
+          name: RIFT ${{ github.ref_name }}
+          body_path: notes.md
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: |
+            dist/RIFT-Setup-*.exe
+            dist/RIFT-*-portable.zip

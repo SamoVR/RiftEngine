@@ -36,3 +36,6 @@ ipch/
 imgui.ini
 settings.json
 *_log.txt
+
+# Release packages (tools/make_installer.py)
+/dist/
