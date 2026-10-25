@@ -90,8 +90,8 @@ python tools/make_installer.py
 packs `dist/RIFT-Setup-<version>.exe` and `dist/RIFT-<version>-portable.zip` from the Release build. To publish, set the version in `src/core/Version.h`, add a section to `CHANGELOG.md`, commit, and push a tag:
 
 ```
-git tag v1.1.0
-git push origin v1.1.0
+git tag v0.1.0
+git push origin v0.1.0
 ```
 
 GitHub Actions builds, tests and publishes the release with the setup attached; installed copies of RIFT then offer the update. The website in `website/` is deployed to GitHub Pages by `.github/workflows/pages.yml` and reads the releases live.

@@ -171,7 +171,7 @@ void EditorApp::drawWelcome(ImGuiID dockspace) {
     theme::pushHeading(1.55f);
     ImGui::TextUnformatted("RIFT");
     theme::pop();
-    ImGui::TextDisabled("Engine " RIFT_VERSION_STRING);
+    ImGui::TextDisabled("Engine " RIFT_VERSION_DISPLAY);
     ImGui::EndGroup();
     ImGui::Dummy(ImVec2(0.0f, fs_ * 1.2f));
     if (navItem(ICON_FA_HOUSE, "Projects", homePage_ == 0, navWidth)) homePage_ = 0;
@@ -218,7 +218,7 @@ void EditorApp::drawWelcome(ImGuiID dockspace) {
         ImGui::SameLine();
         ImGui::Text("RIFT %s is available", updater_.release().version.c_str());
         ImGui::SameLine();
-        ImGui::TextDisabled("(you have %s)", RIFT_VERSION_STRING);
+        ImGui::TextDisabled("(you have %s)", RIFT_VERSION_DISPLAY);
         ImGui::SameLine(width - fs_ * 13.0f);
         if (ImGui::Button("What's new")) showUpdate_ = true;
         ImGui::SameLine();

@@ -256,7 +256,7 @@ void EditorApp::drawPreferences() {
                 row("Include previews", "Pre-release versions: new features sooner, a few more bugs.", [&] { ImGui::Checkbox("##pre", &s.includePrereleases); });
                 row("This version", nullptr, [&] {
                     ImGui::AlignTextToFramePadding();
-                    ImGui::Text("RIFT %s%s", RIFT_VERSION_STRING, Updater::installed() ? "" : " (not installed by the setup)");
+                    ImGui::Text("RIFT %s%s", RIFT_VERSION_DISPLAY, Updater::installed() ? "" : " (not installed by the setup)");
                 });
                 row("", nullptr, [&] {
                     ImGui::BeginDisabled(updater_.busy());
@@ -421,7 +421,7 @@ void EditorApp::drawUpdateDialog() {
     const Updater::Release rel = updater_.release();
     const float w = fs_ * 32.0f;
     ImGui::PushTextWrapPos(w);
-    ImGui::TextDisabled("You have RIFT %s.", RIFT_VERSION_STRING);
+    ImGui::TextDisabled("You have RIFT %s.", RIFT_VERSION_DISPLAY);
 
     switch (state) {
         case Updater::State::Idle:

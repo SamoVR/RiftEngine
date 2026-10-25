@@ -3,7 +3,17 @@
 Every release of RIFT. The newest is at the top; the editor's updater and the
 GitHub release page show the section of the version being installed.
 
-## 1.1.0
+RIFT is in **beta**: versions are 0.x until the engine is complete.
+
+## 0.1.0
+
+The first beta.
+
+### The engine
+- The editor: dockable Viewport, Explorer, Properties, Output, Assets and script tabs; Roblox Studio camera and selection; move, rotate and resize tools with snapping; undo for everything; copy, paste, group.
+- Lua 5.4 scripting with a Roblox-style API, Jolt physics, Humanoid characters, GUI, sounds, lighting and shadows.
+- 3D models (OBJ, glTF, GLB) as MeshParts.
+- The standalone player and File > Build Game.
 
 ### Client and server, like Roblox
 - Games now run as a **server** and a **client**. Scripts run on the server, the new **LocalScript** runs on the player's side (input, camera, GUI).
@@ -28,12 +38,3 @@ GitHub release page show the section of the version being installed.
 - Opening an example asks where to put the copy and what to call it.
 - Optional confirmation before deleting objects.
 
-### Fixes
-- Stopping the game could crash the editor.
-- The folder picker could freeze the editor (New Project, Open Project).
-- Deleting or moving objects from the Explorer's context menu could crash.
-
-## 1.0.0
-
-The first release: the editor, Lua scripting with a Roblox-style API, physics,
-GUI, sounds, MeshParts (OBJ, glTF, GLB), the standalone player and Build Game.

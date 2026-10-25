@@ -294,7 +294,7 @@ void PlayerApp::drawMenu() {
     if (ImGui::Button(fullscreen_ ? "Windowed" : "Fullscreen", ImVec2(width, 0.0f))) setFullscreen(!fullscreen_);
     if (ImGui::Button("Quit", ImVec2(width, 0.0f))) glfwSetWindowShouldClose(window_, GLFW_TRUE);
     ImGui::Dummy(ImVec2(width, 2.0f));
-    ImGui::TextDisabled("Made with RIFT %s", RIFT_VERSION_STRING);
+    ImGui::TextDisabled("Made with RIFT %s", RIFT_VERSION_DISPLAY);
     ImGui::End();
 }
 

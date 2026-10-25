@@ -1,6 +1,6 @@
 # Publishes a release when a version tag is pushed:
 #
-#     git tag v1.1.0 && git push origin v1.1.0
+#     git tag v0.1.0 && git push origin v0.1.0
 #
 # Builds, tests, packs RIFT-Setup-<version>.exe and the portable zip, and
 # creates the GitHub release with the CHANGELOG.md section as its notes.

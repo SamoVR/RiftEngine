@@ -702,7 +702,7 @@ void EditorApp::drawStatusBar() {
     }
     // Right: update badge, counts and version
     char right[128];
-    std::snprintf(right, sizeof(right), "%d objects   RIFT %s", e.hasScene() ? static_cast<int>(e.scene().size()) : 0, RIFT_VERSION_STRING);
+    std::snprintf(right, sizeof(right), "%d objects   RIFT %s", e.hasScene() ? static_cast<int>(e.scene().size()) : 0, RIFT_VERSION_DISPLAY);
     const bool update = updater_.state() == Updater::State::Available || updater_.state() == Updater::State::Ready;
     const std::string badge = update ? ICON_FA_GIFT "  Update to " + updater_.release().version : std::string();
     const float badgeWidth = update ? ImGui::CalcTextSize(badge.c_str()).x + ImGui::GetStyle().ItemSpacing.x * 2.0f : 0.0f;

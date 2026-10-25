@@ -338,7 +338,7 @@ private:
         };
         const float y = lp.y + logo + 22.0f * scale_;
         centered(heading_, 34.0f * scale_, y, "RIFT", IM_COL32(255, 255, 255, 255));
-        centered(body_, 15.0f * scale_, y + 44.0f * scale_, "Engine " RIFT_VERSION_STRING, IM_COL32(255, 255, 255, 190));
+        centered(body_, 15.0f * scale_, y + 44.0f * scale_, "Engine " RIFT_VERSION_DISPLAY, IM_COL32(255, 255, 255, 190));
         centered(body_, 13.5f * scale_, o.y + size.y - 40.0f * scale_, "Make Roblox-style games with Lua", IM_COL32(255, 255, 255, 150));
     }
 
@@ -384,7 +384,7 @@ private:
         title(updating ? "Update RIFT" : "Install RIFT");
         ImGui::PushTextWrapPos(width);
         if (updating) ImGui::TextDisabled("RIFT %s is installed. This replaces it with %s; your projects and settings stay as they are.",
-                                          installed_.version.c_str(), RIFT_VERSION_STRING);
+                                          installed_.version.c_str(), RIFT_VERSION_DISPLAY);
         else ImGui::TextDisabled("The editor, the player for your games, examples and documentation. RIFT installs for you only, so no administrator rights are needed.");
         ImGui::PopTextWrapPos();
         ImGui::Dummy(ImVec2(0.0f, 8.0f * scale_));
@@ -554,7 +554,7 @@ private:
         }
         installed_ = findInstalled();
         const fs::path dir = installed_.found ? installed_.dir : defaultInstallDir();
-        const std::wstring question = L"Install RIFT " + fromUtf8(RIFT_VERSION_STRING).wstring() + L" to\n" + dir.wstring() + L" ?";
+        const std::wstring question = L"Install RIFT " + fromUtf8(RIFT_VERSION_DISPLAY).wstring() + L" to\n" + dir.wstring() + L" ?";
         if (MessageBoxW(nullptr, question.c_str(), L"RIFT Setup", MB_YESNO | MB_ICONQUESTION) != IDYES) return 1;
         Options options;
         options.dir = dir;

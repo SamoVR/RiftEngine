@@ -325,7 +325,7 @@ bool install(const Payload& payload, const fs::path& setupExe, const Options& op
     HKEY key = nullptr;
     if (RegCreateKeyExW(HKEY_CURRENT_USER, kUninstallKey, 0, nullptr, 0, KEY_WRITE, nullptr, &key, nullptr) == ERROR_SUCCESS) {
         const std::wstring uninstaller = L"\"" + (dir / L"Uninstall.exe").wstring() + L"\"";
-        setString(key, L"DisplayName", L"RIFT Engine");
+        setString(key, L"DisplayName", L"RIFT Engine (" RIFT_VERSION_STAGE ")");
         setString(key, L"DisplayVersion", fromUtf8(RIFT_VERSION_STRING).wstring());
         setString(key, L"Publisher", L"RIFT");
         setString(key, L"DisplayIcon", editor.wstring() + L",0");

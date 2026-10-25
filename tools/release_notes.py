@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Prints the CHANGELOG.md section of one version (for the GitHub release).
 
-    python tools/release_notes.py v1.1.0
+    python tools/release_notes.py v0.1.0
 """
 import os
 import sys

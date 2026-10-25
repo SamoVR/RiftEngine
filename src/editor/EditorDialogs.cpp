@@ -431,7 +431,7 @@ void EditorApp::drawDialogs() {
         theme::pushHeading(1.8f);
         ImGui::TextUnformatted("RIFT");
         theme::pop();
-        ImGui::TextDisabled("Version %s", RIFT_VERSION_STRING);
+        ImGui::TextDisabled("Version %s", RIFT_VERSION_DISPLAY);
         ImGui::EndGroup();
         ImGui::Spacing();
         ImGui::TextUnformatted("Built with Dear ImGui, ImGuizmo, GLFW, GLEW, GLM, Jolt Physics,\nLua 5.4 + sol2, miniaudio, stb, nlohmann/json, ImGuiColorTextEdit,\nInter, JetBrains Mono and Font Awesome Free.");

@@ -1,10 +1,13 @@
 #pragma once
 // Single source of truth for the engine version (also used by the .rc files,
 // so keep this header plain preprocessor definitions).
-#define RIFT_VERSION_MAJOR 1
+#define RIFT_VERSION_MAJOR 0
 #define RIFT_VERSION_MINOR 1
 #define RIFT_VERSION_PATCH 0
-#define RIFT_VERSION_STRING "1.1.0"
+#define RIFT_VERSION_STRING "0.1.0"
+// What people see (title bars, About, the setup): the number plus the stage.
+#define RIFT_VERSION_STAGE "Beta"
+#define RIFT_VERSION_DISPLAY RIFT_VERSION_STRING " " RIFT_VERSION_STAGE
 
 // Where releases are published (the updater reads its GitHub Releases).
 #define RIFT_GITHUB_REPO "SamoVR/RiftEngine"
