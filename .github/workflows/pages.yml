@@ -1,7 +1,6 @@
-# Publishes website/ to GitHub Pages (https://samovr.github.io/RiftEngine/).
-# One-time setup: repository Settings > Pages > Source: "GitHub Actions".
-# The site reads the latest release from the GitHub API, so a new release
-# shows up there without deploying again.
+# Publishes website/ to the gh-pages branch, which GitHub Pages serves at
+# https://samovr.github.io/RiftEngine/. The site reads the latest release
+# from the GitHub API, so a new release shows up without deploying again.
 name: Website
 
 on:
@@ -11,9 +10,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
   group: pages
@@ -22,17 +19,14 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/configure-pages@v5
-
-      - uses: actions/upload-pages-artifact@v3
         with:
-          path: website
+          fetch-depth: 0
 
-      - id: deployment
-        uses: actions/deploy-pages@v4
+      - name: Push website/ to gh-pages
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git subtree split --prefix website -b gh-pages-new
+          git push --force origin gh-pages-new:gh-pages
