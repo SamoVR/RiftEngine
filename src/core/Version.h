@@ -3,8 +3,8 @@
 // so keep this header plain preprocessor definitions).
 #define RIFT_VERSION_MAJOR 0
 #define RIFT_VERSION_MINOR 2
-#define RIFT_VERSION_PATCH 0
-#define RIFT_VERSION_STRING "0.2.0"
+#define RIFT_VERSION_PATCH 1
+#define RIFT_VERSION_STRING "0.2.1"
 // What people see (title bars, About, the setup): the number plus the stage.
 #define RIFT_VERSION_STAGE "Beta"
 #define RIFT_VERSION_DISPLAY RIFT_VERSION_STRING " " RIFT_VERSION_STAGE
