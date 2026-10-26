@@ -5,7 +5,7 @@ GitHub release page show the section of the version being installed.
 
 RIFT is in **beta**: versions are 0.x until the engine is complete.
 
-## 0.3.0 (not released yet)
+## 0.3.0
 
 ### Source control, like Visual Studio
 - **Git Changes** (the old Source Control panel): stage and unstage files one by one or all at once, see any file's diff, Commit Staged or Commit All (and push or sync in the same click), amend the last commit, stash changes and bring them back.
