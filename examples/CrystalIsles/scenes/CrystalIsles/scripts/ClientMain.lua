@@ -152,6 +152,7 @@ local howPanel = menu:WaitForChild("HowPanel")
 local contentHome = content.Position
 local inMenu = false
 local orbit = 0
+local showcase = nil -- while the results show: where the camera looks at the character from
 
 local function offscreen(position, by)
 	return UDim2.new(position.X.Scale + by, position.X.Offset, position.Y.Scale, position.Y.Offset)
@@ -221,6 +222,10 @@ end
 
 local function joinRound()
 	if inMenu then hideMenu() end
+	if showcase then
+		showcase = nil
+		camera.CameraType = Enum.CameraType.Custom
+	end
 	results.Enabled = false
 	resetHud()
 	hud.Enabled = true
@@ -245,6 +250,15 @@ RunService.RenderStepped:Connect(function(dt)
 		local center = Vector3.new(4, 5, -12)
 		local eye = center + Vector3.new(math.sin(orbit) * 80, 32, math.cos(orbit) * 80)
 		camera.CFrame = CFrame.lookAt(eye, center)
+	end
+	-- Results: the camera in front of the character, which stands on the left
+	-- of the screen (the panel is on the right), drifting a little.
+	if showcase then
+		local angle = math.sin((time() - showcase.since) * 0.35) * 0.18
+		local look = CFrame.Angles(0, angle, 0):VectorToWorldSpace(showcase.look)
+		local right = (-look):Cross(Vector3.new(0, 1, 0))
+		local target = showcase.at + Vector3.new(0, 0.5, 0) + right * 2.2
+		camera.CFrame = CFrame.lookAt(target + look * 8 + Vector3.new(0, 1.2, 0), target)
 	end
 	-- The score counts up to the real one.
 	if shownScore ~= mine.Score then
@@ -273,7 +287,7 @@ local function confetti()
 	holder.CastShadow = false
 	holder.Transparency = 1
 	holder.Size = Vector3.new(1, 0.2, 1)
-	holder.Position = root.Position + Vector3.new(0, 2.5, 0)
+	holder.Position = root.CFrame.Position + Vector3.new(0, 2.5, 0) -- (Position is relative to the character model)
 	holder.Parent = workspace
 	for _, color in ipairs({ Color3.fromRGB(255, 205, 80), Color3.fromRGB(236, 72, 153), Color3.fromRGB(34, 211, 238), Color3.fromRGB(160, 110, 255) }) do
 		local emitter = Instance.new("ParticleEmitter")
@@ -304,7 +318,34 @@ local function showResults(data)
 	hud.Enabled = false
 	results.Enabled = true
 	dim.BackgroundTransparency = 1
-	tween(dim, 0.4, { BackgroundTransparency = 0.45 })
+	tween(dim, 0.5, { BackgroundTransparency = 0 })
+	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	if root then
+		-- In front of the character, or the nearest angle with nothing in the way.
+		local at = root.CFrame.Position
+		local facing = root.CFrame.LookVector * Vector3.new(1, 0, 1)
+		facing = facing.Magnitude > 0.1 and facing.Unit or Vector3.new(0, 0, -1)
+		local params = RaycastParams.new()
+		params.FilterDescendantsInstances = { player.Character }
+		local look = facing
+		for _, angle in ipairs({ 0, 40, -40, 80, -80, 130, -130, 180 }) do
+			local candidate = CFrame.Angles(0, math.rad(angle), 0):VectorToWorldSpace(facing)
+			local side = (-candidate):Cross(Vector3.new(0, 1, 0))
+			local eye = at + candidate * 8.5 + side * 2.2 + Vector3.new(0, 1.7, 0)
+			local blocked = false
+			for _, point in ipairs({ Vector3.new(0, 1.2, 0), Vector3.new(0, 0.3, 0), Vector3.new(0, -0.8, 0), side * 0.7, side * -0.7 }) do
+				local from = at + point
+				if workspace:Raycast(from, eye - from, params) then blocked = true break end
+			end
+			if not blocked then
+				look = candidate
+				break
+			end
+		end
+		showcase = { at = at, look = look, since = time() }
+		camera.CameraType = Enum.CameraType.Scriptable
+	end
+	setFrozen(true)
 	panel.Size = UDim2.fromOffset(420, 360)
 	tween(panel, 0.5, { Size = UDim2.fromOffset(540, 486) }, Enum.EasingStyle.Back)
 	panel.ScoreText.Text = "0"
@@ -449,6 +490,7 @@ end)
 
 panel.MenuButton.Activated:Connect(function()
 	play("Click")
+	showcase = nil
 	showMenu()
 end)
 
