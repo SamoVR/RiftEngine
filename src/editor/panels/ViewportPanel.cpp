@@ -741,8 +741,11 @@ void ViewportPanel::drawOverlays(UiContext& ui, const glm::mat4& view, const glm
     if (settings.showStats) {
         const RenderStats& st = ui.renderer.stats();
         char text[256];
-        int n = std::snprintf(text, sizeof(text), "%.0f FPS  %.1f ms\n%d parts  %d draws  %dk tris", fps_, fps_ > 0.0f ? 1000.0f / fps_ : 0.0f,
-                              st.parts, st.drawCalls, st.triangles / 1000);
+        char tris[32];
+        if (st.triangles < 10000) std::snprintf(tris, sizeof(tris), "%d", st.triangles);
+        else std::snprintf(tris, sizeof(tris), "%.1fk", st.triangles / 1000.0f);
+        int n = std::snprintf(text, sizeof(text), "%.0f FPS  %.1f ms\n%d parts  %d draws  %s tris", fps_, fps_ > 0.0f ? 1000.0f / fps_ : 0.0f,
+                              st.parts, st.drawCalls, tris);
         if (GameSession* s = editor.session()) std::snprintf(text + n, sizeof(text) - n, "\ngame time %.1f s", s->time());
         const ImVec2 t = ImGui::CalcTextSize(text);
         const ImVec2 p(a.x + pad, b.y - t.y - pad * 1.5f);

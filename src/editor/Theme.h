@@ -70,6 +70,9 @@ bool menuItem(const char* icon, const ImVec4& iconColor, const char* label, cons
 bool beginMenu(const char* icon, const ImVec4& iconColor, const char* label, bool enabled = true);
 // Tooltip for the last item, after a short hover.
 void tooltip(const char* text);
+// A collapsible section header in graphite, exactly as wide as the content
+// (unlike ImGui's, which pokes into the window padding). "Label###id" works.
+bool sectionHeader(const char* label, bool defaultOpen = true, const ImVec4* textColor = nullptr);
 // Bold section title with a thin line under it (`width` 0: to the edge of the window).
 void heading(const char* text, float width = 0.0f);
 // Pushes the heading font at a given size multiplier.

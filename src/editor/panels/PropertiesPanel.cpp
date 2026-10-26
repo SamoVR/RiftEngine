@@ -118,14 +118,7 @@ namespace {
 namespace {
     // Category headers in graphite rather than the selection colour.
     bool categoryHeader(const char* label, ImGuiTreeNodeFlags flags = 0) {
-        ImGui::PushStyleColor(ImGuiCol_Header, theme::color::frame);
-        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, theme::color::frameHover);
-        ImGui::PushStyleColor(ImGuiCol_HeaderActive, theme::color::frameHover);
-        ImGui::PushFont(theme::fonts().medium, 0.0f);
-        const bool open = ImGui::CollapsingHeader(label, flags);
-        ImGui::PopFont();
-        ImGui::PopStyleColor(3);
-        return open;
+        return theme::sectionHeader(label, (flags & ImGuiTreeNodeFlags_DefaultOpen) != 0);
     }
 }
 

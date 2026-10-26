@@ -104,7 +104,12 @@ void EditorApp::openProjectDialog() {
 
 void EditorApp::openNewProject() {
     if (newProjectFolder_.empty()) newProjectFolder_ = defaultProjectsFolder();
-    std::strncpy(newProjectName_, "My Game", sizeof(newProjectName_));
+    // A name that is free in that folder: My Game, My Game 2, ...
+    std::string name = "My Game";
+    std::error_code ec;
+    for (int n = 2; n < 100 && fs::exists(Paths::fromUtf8(newProjectFolder_) / Paths::fromUtf8(name), ec); ++n) name = "My Game " + std::to_string(n);
+    std::strncpy(newProjectName_, name.c_str(), sizeof(newProjectName_) - 1);
+    newProjectName_[sizeof(newProjectName_) - 1] = '\0';
     showNewProject_ = true;
 }
 
@@ -257,9 +262,14 @@ void EditorApp::drawDialogs() {
         ImGui::Spacing();
         ImGui::Checkbox("Track changes with Git (version control)", &settings_.gitInitNewProjects);
         theme::tooltip("Makes the project a git repository with a first commit, so every version can be restored and backed up to GitHub.");
-        const bool ok = validName(newProjectName_) && !newProjectFolder_.empty();
+        std::error_code existsError;
+        const fs::path target = Paths::fromUtf8(newProjectFolder_) / Paths::fromUtf8(newProjectName_);
+        const bool taken = validName(newProjectName_) && fs::exists(target, existsError);
+        const bool ok = validName(newProjectName_) && !newProjectFolder_.empty() && !taken;
         if (!validName(newProjectName_) && newProjectName_[0]) ImGui::TextColored(theme::color::error, "The name cannot contain \\ / : * ? \" < > |");
-        else ImGui::TextDisabled("%s", Paths::toUtf8(Paths::fromUtf8(newProjectFolder_) / Paths::fromUtf8(newProjectName_)).c_str());
+        else if (taken) ImGui::TextColored(theme::color::warning, "A folder with this name is already there: pick another name");
+        else ImGui::TextDisabled("%s", Paths::toUtf8(target).c_str());
+        ImGui::Spacing();
         ImGui::BeginDisabled(!ok);
         if (ImGui::Button(ICON_FA_CHECK "  Create", ImVec2(buttonWidth(), 0.0f)) || (ok && ImGui::IsKeyPressed(ImGuiKey_Enter))) {
             std::error_code ec;
@@ -399,7 +409,12 @@ void EditorApp::drawDialogs() {
     // ---- shortcuts
     if (showShortcuts_) {
         ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-        ImGui::SetNextWindowSize(ImVec2(fs_ * 34.0f, fs_ * 30.0f), ImGuiCond_Appearing);
+        // Tall enough for the whole list when the window allows it.
+        const float rows = static_cast<float>(IM_ARRAYSIZE(kShortcuts));
+        const float listHeight = rows * (ImGui::GetTextLineHeight() + ImGui::GetStyle().CellPadding.y * 2.0f + 1.0f);
+        const float height = std::min(listHeight + ImGui::GetFrameHeight() + ImGui::GetStyle().WindowPadding.y * 2.0f + 2.0f,
+                                      ImGui::GetMainViewport()->WorkSize.y * 0.85f);
+        ImGui::SetNextWindowSize(ImVec2(fs_ * 34.0f, height), ImGuiCond_Appearing);
         if (ImGui::Begin(ICON_FA_KEYBOARD "  Keyboard Shortcuts###Shortcuts", &showShortcuts_, ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoCollapse)) {
             if (ImGui::BeginTable("##keys", 2, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH)) {
                 ImGui::TableSetupColumn("Keys", ImGuiTableColumnFlags_WidthFixed, fs_ * 14.0f);
@@ -440,6 +455,12 @@ void EditorApp::drawDialogs() {
         ImGui::TextUnformatted("Built with Dear ImGui, ImGuizmo, GLFW, GLEW, GLM, Jolt Physics,\nLua 5.4 + sol2, miniaudio, stb, nlohmann/json, ImGuiColorTextEdit,\nInter, JetBrains Mono and Font Awesome Free.");
         ImGui::TextDisabled("Licenses: third_party/README.md and data/fonts.");
         ImGui::Spacing();
+        ImGui::Spacing();
+        if (ImGui::Button(ICON_FA_GLOBE "  Website")) Platform::openWithShell(RIFT_WEBSITE);
+        ImGui::SameLine();
+        if (ImGui::Button(ICON_FA_CODE_BRANCH "  Source on GitHub")) Platform::openWithShell("https://github.com/" RIFT_GITHUB_REPO);
+        ImGui::SameLine();
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.0f, ImGui::GetContentRegionAvail().x - buttonWidth()));
         if (ImGui::Button("Close", ImVec2(buttonWidth(), 0.0f)) || ImGui::IsKeyPressed(ImGuiKey_Escape)) ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
     }

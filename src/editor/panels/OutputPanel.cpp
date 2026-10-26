@@ -79,13 +79,15 @@ void OutputPanel::draw(UiContext& ui, bool* open) {
 
         ImGui::PushID(static_cast<int>(k));
         const ImVec4 color = l.level == LogLevel::Error ? theme::color::error : l.level == LogLevel::Warning ? theme::color::warning : theme::color::text;
-        const char* icon = l.level == LogLevel::Error ? ICON_FA_CIRCLE_XMARK : l.level == LogLevel::Warning ? ICON_FA_TRIANGLE_EXCLAMATION : " ";
         if (l.time > 0.0 && editor.settings().outputTimestamps) {
             ImGui::TextDisabled("%7.2f", l.time);
             ImGui::SameLine();
         }
-        ImGui::TextColored(color, "%s", icon);
-        ImGui::SameLine();
+        // A fixed column for the warning / error icon, so all the text lines up.
+        const float iconX = ImGui::GetCursorPosX();
+        if (l.level == LogLevel::Info) ImGui::Dummy(ImVec2(0.0f, ImGui::GetTextLineHeight()));
+        else ImGui::TextColored(color, "%s", l.level == LogLevel::Error ? ICON_FA_CIRCLE_XMARK : ICON_FA_TRIANGLE_EXCLAMATION);
+        ImGui::SameLine(iconX + ImGui::GetFontSize() * 1.4f);
         if (l.source == "Client" || l.source == "Server") {
             // Where it ran, coloured like the Client / Server switch.
             const ImVec4 tag = l.source == "Client" ? ImVec4(0.40f, 0.66f, 1.0f, 1.0f) : ImVec4(0.30f, 0.82f, 0.52f, 1.0f);

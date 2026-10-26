@@ -5,6 +5,8 @@
 #include "IconsFontAwesome6.h"
 #include <imgui_internal.h>
 #include <algorithm>
+#include <cmath>
+#include <cstring>
 #include <string>
 
 namespace rift::theme {
@@ -117,6 +119,7 @@ void apply(float s) {
     st.GrabRounding = 4;
     st.TabRounding = 5;
     st.WindowTitleAlign = ImVec2(0.0f, 0.5f);
+    st.SelectableTextAlign = ImVec2(0.0f, 0.5f); // tall rows keep their text in the middle
     st.WindowMenuButtonPosition = ImGuiDir_None;
     st.SeparatorTextBorderSize = 1;
     st.DockingSeparatorSize = 2;
@@ -283,7 +286,19 @@ bool iconButton(const char* icon, const char* tip, bool active, float size) {
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(color::accent.x, color::accent.y, color::accent.z, 0.85f));
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, color::accentHover);
     }
-    const bool pressed = ImGui::Button(icon, ImVec2(s, s));
+    // ICON_FA_PLUS is a plain "+", which comes from the text font and looks
+    // thin and small next to the other icons: draw a plus of icon weight.
+    const bool plus = std::strcmp(icon, ICON_FA_PLUS) == 0;
+    const bool pressed = ImGui::Button(plus ? "##plus" : icon, ImVec2(s, s));
+    if (plus) {
+        const ImVec2 a = ImGui::GetItemRectMin(), b = ImGui::GetItemRectMax();
+        const ImVec2 c(std::floor((a.x + b.x) * 0.5f), std::floor((a.y + b.y) * 0.5f));
+        const float arm = std::floor(ImGui::GetFontSize() * 0.36f), half = std::max(1.0f, std::floor(ImGui::GetFontSize() * 0.07f));
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        const ImU32 col = ImGui::GetColorU32(ImGuiCol_Text);
+        dl->AddRectFilled(ImVec2(c.x - arm, c.y - half), ImVec2(c.x + arm, c.y + half), col, half);
+        dl->AddRectFilled(ImVec2(c.x - half, c.y - arm), ImVec2(c.x + half, c.y + arm), col, half);
+    }
     if (active) ImGui::PopStyleColor(2);
     if (tip) tooltip(tip);
     return pressed;
@@ -331,6 +346,33 @@ void tooltip(const char* text) {
         ImGui::PopTextWrapPos();
         ImGui::EndTooltip();
     }
+}
+
+bool sectionHeader(const char* label, bool defaultOpen, const ImVec4* textColor) {
+    ImGuiStorage* storage = ImGui::GetStateStorage();
+    const ImGuiID id = ImGui::GetID(label);
+    bool open = storage->GetBool(id, defaultOpen);
+    const ImGuiStyle& style = ImGui::GetStyle();
+    const float h = ImGui::GetFrameHeight();
+    const float w = std::max(ImGui::GetContentRegionAvail().x, 1.0f);
+    const ImVec2 p = ImGui::GetCursorScreenPos();
+    ImGui::PushID(static_cast<int>(id));
+    if (ImGui::InvisibleButton("##header", ImVec2(w, h))) {
+        open = !open;
+        storage->SetBool(id, open);
+    }
+    const bool hovered = ImGui::IsItemHovered();
+    ImGui::PopID();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    dl->AddRectFilled(p, ImVec2(p.x + w, p.y + h), u32(hovered ? color::frameHover : color::frame), style.FrameRounding);
+    const ImU32 text = u32(textColor ? *textColor : color::text);
+    const float font = ImGui::GetFontSize();
+    ImGui::RenderArrow(dl, ImVec2(p.x + style.FramePadding.x, p.y + (h - font) * 0.5f), text, open ? ImGuiDir_Down : ImGuiDir_Right, 0.75f);
+    const char* end = ImGui::FindRenderedTextEnd(label);
+    ImGui::PushFont(g_fonts.medium, 0.0f);
+    dl->AddText(ImVec2(p.x + style.FramePadding.x + font * 1.2f, p.y + style.FramePadding.y), text, label, end);
+    ImGui::PopFont();
+    return open;
 }
 
 void heading(const char* text, float width) {

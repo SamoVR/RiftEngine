@@ -5,6 +5,7 @@
 #include "scene/Terrain.h"
 
 #include "IconsFontAwesome6.h"
+#include <imgui_internal.h>
 #include <misc/cpp/imgui_stdlib.h>
 #include <algorithm>
 #include <cctype>
@@ -294,16 +295,16 @@ bool materialButton(const char* id, Material material, bool mixed, float width) 
     const bool pressed = ImGui::InvisibleButton(id, ImVec2(width, h));
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const float r = ImGui::GetStyle().FrameRounding;
-    dl->AddRectFilled(p, ImVec2(p.x + width, p.y + h), ImGui::GetColorU32(ImGui::IsItemHovered() ? ImGuiCol_FrameBgHovered : ImGuiCol_FrameBg), r);
+    const bool hovered = ImGui::IsItemHovered();
+    // Drawn like ImGui's combo: the frame, then the arrow button on the right.
+    dl->AddRectFilled(p, ImVec2(p.x + width - h, p.y + h), ImGui::GetColorU32(hovered ? ImGuiCol_FrameBgHovered : ImGuiCol_FrameBg), r, ImDrawFlags_RoundCornersLeft);
+    dl->AddRectFilled(ImVec2(p.x + width - h, p.y), ImVec2(p.x + width, p.y + h), ImGui::GetColorU32(hovered ? ImGuiCol_ButtonHovered : ImGuiCol_Button), r, ImDrawFlags_RoundCornersRight);
     const float pad = 3.0f;
     if (!mixed) drawMaterialSwatch(dl, material, ImVec2(p.x + pad, p.y + pad), ImVec2(p.x + h - pad, p.y + h - pad), 2.0f);
     const std::string name = mixed ? std::string("--") : prettyName(material);
     const ImGuiStyle& style = ImGui::GetStyle();
     dl->AddText(ImVec2(p.x + h + style.ItemInnerSpacing.x, p.y + style.FramePadding.y), ImGui::GetColorU32(ImGuiCol_Text), name.c_str());
-    // A combo-style arrow.
-    const float arrow = ImGui::GetFontSize() * 0.3f;
-    const ImVec2 c(p.x + width - h * 0.5f, p.y + h * 0.5f);
-    dl->AddTriangleFilled(ImVec2(c.x - arrow, c.y - arrow * 0.5f), ImVec2(c.x + arrow, c.y - arrow * 0.5f), ImVec2(c.x, c.y + arrow * 0.6f), ImGui::GetColorU32(ImGuiCol_Text));
+    ImGui::RenderArrow(dl, ImVec2(p.x + width - h + style.FramePadding.y, p.y + style.FramePadding.y), ImGui::GetColorU32(ImGuiCol_Text), ImGuiDir_Down, 1.0f);
     return pressed;
 }
 

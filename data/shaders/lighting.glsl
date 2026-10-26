@@ -68,13 +68,14 @@ vec3 shadeSurface(vec3 worldPos, vec4 lightPos, vec3 N, vec3 V, vec3 albedo,
 
     // Sky-tinted ambient: brighter from above, darker from below.
     float hemi = N.y * 0.5 + 0.5;
-    vec3 ambient = uAmbient * mix(0.55, 1.0, hemi) + uSkyColor * 0.12 * hemi;
+    vec3 ambient = uAmbient * mix(0.6, 1.1, hemi) + uSkyColor * 0.07 * hemi;
     vec3 light = ambient * diffuseColor;
 
     // Sun.
     float ndl = max(dot(N, uSunDirection), 0.0);
     if (ndl > 0.0) {
-        float shadow = shadowFactor(lightPos, N);
+        // Shadows keep a little sun (bounce light) so they read soft, not black.
+        float shadow = mix(0.22, 1.0, shadowFactor(lightPos, N));
         vec3 H = normalize(uSunDirection + V);
         float spec = pow(max(dot(N, H), 0.0), shininess) * (shininess + 8.0) / 25.0;
         light += uSunColor * shadow * (diffuseColor * ndl + specColor * spec * ndl);

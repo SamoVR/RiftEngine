@@ -223,9 +223,7 @@ void SourceControlPanel::draw(UiContext& ui, bool* open) {
     if (!lastOutput_.empty()) {
         ImGui::Spacing();
         const std::string header = std::string(lastOk_ ? ICON_FA_CIRCLE_CHECK "  " : ICON_FA_CIRCLE_XMARK "  ") + lastLabel_ + "###gitOutput";
-        ImGui::PushStyleColor(ImGuiCol_Text, lastOk_ ? theme::color::textDim : theme::color::error);
-        const bool shown = ImGui::CollapsingHeader(header.c_str(), lastOk_ ? 0 : ImGuiTreeNodeFlags_DefaultOpen);
-        ImGui::PopStyleColor();
+        const bool shown = theme::sectionHeader(header.c_str(), !lastOk_, lastOk_ ? &theme::color::textDim : &theme::color::error);
         if (shown) {
             ImGui::PushFont(theme::fonts().mono, 0.0f);
             ImGui::TextUnformatted(lastOutput_.c_str());
@@ -378,7 +376,7 @@ void SourceControlPanel::drawChanges(UiContext& ui) {
     ImGui::Spacing();
     char title[64];
     std::snprintf(title, sizeof(title), "Changes (%d)###changes", count);
-    if (!ImGui::CollapsingHeader(title, ImGuiTreeNodeFlags_DefaultOpen)) return;
+    if (!theme::sectionHeader(title)) return;
     if (unsavedScene) {
         ImGui::TextColored(theme::color::warning, ICON_FA_CIRCLE "  ");
         ImGui::SameLine(0.0f, 0.0f);
@@ -428,7 +426,7 @@ void SourceControlPanel::drawChanges(UiContext& ui) {
 void SourceControlPanel::drawHistory(UiContext& ui) {
     char title[64];
     std::snprintf(title, sizeof(title), "History (%d)###history", static_cast<int>(status_.history.size()));
-    if (!ImGui::CollapsingHeader(title, ImGuiTreeNodeFlags_DefaultOpen)) return;
+    if (!theme::sectionHeader(title)) return;
     if (status_.history.empty()) {
         ImGui::TextDisabled(status_.noCommits ? "No commits yet: commit to save the first version." : "No history.");
         return;

@@ -44,6 +44,18 @@ namespace {
         return it != text.end();
     }
 
+    // `text` cut to fit `width`: "Long na..." or, with `front`, "...end of a path".
+    std::string fitText(ImFont* font, float size, const std::string& text, float width, bool front = false) {
+        auto w = [&](const std::string& t) { return font->CalcTextSizeA(size, FLT_MAX, 0.0f, t.c_str()).x; };
+        if (text.empty() || w(text) <= width) return text;
+        std::string t = text;
+        while (!t.empty() && w(front ? "..." + t : t + "...") > width) {
+            if (front) t.erase(0, 1);
+            else t.pop_back();
+        }
+        return front ? "..." + t : t + "...";
+    }
+
     // A stable colour per project name for cards without a thumbnail.
     ImVec4 nameColor(const std::string& name) {
         unsigned h = 2166136261u;
@@ -103,19 +115,21 @@ namespace {
         const float r = fs_ * 0.6f;
         const ImVec2 b(p.x + width, p.y + top + bottom);
         draw->AddRectFilled(p, b, theme::u32(hovered ? theme::color::frameHover : theme::color::panel), r);
-        // Coloured band with a soft vertical fade.
-        const ImU32 c1 = theme::u32(ImVec4(color.x, color.y, color.z, hovered ? 0.55f : 0.40f));
-        const ImU32 c2 = theme::u32(ImVec4(color.x, color.y, color.z, 0.10f));
-        draw->AddRectFilled(p, ImVec2(b.x, p.y + top), c2, r, ImDrawFlags_RoundCornersTop);
-        draw->AddRectFilledMultiColor(ImVec2(p.x, p.y + r), ImVec2(b.x, p.y + top), c1, c1, c2, c2);
-        draw->AddRectFilled(p, ImVec2(b.x, p.y + r + 1.0f), c1, r, ImDrawFlags_RoundCornersTop);
+        // Coloured band with a soft vertical fade: one rounded shape, shaded
+        // (layered shapes leave a seam where they overlap).
+        const ImVec4 base = hovered ? theme::color::frameHover : theme::color::panel;
+        auto over = [&](float a) { return theme::u32(ImVec4(base.x + (color.x - base.x) * a, base.y + (color.y - base.y) * a, base.z + (color.z - base.z) * a, 1.0f)); };
+        const int firstVertex = draw->VtxBuffer.Size;
+        draw->AddRectFilled(p, ImVec2(b.x, p.y + top), IM_COL32_WHITE, r, ImDrawFlags_RoundCornersTop);
+        ImGui::ShadeVertsLinearColorGradientKeepAlpha(draw, firstVertex, draw->VtxBuffer.Size, p, ImVec2(p.x, p.y + top), over(hovered ? 0.55f : 0.40f), over(0.10f));
         const float iconSize = fs_ * 2.0f;
         const ImVec2 t = theme::fonts().ui->CalcTextSizeA(iconSize, FLT_MAX, 0.0f, icon);
         draw->AddText(theme::fonts().ui, iconSize, ImVec2(p.x + (width - t.x) * 0.5f, p.y + (top - t.y) * 0.5f), theme::u32(ImVec4(1, 1, 1, 0.92f)), icon);
-        draw->AddText(theme::fonts().heading, fs_ * 1.02f, ImVec2(p.x + fs_ * 0.8f, p.y + top + fs_ * 0.55f), theme::u32(theme::color::text), title);
-        draw->PushClipRect(ImVec2(p.x, p.y), ImVec2(b.x - fs_ * 0.5f, b.y), true);
-        draw->AddText(theme::fonts().ui, fs_ * 0.88f, ImVec2(p.x + fs_ * 0.8f, p.y + top + fs_ * 1.85f), theme::u32(theme::color::textDim), text);
-        draw->PopClipRect();
+        const float textWidth = width - fs_ * 1.6f;
+        draw->AddText(theme::fonts().heading, fs_ * 1.02f, ImVec2(p.x + fs_ * 0.8f, p.y + top + fs_ * 0.55f), theme::u32(theme::color::text),
+                      fitText(theme::fonts().heading, fs_ * 1.02f, title, textWidth).c_str());
+        draw->AddText(theme::fonts().ui, fs_ * 0.88f, ImVec2(p.x + fs_ * 0.8f, p.y + top + fs_ * 1.85f), theme::u32(theme::color::textDim),
+                      fitText(theme::fonts().ui, fs_ * 0.88f, text, textWidth).c_str());
         if (hovered) draw->AddRect(p, b, theme::u32(theme::color::accent, 0.8f), r, 0, 1.5f);
         return pressed;
     }
@@ -254,10 +268,12 @@ void EditorApp::drawHomeProjects(float width) {
     ImGui::EndGroup();
     const float buttonsWidth = ImGui::CalcTextSize(ICON_FA_FOLDER_OPEN "  Open" ICON_FA_PLUS "  New project").x + fs_ * 4.4f + ImGui::GetStyle().ItemSpacing.x;
     ImGui::SameLine(std::max(ImGui::GetCursorPosX() + fs_, headerX + width - buttonsWidth));
-    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + fs_ * 0.5f);
+    const float buttonsY = ImGui::GetCursorPosY() + fs_ * 0.5f;
+    ImGui::SetCursorPosY(buttonsY);
     if (bigButton(ICON_FA_FOLDER_OPEN "  Open", false, fs_ * 2.4f)) openProjectDialog();
     theme::tooltip("Open a project folder (the one with project.json)");
     ImGui::SameLine();
+    ImGui::SetCursorPosY(buttonsY); // SameLine goes back to the top of the line
     if (bigButton(ICON_FA_PLUS "  New project", true, fs_ * 2.4f)) openNewProject();
     ImGui::Dummy(ImVec2(0.0f, fs_ * 1.2f));
 
@@ -379,12 +395,13 @@ void EditorApp::drawHomeProjects(float width) {
             draw->AddText(ImVec2(bp.x + fs_ * 0.28f, bp.y + fs_ * 0.18f), theme::u32(theme::color::text), ICON_FA_CODE_BRANCH);
         }
         // Name, folder and when
-        draw->PushClipRect(a, ImVec2(b.x - fs_ * 0.6f, b.y), true);
-        draw->AddText(theme::fonts().heading, fs_ * 1.02f, ImVec2(a.x + fs_ * 0.8f, tb.y + fs_ * 0.55f), theme::u32(exists ? theme::color::text : theme::color::textDim), name.c_str());
+        const float textWidth = cardWidth - fs_ * 1.6f;
+        const std::string shownName = fitText(theme::fonts().heading, fs_ * 1.02f, name, textWidth);
+        draw->AddText(theme::fonts().heading, fs_ * 1.02f, ImVec2(a.x + fs_ * 0.8f, tb.y + fs_ * 0.55f), theme::u32(exists ? theme::color::text : theme::color::textDim), shownName.c_str());
         auto opened = settings_.recentOpened.find(path);
-        const std::string when = !exists ? std::string("Missing: moved or deleted") : opened != settings_.recentOpened.end() ? "Opened " + timeAgo(opened->second) : path;
+        const bool known = opened != settings_.recentOpened.end() && opened->second > 0;
+        const std::string when = !exists ? std::string("Missing: moved or deleted") : known ? "Opened " + timeAgo(opened->second) : fitText(theme::fonts().ui, fs_ * 0.86f, path, textWidth, true);
         draw->AddText(theme::fonts().ui, fs_ * 0.86f, ImVec2(a.x + fs_ * 0.8f, tb.y + fs_ * 1.95f), theme::u32(exists ? theme::color::textDim : theme::color::warning), when.c_str());
-        draw->PopClipRect();
         if (hovered) {
             draw->AddRect(a, b, theme::u32(theme::color::accent, 0.85f), r, 0, 1.5f);
             ImGui::SetTooltip("%s", path.c_str());
@@ -423,7 +440,7 @@ void EditorApp::drawHomeLearn(float width) {
     const Link links[] = {
         { ICON_FA_BOOK_OPEN, { 0.55f, 0.36f, 0.96f, 1.0f }, "Editor guide", "Projects, building, playing, shipping", docs + "GUIDE.md" },
         { ICON_FA_CODE, { 0.23f, 0.51f, 0.96f, 1.0f }, "Scripting reference", "The Lua API, Roblox style", docs + "SCRIPTING.md" },
-        { ICON_FA_TOWER_BROADCAST, { 0.98f, 0.45f, 0.09f, 1.0f }, "Client and server", "LocalScripts, RemoteEvents, replication", docs + "SCRIPTING.md#client-and-server" },
+        { ICON_FA_TOWER_BROADCAST, { 0.98f, 0.45f, 0.09f, 1.0f }, "Client and server", "LocalScripts and RemoteEvents", docs + "SCRIPTING.md#client-and-server" },
         { ICON_FA_GEARS, { 0.08f, 0.72f, 0.65f, 1.0f }, "Engine internals", "How RIFT works inside", docs + "ENGINE.md" },
         { ICON_FA_KEYBOARD, { 0.45f, 0.48f, 0.56f, 1.0f }, "Keyboard shortcuts", "Every key in one list", std::string() },
         { ICON_FA_GLOBE, { 0.13f, 0.77f, 0.37f, 1.0f }, "Website", "News and downloads", RIFT_WEBSITE },

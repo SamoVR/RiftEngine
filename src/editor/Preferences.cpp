@@ -33,8 +33,9 @@ namespace {
         ImGui::PopID();
     }
 
-    bool beginRows(const char* id) {
-        if (!ImGui::BeginTable(id, 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_PadOuterX)) return false;
+    bool beginRows(const char* id, float width = 0.0f) {
+        // No outer padding: the rows line up with the page's heading.
+        if (!ImGui::BeginTable(id, 2, ImGuiTableFlags_SizingStretchProp, ImVec2(width, 0.0f))) return false;
         ImGui::TableSetupColumn("label", ImGuiTableColumnFlags_WidthStretch, 0.42f);
         ImGui::TableSetupColumn("value", ImGuiTableColumnFlags_WidthStretch, 0.58f);
         return true;
@@ -88,10 +89,12 @@ void EditorApp::drawPreferences() {
 
     // Categories on the left
     ImGui::BeginChild("##pages", ImVec2(fs_ * 11.0f, -ImGui::GetFrameHeightWithSpacing() - fs_ * 0.4f), ImGuiChildFlags_Borders);
+    ImGui::PushStyleVar(ImGuiStyleVar_SelectableTextAlign, ImVec2(0.0f, 0.5f)); // labels in the middle of their rows
     for (int k = 0; k < pageCount; ++k) {
         const std::string label = std::string(pages[k].icon) + "  " + pages[k].name;
         if (ImGui::Selectable(label.c_str(), preferencesPage_ == k, 0, ImVec2(0.0f, fs_ * 1.7f))) preferencesPage_ = k;
     }
+    ImGui::PopStyleVar();
     ImGui::EndChild();
     ImGui::SameLine();
 
@@ -195,7 +198,7 @@ void EditorApp::drawPreferences() {
                 break;
             }
             case 3: { // Editing
-                row("Snap while moving, rotating and resizing", "Hold Ctrl while dragging to ignore snapping for a moment.", [&] { ImGui::Checkbox("##snap", &s.snap); });
+                row("Snap to steps", "Moving, rotating and resizing jump by the steps below. Hold Ctrl while dragging to ignore snapping for a moment.", [&] { ImGui::Checkbox("##snap", &s.snap); });
                 row("Move step", nullptr, [&] { ImGui::DragFloat("##move", &s.snapMove, 0.05f, 0.01f, 64.0f, "%.2f studs"); });
                 row("Rotate step", nullptr, [&] { ImGui::DragFloat("##rotate", &s.snapRotate, 0.5f, 1.0f, 180.0f, "%.0f degrees"); });
                 row("Resize step", nullptr, [&] { ImGui::DragFloat("##resize", &s.snapScale, 0.05f, 0.01f, 64.0f, "%.2f studs"); });
@@ -204,7 +207,11 @@ void EditorApp::drawPreferences() {
             }
             case 4: { // Scripts
                 row("Text size", nullptr, [&] { ImGui::SliderFloat("##font", &s.scriptFontSize, 10.0f, 28.0f, "%.0f px"); });
-                row("Tab width", nullptr, [&] { ImGui::SliderInt("##tab", &s.tabSize, 2, 8, "%d spaces"); });
+                row("Tab width", nullptr, [&] {
+                    static const char* kWidths[] = { "2 spaces", "3 spaces", "4 spaces", "5 spaces", "6 spaces", "7 spaces", "8 spaces" };
+                    int index = std::clamp(s.tabSize, 2, 8) - 2;
+                    if (ImGui::Combo("##tab", &index, kWidths, IM_ARRAYSIZE(kWidths))) s.tabSize = index + 2;
+                });
                 row("Show spaces and tabs", nullptr, [&] { ImGui::Checkbox("##ws", &s.showWhitespace); });
                 row("Mini map", "A small overview of the whole file at the right.", [&] { ImGui::Checkbox("##minimap", &s.showMinimap); });
                 row("Close brackets and quotes", nullptr, [&] { ImGui::Checkbox("##pairs", &s.autoClosePairs); });
@@ -320,10 +327,11 @@ void EditorApp::drawProjectSettings() {
             scenesFolderMove_ = true;
         }
         ProjectSettings& p = projectDraft_;
-        ImGui::SeparatorText("Game");
-        if (beginRows("##game")) {
+        const float width = fs_ * 34.0f; // the window sizes itself to this
+        theme::heading("Game", width);
+        if (beginRows("##game", width)) {
             row("Name", nullptr, [&] { ImGui::InputText("##name", &p.name); });
-            row("Version", nullptr, [&] { ImGui::InputText("##version", &p.version); });
+            row("Version", "The game's own version, shown in its window title and the built .exe.", [&] { ImGui::InputText("##version", &p.version); });
             row("Author", nullptr, [&] { ImGui::InputText("##author", &p.author); });
             row("Start scene", "The scene the game starts with.", [&] {
                 if (ImGui::BeginCombo("##start", p.startScene.c_str())) {
@@ -339,8 +347,9 @@ void EditorApp::drawProjectSettings() {
             row("Icon (png)", "Used for the game window and the built .exe.", [&] { ImGui::InputTextWithHint("##icon", "assets/icon.png", &p.icon); });
             ImGui::EndTable();
         }
-        ImGui::SeparatorText("Window");
-        if (beginRows("##window")) {
+        ImGui::Spacing();
+        theme::heading("Window", width);
+        if (beginRows("##window", width)) {
             row("Size", nullptr, [&] {
                 int size[2] = { p.windowWidth, p.windowHeight };
                 if (ImGui::InputInt2("##size", size)) {
@@ -357,50 +366,65 @@ void EditorApp::drawProjectSettings() {
             });
             ImGui::EndTable();
         }
+
+        // ---- where the scenes live (applied at once with its own button, not by Save)
+        ImGui::Spacing();
+        theme::heading("Scenes folder", width);
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + width);
+        ImGui::TextDisabled("Every scene is a folder (scene.json and its scripts) inside this folder of the project. "
+                            "Pick any folder inside the project, for example Levels or Content/Scenes.");
+        ImGui::PopTextWrapPos();
+        const fs::path root = e.project().root();
+        const bool valid = Project::isValidScenesFolder(scenesFolderDraft_);
+        const bool same = scenesFolderDraft_ == e.project().settings().scenesFolder;
+        if (beginRows("##scenes", width)) {
+            row("Folder", nullptr, [&] {
+                ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - ImGui::GetFrameHeight() - ImGui::GetStyle().ItemInnerSpacing.x);
+                ImGui::InputTextWithHint("##scenes", "scenes", &scenesFolderDraft_);
+                ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
+                if (ImGui::Button(ICON_FA_FOLDER_OPEN "##pickScenes", ImVec2(ImGui::GetFrameHeight(), 0.0f))) {
+                    const std::string picked = Platform::pickFolderDialog("Pick the scenes folder (inside the project)", Paths::toUtf8(root));
+                    if (!picked.empty()) {
+                        std::error_code ec;
+                        const fs::path rel = fs::relative(Paths::fromUtf8(picked), root, ec);
+                        std::string text = Paths::toUtf8(rel);
+                        std::replace(text.begin(), text.end(), '\\', '/');
+                        if (ec || text.empty() || text.rfind("..", 0) == 0) e.notify("The scenes folder must be inside the project folder", NoticeLevel::Warning);
+                        else scenesFolderDraft_ = text;
+                    }
+                }
+                ImGui::PushTextWrapPos(0.0f);
+                if (!valid && !scenesFolderDraft_.empty()) ImGui::TextColored(theme::color::error, "Use a folder inside the project (not assets, scripts or Builds)");
+                else ImGui::TextDisabled("%s", Paths::toUtf8(root / Paths::fromUtf8(scenesFolderDraft_)).c_str());
+                ImGui::PopTextWrapPos();
+            });
+            row("Existing scenes", nullptr, [&] { ImGui::Checkbox("Move them there", &scenesFolderMove_); });
+            row("", nullptr, [&] {
+                ImGui::BeginDisabled(!valid || same || e.playing());
+                if (ImGui::Button(ICON_FA_CHECK "  Change scenes folder")) {
+                    if (e.changeScenesFolder(scenesFolderDraft_, scenesFolderMove_)) {
+                        projectDraft_.startScene = e.project().settings().startScene;
+                        projectDraft_.scenesFolder = e.project().settings().scenesFolder;
+                    }
+                }
+                ImGui::EndDisabled();
+            });
+            ImGui::EndTable();
+        }
+
+        // ---- Save / Cancel at the bottom right, like Preferences
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + width - buttonWidth() * 2.0f - ImGui::GetStyle().ItemSpacing.x);
         if (ImGui::Button(ICON_FA_FLOPPY_DISK "  Save", ImVec2(buttonWidth(), 0.0f))) {
-            // The scenes folder is changed with its own button below.
+            // The scenes folder is changed with its own button above.
             p.scenesFolder = e.project().settings().scenesFolder;
             e.project().settings() = p;
             if (e.saveProjectSettings()) showProjectSettings_ = false;
         }
         ImGui::SameLine();
         if (ImGui::Button("Cancel", ImVec2(buttonWidth(), 0.0f))) showProjectSettings_ = false;
-
-        // ---- where the scenes live
-        ImGui::Spacing();
-        ImGui::SeparatorText("Scenes folder");
-        ImGui::PushTextWrapPos(fs_ * 34.0f);
-        ImGui::TextDisabled("Every scene is a folder (scene.json and its scripts) inside this folder of the project. "
-                            "Pick any folder inside the project, for example Levels or Content/Scenes.");
-        ImGui::PopTextWrapPos();
-        const fs::path root = e.project().root();
-        ImGui::SetNextItemWidth(fs_ * 34.0f - ImGui::GetFrameHeight() - ImGui::GetStyle().ItemInnerSpacing.x);
-        ImGui::InputTextWithHint("##scenes", "scenes", &scenesFolderDraft_);
-        ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
-        if (ImGui::Button(ICON_FA_FOLDER_OPEN "##pickScenes", ImVec2(ImGui::GetFrameHeight(), 0.0f))) {
-            const std::string picked = Platform::pickFolderDialog("Pick the scenes folder (inside the project)", Paths::toUtf8(root));
-            if (!picked.empty()) {
-                std::error_code ec;
-                const fs::path rel = fs::relative(Paths::fromUtf8(picked), root, ec);
-                std::string text = Paths::toUtf8(rel);
-                std::replace(text.begin(), text.end(), '\\', '/');
-                if (ec || text.empty() || text.rfind("..", 0) == 0) e.notify("The scenes folder must be inside the project folder", NoticeLevel::Warning);
-                else scenesFolderDraft_ = text;
-            }
-        }
-        const bool valid = Project::isValidScenesFolder(scenesFolderDraft_);
-        const bool same = scenesFolderDraft_ == e.project().settings().scenesFolder;
-        if (!valid && !scenesFolderDraft_.empty()) ImGui::TextColored(theme::color::error, "Use a folder inside the project (not assets, scripts or Builds)");
-        else ImGui::TextDisabled("%s", Paths::toUtf8(root / Paths::fromUtf8(scenesFolderDraft_)).c_str());
-        ImGui::Checkbox("Move the existing scenes there", &scenesFolderMove_);
-        ImGui::BeginDisabled(!valid || same || e.playing());
-        if (ImGui::Button(ICON_FA_CHECK "  Change scenes folder")) {
-            if (e.changeScenesFolder(scenesFolderDraft_, scenesFolderMove_)) {
-                projectDraft_.startScene = e.project().settings().startScene;
-                projectDraft_.scenesFolder = e.project().settings().scenesFolder;
-            }
-        }
-        ImGui::EndDisabled();
     }
     ImGui::End();
 }

@@ -594,7 +594,9 @@ void EditorApp::drawMenuBar() {
         if (ImGui::MenuItem(ICON_FA_BUG "  Report a Problem")) Platform::openWithShell(std::string("https://github.com/") + RIFT_GITHUB_REPO + "/issues");
         if (ImGui::MenuItem(ICON_FA_FILE_LINES "  Open Log File")) Platform::revealInExplorer(Log::filePath());
         ImGui::Separator();
-        ImGui::MenuItem(ICON_FA_FLASK "  ImGui Demo", nullptr, &showImGuiDemo_);
+#ifndef NDEBUG
+        ImGui::MenuItem(ICON_FA_FLASK "  ImGui Demo", nullptr, &showImGuiDemo_); // a developer tool: debug builds only
+#endif
         if (ImGui::MenuItem(ICON_FA_CIRCLE_INFO "  About RIFT")) showAbout_ = true;
         ImGui::EndMenu();
     }
@@ -826,7 +828,8 @@ void EditorApp::drawStatusBar() {
     }
     // Right: update badge, counts and version
     char right[128];
-    std::snprintf(right, sizeof(right), "%d objects   RIFT %s", e.hasScene() ? static_cast<int>(e.scene().size()) : 0, RIFT_VERSION_DISPLAY);
+    if (e.hasScene()) std::snprintf(right, sizeof(right), "%d objects   RIFT %s", static_cast<int>(e.scene().size()), RIFT_VERSION_DISPLAY);
+    else std::snprintf(right, sizeof(right), "RIFT %s", RIFT_VERSION_DISPLAY);
     const bool update = updater_.state() == Updater::State::Available || updater_.state() == Updater::State::Ready;
     const std::string badge = update ? ICON_FA_GIFT "  Update to " + updater_.release().version : std::string();
     const float badgeWidth = update ? ImGui::CalcTextSize(badge.c_str()).x + ImGui::GetStyle().ItemSpacing.x * 2.0f : 0.0f;
