@@ -5,6 +5,35 @@ GitHub release page show the section of the version being installed.
 
 RIFT is in **beta**: versions are 0.x until the engine is complete.
 
+## 0.3.0 (not released yet)
+
+### Source control, like Visual Studio
+- **Git Changes** (the old Source Control panel): stage and unstage files one by one or all at once, see any file's diff, Commit Staged or Commit All (and push or sync in the same click), amend the last commit, stash changes and bring them back.
+- Merge conflicts are listed with **Keep Mine**, **Take Theirs** and **Mark Resolved**, and a stopped merge, revert or cherry-pick can be aborted.
+- **Git Repository** (Git > Git Repository, a tab beside the viewport): your branches, the server's and the tags, next to the history of every branch as a graph with coloured lanes, where branches and tags point, and which commits are outgoing or incoming. Pick a commit to see its files and their diffs; right-click it to branch, tag, check out, revert, cherry-pick or reset.
+- A **Git** menu: fetch, pull, push, sync, new branch, switch, merge, connect to GitHub.
+- Fixed: git's warnings (line endings) broke the panel, discarding a change in a project inside a bigger repository touched the wrong file, and a background refresh disabled every button for a moment.
+
+### Playing
+- **Backpack**: the <kbd>`</kbd> key (left of 1) or the new backpack button opens the inventory: every tool in a grid with a search box. Drag tools onto the ten numbered slots of the bar (or back into the inventory).
+- **Chat**: <kbd>/</kbd> opens the chat box (top left); what players say appears for everyone, with a speech bubble over the speaker's head.
+- **Seats**: characters sit down when they touch one; Space gets them up.
+- **ProximityPrompts**: "E Interact" appears near the part it is in; press, hold or click it.
+- Lighting is matte like Roblox: plastic no longer shines; only Metal, Glass, Ice, Foil and Reflectance do. The night sky has a moon.
+- A script that loops without waiting (making parts, or dropping thousands of unanchored ones) is stopped with a clear error instead of freezing or closing the game.
+
+### Editor
+- **Toolbox** (View > Toolbox): models that come with RIFT (a door, a bench, a sign, a street lamp, a tree, a treasure chest) and the ones you save (Save Selection, or right-click > Save to Toolbox), with their scripts and images. Click to insert, or drag into the viewport.
+- **BillboardGui** and **SurfaceGui** (Insert > GUI): GUI floating over a part, facing the camera, and GUI painted on a face of a part. Both show while editing.
+- Insert > Parts > **Seat**, Insert > Objects > **Proximity Prompt**.
+- Copy, paste and duplicate give LocalScripts their own file too.
+
+### Scripting
+- `Player.Chatted`, and **TextChatService**: `MessageReceived`, `SendingMessage`, `TextChannels.RBXGeneral:SendAsync` / `:DisplaySystemMessage`, `:DisplayBubble`, `ChatWindowConfiguration`, `BubbleChatConfiguration`; the older `Chat:Chat`. `CoreGuiType.Chat` hides the chat window. Each player has its own `UserId`.
+- **Seat** (`Disabled`, `Occupant`, `:Sit(humanoid)`), `Humanoid.Sit`, `SeatPart`, `Seated`, the Seated state, and a sitting pose in the Animate script.
+- **ProximityPrompt**: `ActionText`, `ObjectText`, `KeyboardKeyCode`, `HoldDuration`, `MaxActivationDistance`, `RequiresLineOfSight`, `ClickablePrompt`; `Triggered`, `TriggerEnded`, `PromptButtonHoldBegan`, `PromptButtonHoldEnded`, `PromptShown`, `PromptHidden`.
+- **BillboardGui** (`Adornee`, `Size` in studs and pixels, `StudsOffset`, `StudsOffsetWorldSpace`, `AlwaysOnTop`, `MaxDistance`) and **SurfaceGui** (`Adornee`, `Face`, `SizingMode`, `CanvasSize`, `PixelsPerStud`, `AlwaysOnTop`), with clickable buttons.
+
 ## 0.2.1
 
 ### Fixes
