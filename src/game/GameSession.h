@@ -96,6 +96,29 @@ public:
         glm::vec2 buttonPos{ 0.0f }, buttonSize{ 0.0f };
     };
 
+    // A line of the chat.
+    struct ChatMessage {
+        std::string speaker;   // the player's name ("" for a system message)
+        uint64_t playerId = 0;
+        std::string text;
+        double time = 0.0;
+        Color3 color{ 1.0f, 1.0f, 1.0f }; // the name's colour (a system message: the text's)
+    };
+    // A speech bubble over a character's head (or any part).
+    struct ChatBubble {
+        uint64_t part = 0;
+        std::string text;
+        double time = 0.0;
+    };
+    // Where the chat goes (view pixels): the messages, top left, with the box to type in under them.
+    struct ChatView {
+        bool enabled = false, open = false;
+        glm::vec2 pos{ 0.0f }, size{ 0.0f };            // the messages
+        glm::vec2 inputPos{ 0.0f }, inputSize{ 0.0f };  // the box
+        float textSize = 16.0f;
+        float idle = 0.0f;                               // seconds since the last message or use
+    };
+
     // One player: its client world and everything that belongs to it.
     struct Client {
         Client();
@@ -111,6 +134,14 @@ public:
         bool mouseLock = false, scriptMouseLock = false;
         bool backpackBar = true;      // StarterGui:SetCoreGuiEnabled(Backpack, ...)
         bool playerList = true;       // StarterGui:SetCoreGuiEnabled(PlayerList, ...): the leaderboard
+        bool chatWindow = true;       // SetCoreGuiEnabled(Chat, ...) / ChatWindowConfiguration.Enabled
+        bool bubbleChat = true;       // BubbleChatConfiguration.Enabled: bubbles over heads
+
+        // Chat: what this player has seen, and the box being typed in.
+        std::vector<ChatMessage> chat;
+        bool chatOpen = false;
+        std::string chatDraft;
+        double chatActivity = -1000.0;
 
         // Character (server instances)
         uint64_t characterId = 0, humanoidId = 0, rootPartId = 0;
@@ -201,7 +232,7 @@ public:
     // First-person / MouseBehavior.LockCenter: the host should hide and lock the cursor.
     bool wantsMouseLock() const { return focused().mouseLock; }
     // The focused player is typing into a text box of the game (Esc is the box's).
-    bool typing() const { return focused().searchFocused; }
+    bool typing() const { return focused().searchFocused || focused().chatOpen; }
     void setMouseLockRequested(int client, bool lock);
 
     // ---- the focused player (ids are the same on every side)
@@ -226,6 +257,17 @@ public:
     void setInventoryOpen(int client, bool open);
     // Puts a tool in a bar slot (0..9; -1 takes it off the bar). A tool already there swaps places.
     void assignHotbar(int client, uint64_t tool, int index);
+
+    // ---- chat
+    // `client` says `text`: Player.Chatted on the server, a line for everyone and a bubble over the head.
+    void chat(int client, const std::string& text);
+    // A line without a speaker, for one player (-1: everyone).
+    void systemMessage(int client, const std::string& text, const Color3& color = Color3(0.8f, 0.8f, 0.85f));
+    void showBubble(uint64_t part, const std::string& text);
+    const std::deque<ChatBubble>& bubbles() const { return bubbles_; }
+    ChatView chatView(int client) const;
+    void setChatOpen(int client, bool open);
+    static Color3 nameColor(const std::string& name);
 
     // ---- client <-> server messages (delivered next frame)
     void postRemote(RemoteMessage message);
@@ -282,6 +324,9 @@ private:
     // sounds of the focused client's world
     struct SoundState { uint32_t handle = 0; bool paused = false; };
     std::unordered_map<uint64_t, SoundState> sounds_;
+
+    // speech bubbles over heads
+    std::deque<ChatBubble> bubbles_;
 
     // tools that were just dropped: nobody picks them up again for a moment
     std::unordered_map<uint64_t, double> pickupBlockedUntil_;

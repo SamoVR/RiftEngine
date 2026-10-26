@@ -238,6 +238,7 @@ thrown away on **Stop** (Shift+F5). **Pause** (F6) freezes the game.
 
 - Click the viewport to give the game the keyboard and mouse. The character walks with W A S D, jumps with Space, and the camera turns with the right mouse button. **Esc** gives the mouse back to the editor.
 - Tools: the number keys equip the tools on the backpack bar; <kbd>`</kbd> (the key left of 1) opens the inventory with all of them, a search box, and slots to drag them into.
+- Chat: <kbd>/</kbd> opens the chat box (top left), Enter says it to every player, with a bubble over your character's head.
 - **Test players**: the button next to Play sets how many players join (1 to 8). Each gets a character and its own client; while playing, the player list next to the Client / Server switch picks whose view you see and control.
 - The game runs as a **server** and a **client**, like Roblox. The **Client / Server** switch in the toolbar picks which one you see. Client: the player's view, where you play. Server: the server's world with the editor camera, where you can select and move objects and watch the change reach the client.
 - The Explorer shows the world you are looking at, so it lists the client's objects (PlayerGui, PlayerScripts, whatever LocalScripts create) on the Client side and the server's on the Server side. Output lines are tagged Client or Server.

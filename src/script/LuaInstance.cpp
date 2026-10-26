@@ -323,6 +323,10 @@ void LuaRuntime::Impl::registerInstance() {
         const int t = coreGuiType(type); // PlayerList, Health, Backpack, Chat, All, EmotesMenu
         if (t == 0 || t == 4) me().playerList = enabled;
         if (t == 2 || t == 4) me().backpackBar = enabled;
+        if (t == 3 || t == 4) {
+            me().chatWindow = enabled;
+            if (!enabled) session.setChatOpen(client, false);
+        }
     };
     m["GetCoreGuiEnabled"] = [this, coreGuiType](const Inst& h, sol::object type) {
         Instance* i = need(h);
@@ -331,7 +335,8 @@ void LuaRuntime::Impl::registerInstance() {
         const int t = coreGuiType(type);
         if (t == 0) return me().playerList;
         if (t == 2) return me().backpackBar;
-        if (t == 4) return me().playerList && me().backpackBar;
+        if (t == 3) return me().chatWindow;
+        if (t == 4) return me().playerList && me().backpackBar && me().chatWindow;
         return true;
     };
 
@@ -713,7 +718,10 @@ void LuaRuntime::Impl::registerInstance() {
                     const GameSession::Client* c = session.clientOfPlayer(i->id);
                     return c && c->characterId ? instanceOrNil(scene.find(c->characterId)) : nil();
                 }
-                if (name == "UserId") return sol::make_object(lua, 1);
+                if (name == "UserId") {
+                    const GameSession::Client* c = session.clientOfPlayer(i->id);
+                    return sol::make_object(lua, c ? c->index + 1 : 0);
+                }
                 if (name == "DisplayName") return sol::make_object(lua, i->name);
             }
             // Players.LocalPlayer is nil on the server, like Roblox.

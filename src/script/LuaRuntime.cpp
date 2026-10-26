@@ -106,6 +106,8 @@ LuaRuntime::Impl::Impl(GameSession& s, NetworkSide sd, int clientIndex)
     mouseMove = std::make_shared<SignalState>();
     wheelForward = std::make_shared<SignalState>();
     wheelBackward = std::make_shared<SignalState>();
+    chatReceived = std::make_shared<SignalState>();
+    chatSending = std::make_shared<SignalState>();
     // The scene is observed from start() on (buildApi): the server's scripts run
     // first and already change the client's world before the client starts.
     // Call ids are unique across all runtimes (a client's replies are routed by them).
@@ -773,6 +775,55 @@ void LuaRuntime::onToolEvent(Instance& tool, ToolEvent e) {
         case ToolEvent::Activated: s.queueInstanceEvent(tool.id, "Activated", nullptr); break;
         case ToolEvent::Deactivated: s.queueInstanceEvent(tool.id, "Deactivated", nullptr); break;
     }
+    s.flush();
+}
+
+void LuaRuntime::onPlayerChatted(uint64_t player, const std::string& text) {
+    Impl& s = *impl_;
+    s.queueInstanceEvent(player, "Chatted", [text](lua_State* T) {
+        lua_pushlstring(T, text.data(), text.size());
+        return 1;
+    });
+    s.flush();
+}
+
+void LuaRuntime::onChatSending(const std::string& text) {
+    Impl& s = *impl_;
+    if (!s.chatSending->hasListeners()) return;
+    s.queue(s.chatSending, [&s, text](lua_State* T) {
+        sol::table m = s.lua.create_table();
+        m["Text"] = text;
+        if (Instance* me = s.localPlayer()) {
+            sol::table source = s.lua.create_table();
+            source["Name"] = me->name;
+            source["UserId"] = s.client + 1;
+            m["TextSource"] = source;
+        }
+        m.push(T);
+        return 1;
+    });
+    s.flush();
+}
+
+void LuaRuntime::onChatMessage(const std::string& speaker, uint64_t player, const std::string& text) {
+    Impl& s = *impl_;
+    if (!s.chatReceived->hasListeners()) return;
+    // A TextChatMessage: Text, PrefixText and TextSource (nil for system messages).
+    s.queue(s.chatReceived, [&s, speaker, player, text](lua_State* T) {
+        sol::table m = s.lua.create_table();
+        m["Text"] = text;
+        m["PrefixText"] = speaker.empty() ? std::string() : speaker + ":";
+        m["Timestamp"] = s.session.time();
+        if (!speaker.empty()) {
+            sol::table source = s.lua.create_table();
+            source["Name"] = speaker;
+            const GameSession::Client* c = s.session.clientOfPlayer(player);
+            source["UserId"] = c ? c->index + 1 : 0;
+            m["TextSource"] = source;
+        }
+        m.push(T);
+        return 1;
+    });
     s.flush();
 }
 

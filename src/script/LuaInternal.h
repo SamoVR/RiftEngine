@@ -126,6 +126,11 @@ struct CollectionService {};
 struct HttpService {};
 struct DataStoreService {};
 struct DataStore { std::string name; };
+struct TextChatService {};
+struct TextChannels {};
+struct TextChannel { bool system = false; };      // RBXGeneral / RBXSystem
+struct ChatConfiguration { bool bubbles = false; }; // ChatWindowConfiguration / BubbleChatConfiguration
+struct ChatService {};                              // the older Chat service (Chat:Chat bubbles)
 struct Mouse {};
 struct Camera {};
 struct RaycastParams {
@@ -221,7 +226,7 @@ struct LuaRuntime::Impl : public SceneObserver {
     std::unordered_map<lua::SignalKey, std::shared_ptr<lua::SignalState>, lua::SignalKeyHash> signals;
     std::shared_ptr<lua::SignalState> heartbeat, stepped, renderStepped, inputBegan, inputEnded, inputChanged,
                                       playerAdded, mouseButton1Down, mouseButton1Up, mouseButton2Down, mouseButton2Up,
-                                      mouseMove, wheelForward, wheelBackward;
+                                      mouseMove, wheelForward, wheelBackward, chatReceived, chatSending;
     std::deque<std::function<void()>> pending;
     bool flushing = false;
 

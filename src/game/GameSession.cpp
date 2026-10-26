@@ -23,6 +23,7 @@ namespace {
     constexpr int kMaxPlayers = 8;
     constexpr int kHotbarSlots = 10;
     constexpr int kInventoryColumns = 10;
+    constexpr double kBubbleSeconds = 15.0;
 
     bool containsNoCase(const std::string& text, const std::string& needle) {
         if (needle.empty()) return true;
@@ -270,6 +271,8 @@ void GameSession::update(float dt, const ViewportInput& view) {
         return;
     }
     time_ += dt;
+    // Bubbles pop after a while.
+    bubbles_.erase(std::remove_if(bubbles_.begin(), bubbles_.end(), [&](const ChatBubble& b) { return time_ - b.time > kBubbleSeconds; }), bubbles_.end());
 
     for (auto& c : clients_) c->gui->handleMouse(c->view.mouse, c->view.hovered, c->view.hovered && input_.mouseDown(GLFW_MOUSE_BUTTON_LEFT));
     handleInput(focused());
@@ -303,10 +306,34 @@ void GameSession::handleInput(Client& c) {
         else equipTool(c.index, tool);
     };
 
+    // Chat: / opens the box (the typed character, so it works on any keyboard
+    // layout), Enter sends, Esc closes it.
+    if (c.chatOpen && (!c.chatWindow || !c.view.keyboard)) setChatOpen(c.index, false);
+    const bool chatting = c.chatOpen;
+    if (chatting) {
+        for (char ch : input_.text()) {
+            if (static_cast<unsigned char>(ch) >= 32 && c.chatDraft.size() < 200) c.chatDraft += ch;
+        }
+        if (input_.keyPressed(GLFW_KEY_BACKSPACE) && !c.chatDraft.empty()) {
+            size_t n = c.chatDraft.size() - 1; // a whole UTF-8 character
+            while (n > 0 && (static_cast<unsigned char>(c.chatDraft[n]) & 0xC0) == 0x80) --n;
+            c.chatDraft.erase(n);
+        }
+        if (input_.keyPressed(GLFW_KEY_ENTER) || input_.keyPressed(GLFW_KEY_KP_ENTER)) {
+            const std::string text = c.chatDraft;
+            setChatOpen(c.index, false);
+            chat(c.index, text);
+        } else if (input_.keyPressed(GLFW_KEY_ESCAPE)) {
+            setChatOpen(c.index, false);
+        }
+    } else if (c.view.keyboard && c.chatWindow && !c.searchFocused && input_.text().find('/') != std::string::npos) {
+        setChatOpen(c.index, true);
+    }
+
     // Typing in the inventory's search box: the keys are the box's.
-    if (c.searchFocused && (!c.inventoryOpen || !c.view.keyboard)) c.searchFocused = false;
-    const bool typing = c.searchFocused;
-    if (typing) {
+    if (c.searchFocused && (!c.inventoryOpen || !c.view.keyboard || c.chatOpen)) c.searchFocused = false;
+    const bool typing = c.searchFocused || chatting || c.chatOpen;
+    if (c.searchFocused && !chatting) {
         for (char ch : input_.text()) {
             if (static_cast<unsigned char>(ch) >= 32 && c.inventorySearch.size() < 40) c.inventorySearch += ch;
         }
@@ -335,6 +362,14 @@ void GameSession::handleInput(Client& c) {
     c.overInventory = false;
     if (c.view.hovered) {
         const bool press = input_.mousePressed(GLFW_MOUSE_BUTTON_LEFT);
+        // The chat box opens with a click; a click elsewhere closes it.
+        const ChatView cv = chatView(c.index);
+        if (cv.enabled) {
+            const bool overBox = inside(cv.inputPos, cv.inputSize);
+            if (overBox || (cv.open && inside(cv.pos, cv.size))) overBar = true;
+            if (press && overBox && !c.chatOpen) setChatOpen(c.index, true);
+            else if (press && !overBox && c.chatOpen) setChatOpen(c.index, false);
+        }
         auto startDrag = [&](uint64_t tool, int from) {
             c.dragTool = tool;
             c.dragFrom = from;
@@ -397,8 +432,8 @@ void GameSession::handleInput(Client& c) {
         c.activating = false;
         if (tool) activateTool(tool->id, false);
     }
-    // Keys typed into the search box don't walk the character or reach scripts.
-    if (typing || c.searchFocused) c.view.keyboard = false;
+    // Keys typed into the chat or the search box don't walk the character or reach scripts.
+    if (typing || c.searchFocused || c.chatOpen) c.view.keyboard = false;
 }
 
 // ============================================================================
@@ -840,6 +875,105 @@ GameSession::InventoryView GameSession::inventory(int client) const {
         cell.size = glm::vec2(size);
         v.cells.push_back(cell);
     }
+    return v;
+}
+
+// ============================================================================
+//  Chat
+// ============================================================================
+Color3 GameSession::nameColor(const std::string& name) {
+    // A colour per name, like Roblox's chat.
+    static const Color3 palette[] = {
+        { 0.99f, 0.27f, 0.25f }, { 0.07f, 0.64f, 1.0f }, { 0.01f, 0.72f, 0.34f }, { 0.68f, 0.38f, 0.92f },
+        { 0.99f, 0.56f, 0.18f }, { 0.97f, 0.86f, 0.18f }, { 1.0f, 0.79f, 0.85f }, { 0.84f, 0.76f, 0.6f },
+    };
+    uint32_t h = 2166136261u;
+    for (unsigned char ch : name) h = (h ^ ch) * 16777619u;
+    return palette[h % 8];
+}
+
+void GameSession::setChatOpen(int client, bool open) {
+    if (client < 0 || client >= clientCount()) return;
+    Client& c = *clients_[static_cast<size_t>(client)];
+    c.chatOpen = open && c.chatWindow;
+    if (c.chatOpen) c.searchFocused = false;
+    else c.chatDraft.clear();
+    c.chatActivity = time_;
+}
+
+void GameSession::chat(int client, const std::string& said) {
+    if (client < 0 || client >= clientCount()) return;
+    Client& c = *clients_[static_cast<size_t>(client)];
+    // Trimmed, on one line, not too long.
+    std::string text;
+    for (char ch : said) text += (ch == '\n' || ch == '\r' || ch == '\t') ? ' ' : ch;
+    const size_t first = text.find_first_not_of(' ');
+    if (first == std::string::npos) return;
+    text = text.substr(first, text.find_last_not_of(' ') - first + 1);
+    if (text.size() > 200) text.resize(200);
+    const Instance* player = scene_->find(c.playerId);
+    ChatMessage m;
+    m.speaker = player ? player->name : std::string("Player");
+    m.playerId = c.playerId;
+    m.text = text;
+    m.time = time_;
+    m.color = nameColor(m.speaker);
+    c.lua->onChatSending(text);
+    lua_->onPlayerChatted(c.playerId, text);
+    for (auto& other : clients_) {
+        other->chat.push_back(m);
+        if (other->chat.size() > 200) other->chat.erase(other->chat.begin());
+        other->chatActivity = time_;
+        other->lua->onChatMessage(m.speaker, m.playerId, m.text);
+    }
+    // The bubble goes over the speaker's head.
+    if (Instance* model = c.characterId ? scene_->find(c.characterId) : nullptr) {
+        Instance* head = model->findFirstChild("Head");
+        if (!head || !head->isBasePart()) head = scene_->find(c.rootPartId);
+        if (head) showBubble(head->id, text);
+    }
+}
+
+void GameSession::systemMessage(int client, const std::string& text, const Color3& color) {
+    for (auto& c : clients_) {
+        if (client >= 0 && c->index != client) continue;
+        ChatMessage m;
+        m.text = text;
+        m.time = time_;
+        m.color = color;
+        c->chat.push_back(m);
+        if (c->chat.size() > 200) c->chat.erase(c->chat.begin());
+        c->chatActivity = time_;
+        c->lua->onChatMessage("", 0, text);
+    }
+}
+
+void GameSession::showBubble(uint64_t part, const std::string& text) {
+    if (!part || text.empty()) return;
+    bubbles_.push_back({ part, text.size() > 200 ? text.substr(0, 200) : text, time_ });
+    // At most three per head, and not forever.
+    int count = 0;
+    for (auto it = bubbles_.rbegin(); it != bubbles_.rend(); ++it) {
+        if (it->part == part && ++count > 3) it->time = -1000.0;
+    }
+    while (bubbles_.size() > 64) bubbles_.pop_front();
+}
+
+GameSession::ChatView GameSession::chatView(int client) const {
+    ChatView v;
+    if (client < 0 || client >= clientCount()) return v;
+    const Client& c = *clients_[static_cast<size_t>(client)];
+    v.enabled = c.chatWindow;
+    if (!v.enabled) return v;
+    v.open = c.chatOpen;
+    v.textSize = std::floor(std::clamp(c.view.size.y * 0.024f, 14.0f, 22.0f));
+    const float margin = std::floor(v.textSize * 0.8f);
+    const float width = std::floor(std::clamp(c.view.size.x * 0.3f, 260.0f, 480.0f));
+    v.pos = glm::vec2(margin, margin);
+    v.size = glm::vec2(width, std::floor(v.textSize * 1.35f * 8.0f + v.textSize));
+    v.inputPos = glm::vec2(margin, v.pos.y + v.size.y + std::floor(v.textSize * 0.3f));
+    v.inputSize = glm::vec2(width, std::floor(v.textSize * 2.0f));
+    v.idle = c.chatOpen ? 0.0f : static_cast<float>(time_ - c.chatActivity);
     return v;
 }
 

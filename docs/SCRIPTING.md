@@ -13,6 +13,8 @@ are listed at the end.
 - [Classes and properties](#classes-and-properties)
 - [Events](#events)
 - [Players and characters](#players-and-characters)
+- [Tools and the Backpack](#tools-and-the-backpack)
+- [Chat](#chat)
 - [Physics](#physics)
 - [Time and tasks](#time-and-tasks)
 - [Input](#input)
@@ -462,8 +464,48 @@ a child of the character; an unequipped one lives in the player's Backpack.
 A dropped tool lies in Workspace until a character touches it.
 
 **Built-in GUI**: `StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)`
-hides the backpack bar and inventory (`PlayerList` the leaderboard, `All` both);
-`:GetCoreGuiEnabled(type)` reads it. Call it from a LocalScript.
+hides the backpack bar and inventory (`PlayerList` the leaderboard, `Chat` the
+chat window, `All` everything); `:GetCoreGuiEnabled(type)` reads it. Call it
+from a LocalScript.
+
+## Chat
+
+Players chat like in Roblox: <kbd>/</kbd> (or a click on the box, top left)
+opens the chat box, Enter says it, Esc closes the box. Every player sees the
+line in the chat window, and a speech bubble rises over the speaker's head.
+
+```lua
+-- Script: chat commands
+game.Players.PlayerAdded:Connect(function(player)
+    player.Chatted:Connect(function(message)
+        if message == "!reset" and player.Character then
+            player.Character.Humanoid.Health = 0
+        end
+    end)
+end)
+```
+
+```lua
+-- LocalScript: every chat line, and lines of your own
+local TextChatService = game:GetService("TextChatService")
+TextChatService.MessageReceived:Connect(function(message)
+    local who = message.TextSource and message.TextSource.Name or "(system)"
+    print(who, "said", message.Text)
+end)
+TextChatService.TextChannels.RBXGeneral:DisplaySystemMessage("Welcome to my game!")
+```
+
+- **Player.Chatted** (server) passes the message.
+- **TextChatService** (`game:GetService("TextChatService")`): `MessageReceived`
+  (each client, every line; a message has `Text`, `PrefixText` and `TextSource`
+  with `Name` and `UserId`, or no `TextSource` for system lines), `SendingMessage`
+  (the speaker's client), `TextChannels.RBXGeneral` with `:SendAsync(text)` (say
+  it as the local player) and `:DisplaySystemMessage(text)` (a line with no
+  speaker: on a client for that player, on the server for everyone, a RIFT
+  extra), `:DisplayBubble(partOrCharacter, text)`,
+  `ChatWindowConfiguration.Enabled` and `BubbleChatConfiguration.Enabled`
+  (LocalScript).
+- The older **Chat** service: `Chat:Chat(partOrCharacter, text)` shows a bubble.
 
 ## Terrain
 

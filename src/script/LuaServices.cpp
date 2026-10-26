@@ -1015,6 +1015,77 @@ void LuaRuntime::Impl::registerServices() {
             return instanceFor(kfs->id);
         });
 
+    // ------------------------------------------------------------ TextChatService / Chat
+    // A part to put a bubble over: the part, or a character's (model's) Head.
+    auto bubblePart = [this](const sol::object& target) -> uint64_t {
+        if (!target.is<Inst>()) fail("expected a part or a character");
+        Instance* i = need(target.as<Inst>());
+        if (i->isBasePart()) return i->id;
+        if (Instance* head = i->findFirstChild("Head"); head && head->isBasePart()) return head->id;
+        if (Instance* root = i->findFirstChild("HumanoidRootPart"); root && root->isBasePart()) return root->id;
+        fail(i->name + " has no Head to show a bubble over");
+    };
+    auto channelChild = [this](const std::string& name) -> sol::object {
+        if (name == "RBXGeneral") return sol::make_object(lua, TextChannel{ false });
+        if (name == "RBXSystem") return sol::make_object(lua, TextChannel{ true });
+        return nil();
+    };
+    lua.new_usertype<TextChannels>("TextChannels", sol::no_constructor,
+        "FindFirstChild", [channelChild](TextChannels&, const std::string& name) { return channelChild(name); },
+        "WaitForChild", [channelChild](TextChannels&, const std::string& name, sol::optional<double>) {
+            sol::object c = channelChild(name);
+            if (c.get_type() == sol::type::lua_nil) fail("TextChannels has no channel named '" + name + "' (RBXGeneral, RBXSystem)");
+            return c;
+        },
+        sol::meta_function::index, [channelChild](TextChannels&, const std::string& name) {
+            sol::object c = channelChild(name);
+            if (c.get_type() == sol::type::lua_nil) fail("'" + name + "' is not a valid member of TextChannels");
+            return c;
+        });
+    lua.new_usertype<TextChannel>("TextChannel", sol::no_constructor,
+        "Name", sol::property([](TextChannel& c) { return std::string(c.system ? "RBXSystem" : "RBXGeneral"); }),
+        // Says it as the local player (a LocalScript), like typing it in the chat.
+        "SendAsync", [this](TextChannel&, const std::string& text) {
+            requireSide(NetworkSide::Client, "TextChannel:SendAsync");
+            session.chat(client, text);
+        },
+        // A line without a speaker: for this player on a client, for everyone on the server (a RIFT extra).
+        "DisplaySystemMessage", [this](TextChannel&, const std::string& text) {
+            session.systemMessage(isClient() ? client : -1, text);
+        });
+    lua.new_usertype<ChatConfiguration>("ChatConfiguration", sol::no_constructor,
+        "Enabled", sol::property(
+            [this](ChatConfiguration& c) { return !isClient() || (c.bubbles ? me().bubbleChat : me().chatWindow); },
+            [this](ChatConfiguration& c, bool enabled) {
+                requireSide(NetworkSide::Client, c.bubbles ? "BubbleChatConfiguration.Enabled" : "ChatWindowConfiguration.Enabled");
+                if (c.bubbles) me().bubbleChat = enabled;
+                else {
+                    me().chatWindow = enabled;
+                    if (!enabled) session.setChatOpen(client, false);
+                }
+            }));
+    lua.new_usertype<TextChatService>("TextChatService", sol::no_constructor,
+        "MessageReceived", sol::property([this](TextChatService&) { return Signal{ chatReceived }; }),
+        "SendingMessage", sol::property([this](TextChatService&) { return Signal{ chatSending }; }),
+        "TextChannels", sol::property([](TextChatService&) { return TextChannels{}; }),
+        "ChatWindowConfiguration", sol::property([](TextChatService&) { return ChatConfiguration{ false }; }),
+        "BubbleChatConfiguration", sol::property([](TextChatService&) { return ChatConfiguration{ true }; }),
+        "FindFirstChild", [this](TextChatService&, const std::string& name) -> sol::object {
+            return name == "TextChannels" ? sol::make_object(lua, TextChannels{}) : nil();
+        },
+        "WaitForChild", [this](TextChatService&, const std::string& name, sol::optional<double>) -> sol::object {
+            if (name != "TextChannels") fail("TextChatService has no child named '" + name + "'");
+            return sol::make_object(lua, TextChannels{});
+        },
+        "DisplayBubble", [this, bubblePart](TextChatService&, sol::object target, const std::string& text) { session.showBubble(bubblePart(target), text); });
+    lua.new_usertype<ChatService>("Chat", sol::no_constructor,
+        "Chat", [this, bubblePart](ChatService&, sol::object target, const std::string& text, sol::optional<sol::object>) {
+            session.showBubble(bubblePart(target), text);
+        },
+        "BubbleChatEnabled", sol::property(
+            [this](ChatService&) { return !isClient() || me().bubbleChat; },
+            [this](ChatService&, bool enabled) { if (isClient()) me().bubbleChat = enabled; }));
+
     // ------------------------------------------------------------ game / workspace
     auto serviceByName = [this](const std::string& name) -> sol::object {
         static const std::pair<const char*, ClassId> instanceServices[] = {
@@ -1031,6 +1102,8 @@ void LuaRuntime::Impl::registerServices() {
         if (name == "CollectionService") return sol::make_object(lua, CollectionService{});
         if (name == "HttpService") return sol::make_object(lua, HttpService{});
         if (name == "KeyframeSequenceProvider") return sol::make_object(lua, KeyframeSequenceProvider{});
+        if (name == "TextChatService") return sol::make_object(lua, TextChatService{});
+        if (name == "Chat") return sol::make_object(lua, ChatService{});
         if (name == "DataStoreService") {
             requireSide(NetworkSide::Server, "DataStoreService");
             return sol::make_object(lua, DataStoreService{});

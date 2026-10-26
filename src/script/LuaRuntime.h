@@ -65,6 +65,11 @@ public:
     void onAnimationEvent(const AnimEvent& e);
     void onGuiEvent(Instance& element, GuiEvent e);
     void onSoundEnded(Instance& sound);
+    // Chat: Player.Chatted (server), TextChatService.SendingMessage (the speaker's
+    // client) and MessageReceived (every client; speaker "" for a system message).
+    void onPlayerChatted(uint64_t player, const std::string& text);
+    void onChatSending(const std::string& text);
+    void onChatMessage(const std::string& speaker, uint64_t player, const std::string& text);
     // A RemoteEvent / RemoteFunction message for this side (GameSession delivers them).
     void onRemoteMessage(const RemoteMessage& message);
     NetworkSide side() const;

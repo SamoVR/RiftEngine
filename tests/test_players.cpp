@@ -390,3 +390,79 @@ TEST_CASE("the backpack: ` opens the inventory, search, drag tools between it an
     CHECK(c.equipped == inv.cells[0].tool);
     CHECK(g.errors() == 0);
 }
+
+TEST_CASE("chat: / opens the box, Enter says it to everyone, Player.Chatted and TextChatService hear it") {
+    Game g;
+    g.script(R"(
+        local Players = game:GetService("Players")
+        local function watch(p) p.Chatted:Connect(function(m) print("server heard", p.Name, m) end) end
+        Players.PlayerAdded:Connect(watch)
+        task.wait(0.6)
+        game:GetService("TextChatService").TextChannels.RBXGeneral:DisplaySystemMessage("Welcome!")
+    )", g.scene.service(ClassId::ScriptService));
+    g.script(R"(
+        local TextChatService = game:GetService("TextChatService")
+        local me = game.Players.LocalPlayer
+        TextChatService.MessageReceived:Connect(function(m)
+            print(me.Name, "got", m.Text, m.TextSource and m.TextSource.Name or "system")
+        end)
+        TextChatService.SendingMessage:Connect(function(m) print(me.Name, "sending", m.Text) end)
+        if me.Name == "Player2" then
+            task.wait(0.5)
+            TextChatService:WaitForChild("TextChannels"):WaitForChild("RBXGeneral"):SendAsync("from code")
+        end
+    )", g.starterPlayerScripts(), ClassId::LocalScript);
+    GameSession& s = g.start(2);
+    g.run(0.1f);
+
+    // Type "/" (any layout: the character counts), then the message, then Enter.
+    ViewportInput view;
+    auto type = [&](const std::string& text, int key = 0) {
+        g.input.newFrame();
+        for (char ch : text) g.input.addText(static_cast<unsigned char>(ch));
+        if (key) g.input.setKey(key, true);
+        s.update(1.0f / 60.0f, view);
+        g.input.newFrame();
+        if (key) g.input.setKey(key, false);
+        s.update(1.0f / 60.0f, view);
+    };
+    type("/");
+    CHECK(s.client(0).chatOpen);
+    CHECK(s.typing());
+    CHECK(s.client(0).chatDraft.empty()); // the / only opens it
+    type("hi there");
+    CHECK(s.client(0).chatDraft == "hi there");
+    type("", GLFW_KEY_ENTER);
+    CHECK_FALSE(s.client(0).chatOpen);
+    g.run(0.1f);
+    CHECK_MESSAGE(g.count("server heard Player1 hi there") == 1, g.dump());
+    CHECK(g.count("Player1 sending hi there") == 1);
+    CHECK(g.count("Player1 got hi there Player1") == 1);
+    CHECK(g.count("Player2 got hi there Player1") == 1);
+    REQUIRE(s.client(1).chat.size() == 1);
+    CHECK(s.client(1).chat[0].speaker == "Player1");
+    // A bubble over Player1's head.
+    REQUIRE(s.bubbles().size() == 1);
+    CHECK(s.scene().find(s.bubbles()[0].part)->name == "Head");
+
+    // Esc closes the box without saying anything; blank messages say nothing.
+    type("/");
+    type("never mind");
+    type("", GLFW_KEY_ESCAPE);
+    CHECK_FALSE(s.client(0).chatOpen);
+    type("/");
+    type("   ", GLFW_KEY_ENTER);
+
+    // From code, and a system line from the server.
+    g.run(0.6f);
+    CHECK_MESSAGE(g.count("server heard Player2 from code") == 1, g.dump());
+    CHECK(g.count("Player1 got from code Player2") == 1);
+    CHECK(g.count("Player1 got Welcome! system") == 1);
+    CHECK(g.count("Player2 got Welcome! system") == 1);
+    CHECK(g.count("never mind") == 0);
+    CHECK(s.client(0).chat.size() == 3);
+    // Bubbles pop after a while.
+    g.run(16.0f);
+    CHECK(s.bubbles().empty());
+    CHECK(g.errors() == 0);
+}

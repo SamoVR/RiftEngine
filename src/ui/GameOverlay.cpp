@@ -65,6 +65,42 @@ namespace {
         return std::floor(lo);
     }
 
+    // Words laid out in lines of at most `width` (the first line starts `indent` in).
+    struct WordLine { std::vector<std::pair<std::string, float>> words; }; // word, x
+    std::vector<WordLine> wrapWords(ImFont* font, float size, const std::string& text, float width, float indent) {
+        std::vector<WordLine> lines(1);
+        const float space = font->CalcTextSizeA(size, FLT_MAX, 0.0f, " ").x;
+        float x = indent;
+        size_t start = 0;
+        while (start <= text.size()) {
+            size_t end = text.find(' ', start);
+            if (end == std::string::npos) end = text.size();
+            std::string word = text.substr(start, end - start);
+            start = end + 1;
+            if (word.empty()) { if (end >= text.size()) break; continue; }
+            float w = font->CalcTextSizeA(size, FLT_MAX, 0.0f, word.c_str()).x;
+            // A word longer than a line is cut where it reaches the edge.
+            while (w > width) {
+                size_t fit = word.size();
+                while (fit > 1 && font->CalcTextSizeA(size, FLT_MAX, 0.0f, word.c_str(), word.c_str() + fit).x > width - x) --fit;
+                if (x > 0.0f && fit < word.size() / 2) { lines.emplace_back(); x = 0.0f; continue; }
+                lines.back().words.emplace_back(word.substr(0, fit), x);
+                lines.emplace_back();
+                x = 0.0f;
+                word = word.substr(fit);
+                w = font->CalcTextSizeA(size, FLT_MAX, 0.0f, word.c_str()).x;
+            }
+            if (x > 0.0f && x + w > width) {
+                lines.emplace_back();
+                x = 0.0f;
+            }
+            lines.back().words.emplace_back(word, x);
+            x += w + space;
+            if (end >= text.size()) break;
+        }
+        return lines;
+    }
+
     // Multiplies the vertices drawn since `first` by the gradient across a..b.
     void applyGradient(ImDrawList* draw, int first, const ImVec2& a, const ImVec2& b, const Instance& g) {
         const float angle = g.guiRotation * 3.14159265f / 180.0f;
@@ -370,6 +406,134 @@ void drawGameHud(GameSession& session, TextureCache& textures, ImDrawList* draw,
             const ImVec2 p(origin.x + hoveredPos.x, origin.y + hoveredPos.y - t.y - base * 0.9f);
             draw->AddRectFilled(ImVec2(p.x - 6.0f, p.y - 4.0f), ImVec2(p.x + t.x + 6.0f, p.y + t.y + 4.0f), IM_COL32(14, 14, 20, 230), 5.0f);
             draw->AddText(font, base * 0.9f, p, IM_COL32(240, 240, 248, 255), tip.c_str());
+        }
+    }
+
+    // ---- speech bubbles over heads (in the world the player sees)
+    if (session.focused().bubbleChat) {
+        const Scene& world = session.clientScene();
+        const glm::vec3 eye = session.focused().camera.position;
+        // Each head's bubbles, oldest first.
+        std::vector<std::pair<uint64_t, std::vector<const GameSession::ChatBubble*>>> heads;
+        for (const GameSession::ChatBubble& b : session.bubbles()) {
+            auto it = std::find_if(heads.begin(), heads.end(), [&](const auto& h) { return h.first == b.part; });
+            if (it == heads.end()) { heads.push_back({ b.part, {} }); it = heads.end() - 1; }
+            it->second.push_back(&b);
+        }
+        for (const auto& [partId, list] : heads) {
+            const Instance* part = world.find(partId);
+            if (!part || !part->isBasePart()) continue;
+            const glm::vec3 top = part->worldPosition() + glm::vec3(0.0f, part->size.y * 0.5f + 0.9f, 0.0f);
+            const float distance = glm::length(top - eye);
+            if (distance > 100.0f) continue;
+            const glm::vec3 p = session.worldToScreen(top);
+            if (p.z <= 0.0f) continue;
+            const float scale = std::clamp(18.0f / std::max(distance, 1.0f), 0.6f, 1.0f);
+            const float textSize = std::floor(base * 0.95f * scale);
+            const float pad = textSize * 0.55f, maxWidth = textSize * 15.0f;
+            float bottom = origin.y + p.y;
+            for (size_t k = list.size(); k-- > 0;) {
+                const GameSession::ChatBubble& b = *list[k];
+                const float age = static_cast<float>(session.time() - b.time);
+                const float alpha = std::clamp(15.0f - age, 0.0f, 1.0f) * std::clamp(age * 6.0f, 0.0f, 1.0f) * (k + 1 == list.size() ? 1.0f : 0.85f);
+                if (alpha <= 0.0f) continue;
+                const auto lines = wrapWords(font, textSize, b.text, maxWidth, 0.0f);
+                float width = 0.0f;
+                for (const WordLine& l : lines) {
+                    if (l.words.empty()) continue;
+                    const auto& last = l.words.back();
+                    width = std::max(width, last.second + font->CalcTextSizeA(textSize, FLT_MAX, 0.0f, last.first.c_str()).x);
+                }
+                const float lineHeight = textSize * 1.2f;
+                const float height = lines.size() * lineHeight;
+                const bool newest = k + 1 == list.size();
+                const float tail = newest ? textSize * 0.45f : 0.0f;
+                const ImVec2 b1(origin.x + p.x - width * 0.5f - pad, bottom - tail - height - pad * 1.4f);
+                const ImVec2 b2(origin.x + p.x + width * 0.5f + pad, bottom - tail);
+                const int a = static_cast<int>(alpha * 255.0f);
+                draw->AddRectFilled(ImVec2(b1.x + 1.5f, b1.y + 2.0f), ImVec2(b2.x + 1.5f, b2.y + 2.0f), IM_COL32(0, 0, 0, a / 5), textSize * 0.6f);
+                draw->AddRectFilled(b1, b2, IM_COL32(250, 250, 252, a), textSize * 0.6f);
+                if (newest) {
+                    const float cx = origin.x + p.x;
+                    draw->AddTriangleFilled(ImVec2(cx - tail, b2.y), ImVec2(cx + tail, b2.y), ImVec2(cx, b2.y + tail), IM_COL32(250, 250, 252, a));
+                }
+                float y = b1.y + pad * 0.7f;
+                for (const WordLine& l : lines) {
+                    for (const auto& [word, x] : l.words)
+                        draw->AddText(font, textSize, ImVec2(b1.x + pad + x, y), IM_COL32(30, 30, 38, a), word.c_str());
+                    y += lineHeight;
+                }
+                bottom = b1.y - textSize * 0.3f;
+            }
+        }
+    }
+
+    // ---- chat (top left): what players said, and the box to type in
+    {
+        const GameSession::ChatView cv = session.chatView(session.focus());
+        const GameSession::Client& me = session.focused();
+        if (cv.enabled) {
+            const glm::vec2 mouse = session.viewport().mouse;
+            const bool hoveredView = session.viewport().hovered;
+            const bool hover = hoveredView && mouse.x >= cv.pos.x && mouse.y >= cv.pos.y && mouse.x <= cv.inputPos.x + cv.inputSize.x &&
+                               mouse.y <= cv.inputPos.y + cv.inputSize.y;
+            // Messages fade away when nobody has chatted for a while; open or hovered, they come back.
+            const float shown = cv.open || hover ? 1.0f : std::clamp(1.0f - (cv.idle - 30.0f) / 2.0f, 0.0f, 1.0f);
+            const float frame = cv.open || hover ? 1.0f : std::clamp(1.0f - (cv.idle - 5.0f) / 1.5f, 0.0f, 1.0f);
+            const ImVec2 a(origin.x + cv.pos.x, origin.y + cv.pos.y), b(a.x + cv.size.x, a.y + cv.size.y);
+            const float r = cv.textSize * 0.45f;
+            if (frame > 0.0f && !me.chat.empty()) draw->AddRectFilled(a, b, IM_COL32(12, 12, 18, static_cast<int>(95 * frame)), r);
+            if (shown > 0.0f) {
+                // Newest at the bottom; as many as fit.
+                const float ts = cv.textSize, lineHeight = std::floor(ts * 1.35f), pad = std::floor(ts * 0.5f);
+                const float width = cv.size.x - pad * 2.0f;
+                float y = b.y - pad;
+                draw->PushClipRect(a, b, true);
+                for (size_t k = me.chat.size(); k-- > 0 && y > a.y;) {
+                    const GameSession::ChatMessage& m = me.chat[k];
+                    const std::string prefix = m.speaker.empty() ? std::string() : m.speaker + ": ";
+                    const float indent = prefix.empty() ? 0.0f : bold->CalcTextSizeA(ts, FLT_MAX, 0.0f, prefix.c_str()).x;
+                    const auto lines = wrapWords(font, ts, m.text, width, indent);
+                    y -= lines.size() * lineHeight;
+                    const int alpha = static_cast<int>(255 * shown);
+                    auto text = [&](ImFont* f, float x, float ly, ImU32 color, const char* s) {
+                        draw->AddText(f, ts, ImVec2(x + 1.0f, ly + 1.0f), IM_COL32(0, 0, 0, alpha * 3 / 5), s);
+                        draw->AddText(f, ts, ImVec2(x, ly), color, s);
+                    };
+                    if (!prefix.empty()) text(bold, a.x + pad, y, rgba(m.color, shown), prefix.c_str());
+                    float ly = y;
+                    const ImU32 color = m.speaker.empty() ? rgba(m.color, shown) : IM_COL32(255, 255, 255, alpha);
+                    for (const WordLine& l : lines) {
+                        for (const auto& [word, x] : l.words) text(font, a.x + pad + x, ly, color, word.c_str());
+                        ly += lineHeight;
+                    }
+                    y -= std::floor(ts * 0.2f);
+                }
+                draw->PopClipRect();
+            }
+            // The box: "press /" when closed, the draft and a caret when open.
+            const float boxAlpha = cv.open ? 1.0f : std::max(frame, hover ? 1.0f : 0.55f);
+            const ImVec2 ia(origin.x + cv.inputPos.x, origin.y + cv.inputPos.y), ib(ia.x + cv.inputSize.x, ia.y + cv.inputSize.y);
+            draw->AddRectFilled(ia, ib, IM_COL32(12, 12, 18, static_cast<int>((cv.open ? 210 : 120) * boxAlpha)), r);
+            if (cv.open) draw->AddRect(ia, ib, IM_COL32(255, 255, 255, 120), r, 0, 1.5f);
+            const float ts = cv.textSize;
+            const ImVec2 tp(ia.x + ts * 0.6f, ia.y + (cv.inputSize.y - ts) * 0.5f);
+            draw->PushClipRect(ia, ib, true);
+            if (!cv.open) {
+                draw->AddText(font, ts, tp, IM_COL32(220, 220, 230, static_cast<int>(170 * boxAlpha)), "To chat click here or press / key");
+            } else if (me.chatDraft.empty()) {
+                draw->AddText(font, ts, tp, IM_COL32(200, 200, 210, 150), "Type a message, Enter to send");
+            }
+            if (cv.open) {
+                // Long drafts scroll so the end stays visible.
+                const float textWidth = font->CalcTextSizeA(ts, FLT_MAX, 0.0f, me.chatDraft.c_str()).x;
+                const float room = cv.inputSize.x - ts * 1.4f;
+                const float x = tp.x - std::max(0.0f, textWidth - room);
+                draw->AddText(font, ts, ImVec2(x, tp.y), IM_COL32(255, 255, 255, 255), me.chatDraft.c_str());
+                if (std::fmod(ImGui::GetTime(), 1.0) < 0.55)
+                    draw->AddLine(ImVec2(x + textWidth + 1.0f, tp.y), ImVec2(x + textWidth + 1.0f, tp.y + ts), IM_COL32(255, 255, 255, 230), 1.5f);
+            }
+            draw->PopClipRect();
         }
     }
 

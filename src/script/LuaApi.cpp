@@ -44,7 +44,7 @@ bool hasEvent(const Instance& i, const std::string& name) {
             || name == "MouseEnter" || name == "MouseLeave";
     }
     if (i.isGuiObject()) return name == "MouseEnter" || name == "MouseLeave";
-    if (i.cls == ClassId::Player) return name == "CharacterAdded" || name == "CharacterRemoving";
+    if (i.cls == ClassId::Player) return name == "CharacterAdded" || name == "CharacterRemoving" || name == "Chatted";
     if (i.cls == ClassId::RemoteEvent) return name == "OnServerEvent" || name == "OnClientEvent";
     if (i.cls == ClassId::BindableEvent) return name == "Event";
     if (i.cls == ClassId::Tool) return name == "Equipped" || name == "Unequipped" || name == "Activated" || name == "Deactivated";
@@ -273,6 +273,12 @@ const std::vector<std::string>& valueMembers(const std::string& type) {
         { "DataStoreService", { "GetDataStore" } },
         { "DataStore", sorted({ "GetAsync", "IncrementAsync", "SetAsync", "UpdateAsync" }) },
         { "KeyframeSequenceProvider", sorted({ "GetKeyframeSequenceAsync", "RegisterKeyframeSequence" }) },
+        { "TextChatService", sorted({ "BubbleChatConfiguration", "ChatWindowConfiguration", "DisplayBubble", "FindFirstChild", "MessageReceived",
+                                      "SendingMessage", "TextChannels", "WaitForChild" }) },
+        { "TextChannels", sorted({ "FindFirstChild", "RBXGeneral", "RBXSystem", "WaitForChild" }) },
+        { "TextChannel", sorted({ "DisplaySystemMessage", "Name", "SendAsync" }) },
+        { "ChatConfiguration", { "Enabled" } },
+        { "Chat", sorted({ "BubbleChatEnabled", "Chat" }) },
     };
     static const std::vector<std::string> none;
     auto it = table.find(type);
@@ -283,7 +289,7 @@ const std::vector<std::string>& serviceNames() {
     static const std::vector<std::string> list = sorted({
         "Workspace", "Players", "Lighting", "ReplicatedStorage", "ServerStorage", "ServerScriptService", "ScriptService", "StarterGui",
         "StarterPack", "StarterPlayer", "SoundService", "RunService", "UserInputService", "TweenService", "Debris", "CollectionService",
-        "HttpService", "DataStoreService", "KeyframeSequenceProvider",
+        "HttpService", "DataStoreService", "KeyframeSequenceProvider", "TextChatService", "Chat",
     });
     return list;
 }
