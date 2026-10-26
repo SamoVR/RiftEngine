@@ -97,6 +97,7 @@ public:
 
         // Character (server instances)
         uint64_t characterId = 0, humanoidId = 0, rootPartId = 0;
+        glm::vec3 rootOffset{ 0.0f }, rootRotation{ 0.0f }; // the root part's place in the character model
         CharacterController* controller = nullptr;
         float lastHealth = 0.0f, respawnTimer = 0.0f, facingYaw = 0.0f, runningSpeed = -1.0f;
         bool dead = false, guiFilled = false, walkTarget = false;

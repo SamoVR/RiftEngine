@@ -412,8 +412,19 @@ end)
 `:MoveTo(position)` (walks there). When `Health` reaches 0 the character falls
 apart, `Died` fires and the player respawns 3 seconds later.
 
-Moving the character: set `character.HumanoidRootPart.CFrame` (teleport) or
-`AssemblyLinearVelocity` (a push or jump pad).
+Moving the character: set `character.HumanoidRootPart.CFrame` (teleports the
+whole character, turned the way the CFrame faces) or `AssemblyLinearVelocity`
+(a push or a launch pad). A push faster than walking carries the character
+through the air and fades; the player can still steer.
+
+```lua
+-- A launch pad: throws whoever steps on it towards another island.
+local pad = script.Parent
+pad.Touched:Connect(function(hit)
+    local root = hit.Parent:FindFirstChild("HumanoidRootPart")
+    if root then root.AssemblyLinearVelocity = Vector3.new(20, 24, -12) end
+end)
+```
 
 **Leaderboard**: a Folder named `leaderstats` inside the Player, with IntValue /
 NumberValue / StringValue / BoolValue children, is shown in the top right corner.
@@ -671,12 +682,31 @@ GUI from a LocalScript inside the ScreenGui (`script.Parent`) or through
 |---|---|
 | `ScreenGui` | `Enabled`, `DisplayOrder`, `ResetOnSpawn` |
 | `Frame` | Rectangle |
-| `TextLabel`, `TextButton` | + `Text`, `TextColor3`, `TextSize`, `TextXAlignment`, `TextYAlignment`, `TextWrapped` |
+| `TextLabel`, `TextButton` | + `Text`, `TextColor3`, `TextSize`, `TextScaled`, `Font`, `TextTransparency`, `TextStrokeColor3`, `TextStrokeTransparency`, `TextXAlignment`, `TextYAlignment`, `TextWrapped` |
 | `ImageLabel`, `ImageButton` | + `Image`, `ImageColor3`, `ImageTransparency`, `ScaleType` (Stretch, Fit, Crop) |
+| `UIGradient` | Inside an element: shades its background, text and image. `Color` (ColorSequence), `Transparency` (NumberSequence), `Rotation` (0 left to right, 90 top to bottom), `Offset`, `Enabled` |
 
 Every element has `Position` and `Size` (UDim2), `AnchorPoint` (Vector2),
-`ZIndex`, `Visible`, `BackgroundColor3`, `BackgroundTransparency`,
-`CornerRadius`, `BorderSizePixel`, `BorderColor3`.
+`ZIndex`, `Visible`, `Rotation` (degrees, clockwise; children turn with it),
+`BackgroundColor3`, `BackgroundTransparency`, `CornerRadius`, `BorderSizePixel`,
+`BorderColor3`.
+
+- **Font** (`Enum.Font`) takes Roblox's names so scripts carry over: `Gotham`, `GothamMedium`, `GothamBold`, `GothamBlack` (the heaviest), `SourceSans`, `SourceSansSemibold`, `SourceSansBold`, `Arial`, `ArialBold` and `Code` (monospaced).
+- **TextScaled** makes the text as large as fits the element (up to 100); **TextStrokeTransparency** 0 draws a solid outline in `TextStrokeColor3`.
+- Everything inside a button (a label, an icon, a gradient fill) is part of it: clicks on it go to the button. A UIGradient also shades the button's own text, so a gradient button usually carries its text in a TextLabel inside it.
+- All these properties can be tweened, which is how menus slide, fade and pop:
+
+```lua
+local TweenService = game:GetService("TweenService")
+local title = script.Parent.Title
+title.TextTransparency = 1
+title.Rotation = -6
+TweenService:Create(title, TweenInfo.new(0.6, Enum.EasingStyle.Back), { TextTransparency = 0, Rotation = 0 }):Play()
+
+local gradient = Instance.new("UIGradient")
+gradient.Color = ColorSequence.new(Color3.fromRGB(139, 92, 246), Color3.fromRGB(236, 72, 153))
+gradient.Parent = script.Parent.PlayButton
+```
 
 ```lua
 -- LocalScript in StarterPlayerScripts

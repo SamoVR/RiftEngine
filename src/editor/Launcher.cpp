@@ -13,6 +13,9 @@
 #include <cctype>
 #include <cstdio>
 #include <ctime>
+#include <fstream>
+#include <map>
+#include <nlohmann/json.hpp>
 
 namespace rift {
 
@@ -54,6 +57,20 @@ namespace {
             else t.pop_back();
         }
         return front ? "..." + t : t + "...";
+    }
+
+    // An example's name and one line about it, from its project.json (read once).
+    const std::pair<std::string, std::string>& exampleInfo(const fs::path& folder) {
+        static std::map<fs::path, std::pair<std::string, std::string>> cache;
+        if (auto it = cache.find(folder); it != cache.end()) return it->second;
+        std::pair<std::string, std::string> info{ Paths::toUtf8(folder.filename()), "Example: open a copy" };
+        std::ifstream in(folder / "project.json");
+        const nlohmann::json j = nlohmann::json::parse(in, nullptr, false);
+        if (j.is_object()) {
+            if (j.contains("name") && j["name"].is_string() && !j["name"].get<std::string>().empty()) info.first = j["name"].get<std::string>();
+            if (j.contains("description") && j["description"].is_string()) info.second = j["description"].get<std::string>();
+        }
+        return cache[folder] = info;
     }
 
     // A stable colour per project name for cards without a thumbnail.
@@ -291,7 +308,7 @@ void EditorApp::drawHomeProjects(float width) {
         int k = 0;
         for (const auto& item : fs::directory_iterator(examples, ec)) {
             if (!fs::exists(item.path() / "project.json", ec)) continue;
-            starts.push_back({ nullptr, ICON_FA_GAMEPAD, exampleColors[k++ % 3], nullptr, "Example: open a copy", -1, item.path() });
+            starts.push_back({ nullptr, ICON_FA_GAMEPAD, exampleColors[k++ % 3], nullptr, nullptr, -1, item.path() });
         }
     }
     const float tileWidth = fs_ * 11.5f;
@@ -302,7 +319,8 @@ void EditorApp::drawHomeProjects(float width) {
         if (k % static_cast<size_t>(perRow) != 0) ImGui::SameLine(0.0f, gap);
         const std::string name = s.example.empty() ? std::string() : Paths::toUtf8(s.example.filename());
         const std::string id = s.id ? s.id : "example:" + name;
-        if (tile(id.c_str(), s.icon, s.color, s.title ? s.title : name.c_str(), s.text, tileWidth)) {
+        const std::pair<std::string, std::string> info = s.example.empty() ? std::pair<std::string, std::string>() : exampleInfo(s.example);
+        if (tile(id.c_str(), s.icon, s.color, s.title ? s.title : info.first.c_str(), s.text ? s.text : info.second.c_str(), tileWidth)) {
             if (s.templ >= 0) {
                 openNewProject();
                 newProjectTemplate_ = s.templ;

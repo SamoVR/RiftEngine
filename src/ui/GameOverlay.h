@@ -23,6 +23,8 @@ class TextureCache;
 struct OverlayFonts {
     ImFont* regular = nullptr;
     ImFont* bold = nullptr;
+    ImFont* medium = nullptr; // null: regular
+    ImFont* mono = nullptr;   // null: regular
 };
 
 // `origin`: top-left of the game view in screen pixels (GuiSystem rectangles

@@ -386,6 +386,8 @@ void GameSession::spawnCharacter(Client& c) {
     c.characterId = model->id;
     c.humanoidId = hum->id;
     c.rootPartId = root->id;
+    c.rootOffset = root->position;
+    c.rootRotation = root->rotation;
     c.controller = physics_->createCharacter(root->id, feet, kCharacterRadius, kCharacterHeight);
     c.lastHealth = hum->health;
     c.dead = false;
@@ -457,6 +459,18 @@ void GameSession::updateCharacter(Client& c, float dt) {
     const glm::vec3 expected = c.controller->feetPosition() + glm::vec3(0.0f, kCharacterHeight * 0.5f, 0.0f);
     const glm::vec3 actual = root->worldPosition();
     if (glm::length(actual - expected) > 0.01f) c.controller->teleport(actual - glm::vec3(0.0f, kCharacterHeight * 0.5f, 0.0f));
+    if (root->position != c.rootOffset || root->rotation != c.rootRotation) {
+        // HumanoidRootPart.CFrame = ... moved only the root part inside the model:
+        // the whole character goes there (the root is jointed to the rest, as in
+        // Roblox), turned the way the script turned the root.
+        if (root->rotation != c.rootRotation) c.facingYaw = wrapDegrees(root->worldRotation().y);
+        root->position = c.rootOffset;
+        root->rotation = c.rootRotation;
+        if (Instance* mine = c.scene->find(root->id)) { // the client's copy, if it was the client that moved it
+            mine->position = c.rootOffset;
+            mine->rotation = c.rootRotation;
+        }
+    }
     // A script set the root part's velocity (jump pads, knock-back).
     if (glm::length(root->velocity - c.controller->velocity()) > 0.01f) c.controller->setVelocity(root->velocity);
 

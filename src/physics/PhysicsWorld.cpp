@@ -282,6 +282,7 @@ public:
         const bool movingTowardsGround = (currentVertical.GetY() - groundVelocity.GetY()) < 0.1f;
 
         JPH::Vec3 v;
+        bool airborne = false;
         if (input_.swimming) {
             // Swimming: drift down slowly, Space swims up, move at a little below walking speed.
             glm::vec3 swim = input_.moveDirection;
@@ -303,12 +304,24 @@ public:
             }
         } else {
             v = currentVertical;
+            airborne = true;
         }
         v += gravity * dt;
         glm::vec3 move = input_.moveDirection;
         move.y = 0.0f;
         if (glm::length(move) > 1.0f) move = glm::normalize(move);
-        v += toJ(move * input_.walkSpeed);
+        const JPH::Vec3 walk = toJ(move * input_.walkSpeed);
+        const JPH::Vec3 horizontal = character_->GetLinearVelocity() - currentVertical;
+        if (airborne) {
+            // In the air the player steers quickly but not instantly, letting go
+            // slows down gently, and a push faster than walking (a launch pad, a
+            // knock-back) carries on and fades.
+            const bool steering = glm::length(move) > 0.01f;
+            const float rate = horizontal.Length() > input_.walkSpeed + 0.5f ? 1.2f : steering ? 10.0f : 4.0f;
+            v += horizontal + (walk - horizontal) * (1.0f - std::exp(-dt * rate));
+        } else {
+            v += walk;
+        }
         character_->SetLinearVelocity(v);
 
         JPH::CharacterVirtual::ExtendedUpdateSettings ext;

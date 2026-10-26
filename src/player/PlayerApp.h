@@ -44,6 +44,8 @@ private:
     Framebuffer framebuffer_;
     ImFont* font_ = nullptr;
     ImFont* bold_ = nullptr;
+    ImFont* medium_ = nullptr;
+    ImFont* mono_ = nullptr;
     bool menuOpen_ = false;
     bool mouseCaptured_ = false;
     bool fullscreen_ = false;

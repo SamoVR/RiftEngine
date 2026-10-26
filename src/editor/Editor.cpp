@@ -781,6 +781,14 @@ Instance* Editor::insert(ClassId cls, PartShape shape) {
     } else if (cls == ClassId::ScreenGui) {
         i = s.create(cls);
         parent = s.service(ClassId::StarterGui);
+    } else if (cls == ClassId::UIGradient) {
+        // Shades the GUI element it is in.
+        if (!selected || !selected->isGuiObject()) {
+            notify("Select a GUI element (Frame, TextLabel, ...) to put the UIGradient in", NoticeLevel::Warning);
+            return nullptr;
+        }
+        i = s.create(cls);
+        parent = selected;
     } else if (cls > ClassId::ScreenGui && cls <= ClassId::ImageButton) {
         // GUI elements go into the selected ScreenGui / Frame, or a new ScreenGui.
         Instance* container = nullptr;

@@ -60,7 +60,10 @@ void GuiSystem::handleMouse(const glm::vec2& mouse, bool inView, bool buttonDown
             if (!it->rect.contains(mouse) || !it->clip.contains(mouse)) continue;
             Instance* inst = scene_.find(it->id);
             if (!inst) continue;
-            if (isButton(*inst)) { topButton = inst->id; overGui_ = true; break; }
+            // What is inside a button (its label, an icon, a gradient fill) is part of it.
+            Instance* button = nullptr;
+            for (Instance* p = inst; p && p->isGuiObject() && !button; p = p->parent) if (isButton(*p)) button = p;
+            if (button) { topButton = button->id; overGui_ = true; break; }
             if (inst->backgroundTransparency < 1.0f) { overGui_ = true; break; } // an opaque frame blocks what is behind it
         }
     }

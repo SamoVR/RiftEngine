@@ -47,6 +47,7 @@ enum class ClassId : uint8_t {
     RemoteEvent, RemoteFunction, BindableEvent, BindableFunction,
     // 2D GUI
     ScreenGui, Frame, TextLabel, TextButton, ImageLabel, ImageButton,
+    UIGradient, // modifies its parent GUI element; not drawn itself
     Count
 };
 constexpr int kClassCount = static_cast<int>(ClassId::Count);
@@ -68,6 +69,10 @@ enum class CameraMode : int { ThirdPerson, FirstPerson };
 enum class TextXAlignment : int { Left, Center, Right };
 enum class TextYAlignment : int { Top, Center, Bottom };
 enum class ScaleType : int { Stretch, Fit, Crop };
+// Enum.Font: Roblox's names, so scripts carry over. RIFT draws them with Inter
+// (regular, medium, semibold, and semibold made heavier for Black) and Code
+// with JetBrains Mono.
+enum class GuiFont : int { Gotham, GothamMedium, GothamBold, GothamBlack, SourceSans, SourceSansSemibold, SourceSansBold, Arial, ArialBold, Code };
 enum class NormalId : int { Right, Top, Back, Left, Bottom, Front };   // +X, +Y, +Z, -X, -Y, -Z
 enum class ParticleOrientation : int { FacingCamera, FacingCameraWorldUp, VelocityParallel, VelocityPerpendicular };
 enum class TextureMode : int { Stretch, Wrap, Static };
@@ -233,6 +238,13 @@ struct Instance {
     TextXAlignment textXAlignment = TextXAlignment::Center;
     TextYAlignment textYAlignment = TextYAlignment::Center;
     bool textWrapped = false;
+    bool textScaled = false;              // the largest size that fits the element (up to 100)
+    GuiFont font = GuiFont::Gotham;
+    float textTransparency = 0.0f;
+    Color3 textStrokeColor{ 0.0f, 0.0f, 0.0f };
+    float textStrokeTransparency = 1.0f;  // 1: no outline
+    float guiRotation = 0.0f;             // degrees clockwise (GuiObject.Rotation, UIGradient.Rotation)
+    glm::vec2 gradientOffset{ 0.0f };     // UIGradient.Offset, in fractions of the element's size
     Color3 imageColor{ 1.0f, 1.0f, 1.0f };
     float imageTransparency = 0.0f;
     ScaleType scaleType = ScaleType::Stretch;

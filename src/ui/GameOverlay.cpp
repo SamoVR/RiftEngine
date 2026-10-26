@@ -1,11 +1,13 @@
 #include "ui/GameOverlay.h"
 #include "game/GameSession.h"
+#include "game/GuiSystem.h"
 #include "render/TextureCache.h"
 
 #include <imgui.h>
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <unordered_map>
 
 namespace rift {
 
@@ -33,6 +35,64 @@ namespace {
             default: return "";
         }
     }
+
+    ImFont* fontFor(GuiFont f, const OverlayFonts& fonts) {
+        ImFont* regular = fonts.regular ? fonts.regular : ImGui::GetFont();
+        switch (f) {
+            case GuiFont::GothamMedium: return fonts.medium ? fonts.medium : regular;
+            case GuiFont::GothamBold: case GuiFont::GothamBlack: case GuiFont::SourceSansSemibold:
+            case GuiFont::SourceSansBold: case GuiFont::ArialBold: return fonts.bold ? fonts.bold : regular;
+            case GuiFont::Code: return fonts.mono ? fonts.mono : regular;
+            default: return regular;
+        }
+    }
+
+    // TextScaled: the largest size (up to 100, like Roblox) at which the text fits the box.
+    float scaledTextSize(ImFont* font, const std::string& text, const ImVec2& box, bool wrapped) {
+        const float width = std::max(box.x - 8.0f, 1.0f);
+        if (!wrapped) {
+            const ImVec2 t = font->CalcTextSizeA(100.0f, FLT_MAX, 0.0f, text.c_str());
+            const float s = std::min(100.0f * width / std::max(t.x, 1.0f), 100.0f * box.y / std::max(t.y, 1.0f));
+            return std::clamp(std::floor(s), 1.0f, 100.0f);
+        }
+        float lo = 1.0f, hi = std::clamp(box.y, 1.0f, 100.0f);
+        for (int k = 0; k < 12; ++k) {
+            const float mid = (lo + hi) * 0.5f;
+            const ImVec2 t = font->CalcTextSizeA(mid, FLT_MAX, width, text.c_str());
+            if (t.x <= width + 0.5f && t.y <= box.y) lo = mid;
+            else hi = mid;
+        }
+        return std::floor(lo);
+    }
+
+    // Multiplies the vertices drawn since `first` by the gradient across a..b.
+    void applyGradient(ImDrawList* draw, int first, const ImVec2& a, const ImVec2& b, const Instance& g) {
+        const float angle = g.guiRotation * 3.14159265f / 180.0f;
+        const ImVec2 dir(std::cos(angle), std::sin(angle));
+        const ImVec2 size(b.x - a.x, b.y - a.y);
+        const ImVec2 center(a.x + size.x * (0.5f + g.gradientOffset.x), a.y + size.y * (0.5f + g.gradientOffset.y));
+        const float extent = std::max(std::abs(dir.x) * size.x + std::abs(dir.y) * size.y, 1.0f);
+        for (int k = first; k < draw->VtxBuffer.Size; ++k) {
+            ImDrawVert& v = draw->VtxBuffer[k];
+            const float t = std::clamp(((v.pos.x - center.x) * dir.x + (v.pos.y - center.y) * dir.y) / extent + 0.5f, 0.0f, 1.0f);
+            const Color3 c = g.colorSequence.at(t);
+            const float alpha = 1.0f - std::clamp(g.transparencySequence.at(t), 0.0f, 1.0f);
+            auto channel = [&](int shift, float f) { return static_cast<ImU32>(std::clamp(((v.col >> shift) & 0xFF) * f + 0.5f, 0.0f, 255.0f)); };
+            v.col = (channel(IM_COL32_R_SHIFT, c.r) << IM_COL32_R_SHIFT) | (channel(IM_COL32_G_SHIFT, c.g) << IM_COL32_G_SHIFT)
+                  | (channel(IM_COL32_B_SHIFT, c.b) << IM_COL32_B_SHIFT) | (channel(IM_COL32_A_SHIFT, alpha) << IM_COL32_A_SHIFT);
+        }
+    }
+
+    // GuiObject.Rotation: turns what was drawn since `first` around `center` (clockwise on screen).
+    void rotateVertices(ImDrawList* draw, int first, const ImVec2& center, float degrees) {
+        const float r = degrees * 3.14159265f / 180.0f;
+        const float c = std::cos(r), s = std::sin(r);
+        for (int k = first; k < draw->VtxBuffer.Size; ++k) {
+            ImDrawVert& v = draw->VtxBuffer[k];
+            const ImVec2 p(v.pos.x - center.x, v.pos.y - center.y);
+            v.pos = ImVec2(center.x + p.x * c - p.y * s, center.y + p.x * s + p.y * c);
+        }
+    }
 }
 
 void drawGameGui(GameSession& session, TextureCache& textures, ImDrawList* draw, const glm::vec2& origin, const OverlayFonts& fonts) {
@@ -40,13 +100,18 @@ void drawGameGui(GameSession& session, TextureCache& textures, ImDrawList* draw,
 }
 
 void drawGui(const Scene& scene, const GuiSystem& gui, TextureCache& textures, ImDrawList* draw, const glm::vec2& origin, const OverlayFonts& fonts) {
-    ImFont* font = fonts.regular ? fonts.regular : ImGui::GetFont();
+    // Where each element is, for turning children with a rotated parent.
+    std::unordered_map<uint64_t, GuiRect> rects;
+    for (const GuiSystem::Item& item : gui.drawList()) rects.emplace(item.id, item.rect);
+    auto centerOf = [&](const GuiRect& r) { return ImVec2(origin.x + r.pos.x + r.size.x * 0.5f, origin.y + r.pos.y + r.size.y * 0.5f); };
+
     for (const GuiSystem::Item& item : gui.drawList()) {
         const Instance* e = scene.find(item.id);
         if (!e) continue;
         const ImVec2 clipMin(origin.x + item.clip.pos.x, origin.y + item.clip.pos.y);
         const ImVec2 clipMax(clipMin.x + item.clip.size.x, clipMin.y + item.clip.size.y);
         draw->PushClipRect(clipMin, clipMax, true);
+        const int firstVertex = draw->VtxBuffer.Size;
 
         const ImVec2 a(origin.x + item.rect.pos.x, origin.y + item.rect.pos.y);
         const ImVec2 b(a.x + item.rect.size.x, a.y + item.rect.size.y);
@@ -56,7 +121,6 @@ void drawGui(const Scene& scene, const GuiSystem& gui, TextureCache& textures, I
         if (isButton) background = buttonTint(background, gui.hovered() == e->id, gui.pressed() == e->id);
 
         if (e->backgroundTransparency < 1.0f) draw->AddRectFilled(a, b, rgba(background, 1.0f - e->backgroundTransparency), rounding);
-        if (e->borderSize > 0.0f) draw->AddRect(a, b, rgba(e->borderColor, 1.0f - e->backgroundTransparency * 0.5f), rounding, 0, e->borderSize);
 
         if (e->cls == ClassId::ImageLabel || e->cls == ClassId::ImageButton) {
             if (auto tex = textures.get(e->texture.path)) {
@@ -77,16 +141,51 @@ void drawGui(const Scene& scene, const GuiSystem& gui, TextureCache& textures, I
             }
         }
 
-        if ((e->cls == ClassId::TextLabel || e->cls == ClassId::TextButton) && !e->text.empty()) {
-            const float size = std::max(e->textSize, 4.0f);
+        const float textAlpha = 1.0f - std::clamp(e->textTransparency, 0.0f, 1.0f);
+        if ((e->cls == ClassId::TextLabel || e->cls == ClassId::TextButton) && !e->text.empty() && textAlpha > 0.0f) {
+            ImFont* font = fontFor(e->font, fonts);
             const float wrap = e->textWrapped ? std::max(item.rect.size.x - 8.0f, 1.0f) : 0.0f;
+            const float size = e->textScaled ? scaledTextSize(font, e->text, ImVec2(item.rect.size.x, item.rect.size.y), e->textWrapped)
+                                             : std::max(e->textSize, 4.0f);
             const ImVec2 textSize = font->CalcTextSizeA(size, FLT_MAX, wrap, e->text.c_str());
             float x = a.x + 4.0f, y = a.y;
             if (e->textXAlignment == TextXAlignment::Center) x = a.x + (item.rect.size.x - textSize.x) * 0.5f;
             else if (e->textXAlignment == TextXAlignment::Right) x = b.x - textSize.x - 4.0f;
             if (e->textYAlignment == TextYAlignment::Center) y = a.y + (item.rect.size.y - textSize.y) * 0.5f;
             else if (e->textYAlignment == TextYAlignment::Bottom) y = b.y - textSize.y;
-            draw->AddText(font, size, ImVec2(std::floor(x), std::floor(y)), rgba(e->textColor, 1.0f), e->text.c_str(), nullptr, wrap);
+            const ImVec2 pos(std::floor(x), std::floor(y));
+            // Black is the bold face drawn twice, a little apart.
+            const float heavy = e->font == GuiFont::GothamBlack ? std::max(1.0f, std::round(size * 0.035f)) : 0.0f;
+            if (e->textStrokeTransparency < 1.0f) {
+                const ImU32 stroke = rgba(e->textStrokeColor, (1.0f - e->textStrokeTransparency) * textAlpha);
+                const float t = std::max(1.0f, std::round(size / 22.0f));
+                for (int dy = -1; dy <= 1; ++dy)
+                    for (int dx = -1; dx <= 1; ++dx) {
+                        if (!dx && !dy) continue;
+                        const float k = dx && dy ? 0.75f : 1.0f; // rounder corners
+                        const ImVec2 at(pos.x + dx * t * k, pos.y + dy * t * k);
+                        draw->AddText(font, size, at, stroke, e->text.c_str(), nullptr, wrap);
+                        if (heavy > 0.0f) draw->AddText(font, size, ImVec2(at.x + heavy, at.y), stroke, e->text.c_str(), nullptr, wrap);
+                    }
+            }
+            const ImU32 color = rgba(e->textColor, textAlpha);
+            draw->AddText(font, size, pos, color, e->text.c_str(), nullptr, wrap);
+            if (heavy > 0.0f) draw->AddText(font, size, ImVec2(pos.x + heavy, pos.y), color, e->text.c_str(), nullptr, wrap);
+        }
+
+        // A UIGradient inside shades the background, image and text.
+        for (const Instance* c : e->children) {
+            if (c->cls == ClassId::UIGradient && c->enabled) {
+                applyGradient(draw, firstVertex, a, b, *c);
+                break;
+            }
+        }
+        if (e->borderSize > 0.0f) draw->AddRect(a, b, rgba(e->borderColor, 1.0f - e->backgroundTransparency * 0.5f), rounding, 0, e->borderSize);
+        // Its own rotation, then each rotated ancestor's (children turn with their parent).
+        if (std::fmod(e->guiRotation, 360.0f) != 0.0f) rotateVertices(draw, firstVertex, ImVec2((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f), e->guiRotation);
+        for (const Instance* p = e->parent; p && p->isGuiObject(); p = p->parent) {
+            if (std::fmod(p->guiRotation, 360.0f) == 0.0f) continue;
+            if (auto it = rects.find(p->id); it != rects.end()) rotateVertices(draw, firstVertex, centerOf(it->second), p->guiRotation);
         }
         draw->PopClipRect();
     }

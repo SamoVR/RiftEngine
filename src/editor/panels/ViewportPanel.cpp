@@ -166,7 +166,7 @@ void ViewportPanel::draw(UiContext& ui) {
     handleDrop(ui);
 
     // ---- 2D GUI over the scene
-    const OverlayFonts fonts{ theme::fonts().ui, theme::fonts().heading };
+    const OverlayFonts fonts{ theme::fonts().ui, theme::fonts().heading, theme::fonts().medium, theme::fonts().mono };
     std::unique_ptr<GuiSystem> editGui;
     if (GameSession* s = editor.session()) {
         // The GUI belongs to the player: the server view shows the world only.

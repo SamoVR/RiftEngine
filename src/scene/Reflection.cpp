@@ -20,6 +20,7 @@ const std::vector<std::string> kCameraModes = { "ThirdPerson", "FirstPerson" };
 const std::vector<std::string> kTextX = { "Left", "Center", "Right" };
 const std::vector<std::string> kTextY = { "Top", "Center", "Bottom" };
 const std::vector<std::string> kScaleTypes = { "Stretch", "Fit", "Crop" };
+const std::vector<std::string> kFonts = { "Gotham", "GothamMedium", "GothamBold", "GothamBlack", "SourceSans", "SourceSansSemibold", "SourceSansBold", "Arial", "ArialBold", "Code" };
 const std::vector<std::string> kNormalIds = { "Right", "Top", "Back", "Left", "Bottom", "Front" };
 const std::vector<std::string> kParticleOrientations = { "FacingCamera", "FacingCameraWorldUp", "VelocityParallel", "VelocityPerpendicular" };
 const std::vector<std::string> kTextureModes = { "Stretch", "Wrap", "Static" };
@@ -131,6 +132,7 @@ void addGuiObject(std::vector<PropertyInfo>& p) {
     p.push_back(field<&Instance::anchorPoint>("AnchorPoint", "Layout").range(0.0f, 1.0f).speed(0.01f).tip("Which point of the element sits at Position: 0,0 top-left, 0.5,0.5 centre."));
     p.push_back(field<&Instance::zIndex>("ZIndex", "Layout").range(-100.0f, 1000.0f));
     p.push_back(field<&Instance::visible>("Visible", "Layout"));
+    p.push_back(field<&Instance::guiRotation>("Rotation", "Layout").range(-3600.0f, 3600.0f).tip("Degrees, clockwise, around the element's centre (clicks still use the unrotated box)."));
     p.push_back(field<&Instance::color>("BackgroundColor3", "Appearance"));
     p.push_back(field<&Instance::backgroundTransparency>("BackgroundTransparency", "Appearance").range(0.0f, 1.0f).speed(0.01f));
     p.push_back(field<&Instance::cornerRadius>("CornerRadius", "Appearance").range(0.0f, 500.0f).tip("Rounded corners, in pixels."));
@@ -145,6 +147,11 @@ void addText(std::vector<PropertyInfo>& p) {
     p.push_back(field<&Instance::textXAlignment>("TextXAlignment", "Text").enums("TextXAlignment"));
     p.push_back(field<&Instance::textYAlignment>("TextYAlignment", "Text").enums("TextYAlignment"));
     p.push_back(field<&Instance::textWrapped>("TextWrapped", "Text"));
+    p.push_back(field<&Instance::textScaled>("TextScaled", "Text").tip("The text grows or shrinks to fill the element (TextSize is ignored)."));
+    p.push_back(field<&Instance::font>("Font", "Text").enums("Font"));
+    p.push_back(field<&Instance::textTransparency>("TextTransparency", "Text").range(0.0f, 1.0f).speed(0.01f));
+    p.push_back(field<&Instance::textStrokeColor>("TextStrokeColor3", "Text"));
+    p.push_back(field<&Instance::textStrokeTransparency>("TextStrokeTransparency", "Text").range(0.0f, 1.0f).speed(0.01f).tip("An outline around the letters: 0 = solid, 1 = none."));
 }
 
 // Attachment.WorldPosition: computed from the parent part; setting it moves the attachment.
@@ -487,6 +494,14 @@ std::vector<ClassInfo> buildClasses() {
         addGuiObject(c.props);
         addImage(c.props);
     }
+    {
+        ClassInfo& c = def(ClassId::UIGradient, "UIGradient", "Put inside a GUI element: shades its background, text and image with a gradient.", true);
+        c.props.push_back(field<&Instance::enabled>("Enabled", "Behavior"));
+        c.props.push_back(field<&Instance::colorSequence>("Color", "Appearance").tip("Multiplies the element's colours, along the gradient."));
+        c.props.push_back(field<&Instance::transparencySequence>("Transparency", "Appearance").range(0.0f, 1.0f));
+        c.props.push_back(field<&Instance::guiRotation>("Rotation", "Appearance").range(-3600.0f, 3600.0f).tip("0: left to right, 90: top to bottom."));
+        c.props.push_back(field<&Instance::gradientOffset>("Offset", "Appearance").range(-1.0f, 1.0f).speed(0.01f).tip("Moves the gradient, in fractions of the element's size."));
+    }
 
     // Every class can carry Archivable.
     for (ClassInfo& c : classes) {
@@ -734,6 +749,7 @@ const std::vector<std::pair<std::string, std::vector<std::string>>>& allEnums() 
         { "TextXAlignment", kTextX },
         { "TextYAlignment", kTextY },
         { "ScaleType", kScaleTypes },
+        { "Font", kFonts },
         { "NormalId", kNormalIds },
         { "ParticleOrientation", kParticleOrientations },
         { "TextureMode", kTextureModes },

@@ -122,6 +122,8 @@ void PlayerApp::initWindow() {
     config.OversampleH = 2;
     font_ = io.Fonts->AddFontFromFileTTF(Paths::toUtf8(Paths::font("Inter-Regular.ttf")).c_str(), 18.0f, &config);
     bold_ = io.Fonts->AddFontFromFileTTF(Paths::toUtf8(Paths::font("Inter-SemiBold.ttf")).c_str(), 18.0f, &config);
+    medium_ = io.Fonts->AddFontFromFileTTF(Paths::toUtf8(Paths::font("Inter-Medium.ttf")).c_str(), 18.0f, &config);
+    mono_ = io.Fonts->AddFontFromFileTTF(Paths::toUtf8(Paths::font("JetBrainsMono-Regular.ttf")).c_str(), 18.0f, &config);
     if (!font_) font_ = io.Fonts->AddFontDefault();
     if (!bold_) bold_ = font_;
     io.FontDefault = font_;
@@ -259,7 +261,7 @@ void PlayerApp::frame(float dt) {
 
     ImDrawList* background = ImGui::GetBackgroundDrawList();
     background->AddImage(static_cast<ImTextureID>(framebuffer_.texture()), ImVec2(0, 0), ImVec2(static_cast<float>(w), static_cast<float>(h)), ImVec2(0, 1), ImVec2(1, 0));
-    const OverlayFonts fonts{ font_, bold_ };
+    const OverlayFonts fonts{ font_, bold_, medium_, mono_ };
     drawGameGui(*session_, renderer_->textures(), background, glm::vec2(0.0f), fonts);
     drawGameHud(*session_, renderer_->textures(), background, glm::vec2(0.0f), view.size, fonts);
     if (session_->outcome() != GameSession::Outcome::None && !menuOpen_) {

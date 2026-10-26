@@ -192,6 +192,9 @@ void drawInsertMenuItems(Editor& editor) {
         classItem(editor, ClassId::TextButton, "TextButton");
         classItem(editor, ClassId::ImageLabel, "ImageLabel");
         classItem(editor, ClassId::ImageButton, "ImageButton");
+        ImGui::Separator();
+        classItem(editor, ClassId::UIGradient, "UIGradient");
+        theme::tooltip("Goes inside the selected GUI element and shades it with a gradient.");
         ImGui::EndMenu();
     }
     if (theme::beginMenu(ICON_FA_WAND_MAGIC_SPARKLES, theme::color::warning, "Gameplay")) {

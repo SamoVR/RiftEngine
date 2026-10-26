@@ -10,7 +10,9 @@
 
 #include <GLFW/glfw3.h>
 #include <filesystem>
+#include <cstdio>
 #include <fstream>
+#include <iterator>
 
 using namespace rift;
 namespace fs = std::filesystem;
@@ -348,6 +350,66 @@ TEST_CASE("the character spawns on a SpawnLocation and walks with WASD") {
     CHECK(std::abs(s.rootPart()->worldPosition().z - startZ) > 4.0f);
 }
 
+TEST_CASE("a sideways launch carries the character through the air") {
+    Fixture f;
+    Instance* spawn = f.scene.create(ClassId::SpawnLocation, &f.scene.workspace());
+    spawn->position = { 0, 0.2f, 0 };
+    f.script(R"(
+        local character = game.Players:GetPlayers()[1].Character or game.Players:GetPlayers()[1].CharacterAdded:Wait()
+        task.wait(0.3)
+        character.HumanoidRootPart.AssemblyLinearVelocity = Vector3.new(20, 14, 0)
+    )");
+    GameSession& s = f.start(true);
+    f.run(0.3f);
+    REQUIRE(s.rootPart());
+    const float startX = s.rootPart()->worldPosition().x;
+    f.run(0.8f);
+    // Without the carry the character would stop at once (nobody presses a key).
+    CHECK_MESSAGE(s.rootPart()->worldPosition().x - startX > 8.0f, f.dump());
+    // Back on the ground it stops.
+    f.run(1.5f);
+    const float landedX = s.rootPart()->worldPosition().x;
+    f.run(0.5f);
+    CHECK(std::abs(s.rootPart()->worldPosition().x - landedX) < 0.5f);
+}
+
+TEST_CASE("a launch pad throws a character that a LocalScript teleported onto it") {
+    Fixture f;
+    Instance* spawn = f.scene.create(ClassId::SpawnLocation, &f.scene.workspace());
+    spawn->position = { 0, 0.2f, 0 };
+    Instance* pad = f.scene.create(ClassId::Part, &f.scene.workspace());
+    pad->name = "Pad";
+    pad->position = { 20, 0.15f, 0 };
+    pad->size = { 3, 0.3f, 3 };
+    f.script(R"(
+        workspace.Pad.Touched:Connect(function(hit)
+            local root = hit.Parent:FindFirstChild("HumanoidRootPart")
+            if root and not workspace.Pad:GetAttribute("Used") then
+                workspace.Pad:SetAttribute("Used", true)
+                root.AssemblyLinearVelocity = Vector3.new(15, 18, 0)
+            end
+        end)
+    )");
+    f.localScript(R"(
+        local player = game.Players.LocalPlayer
+        local character = player.Character or player.CharacterAdded:Wait()
+        task.wait(0.5)
+        character.HumanoidRootPart.CFrame = CFrame.new(workspace.Pad.Position + Vector3.new(0, 1.6, 0))
+        for k = 1, 8 do
+            task.wait(0.25)
+            local root = character.HumanoidRootPart.CFrame.Position
+            print("at", math.floor(root.X), "body", (character.Torso.CFrame.Position - root).Magnitude < 1)
+        end
+    )");
+    GameSession& s = f.start(true);
+    f.run(3.0f);
+    REQUIRE(s.rootPart());
+    // Thrown towards +X (from x = 20), never backwards, and the body stays with the root.
+    CHECK_MESSAGE(s.rootPart()->worldPosition().x > 26.0f, f.dump());
+    CHECK_MESSAGE(!f.logged("body false"), f.dump());
+    CHECK(glm::length(s.rootPart()->position) < 0.5f); // still in its place inside the model
+}
+
 TEST_CASE("kill bricks work with the Roblox Humanoid pattern, and the player respawns") {
     Fixture f;
     Instance* brick = f.scene.create(ClassId::Part, &f.scene.workspace());
@@ -400,6 +462,59 @@ TEST_CASE("GUI buttons fire Activated") {
     CHECK_MESSAGE(f.logged("clicked"), f.dump());
 }
 
+TEST_CASE("a click on something inside a button activates the button") {
+    Fixture f;
+    Instance* gui = f.scene.create(ClassId::ScreenGui, f.scene.service(ClassId::StarterGui));
+    Instance* button = f.scene.create(ClassId::TextButton, gui);
+    button->name = "Play";
+    button->text = "";
+    button->guiPosition = { 0.5f, -100.0f, 0.5f, -30.0f };
+    button->guiSize = { 0.0f, 200.0f, 0.0f, 60.0f };
+    Instance* label = f.scene.create(ClassId::TextLabel, button); // covers the whole button, opaque
+    label->guiSize = { 1.0f, 0.0f, 1.0f, 0.0f };
+    label->backgroundTransparency = 0.0f;
+    f.script("script.Parent.Play.Activated:Connect(function() print('clicked through the label') end)", gui, ClassId::LocalScript);
+    GameSession& s = f.start(false);
+    ViewportInput view;
+    view.size = { 1000, 600 };
+    view.mouse = { 500, 300 };
+    for (bool down : { false, true, false }) {
+        f.input.setMouseButton(GLFW_MOUSE_BUTTON_LEFT, down);
+        f.input.newFrame();
+        s.update(1.0f / 60.0f, view);
+    }
+    CHECK_MESSAGE(f.logged("clicked through the label"), f.dump());
+}
+
+TEST_CASE("GUI text styling, rotation and UIGradient from scripts") {
+    Fixture f;
+    f.script(R"(
+        local label = Instance.new("TextLabel")
+        label.Font = Enum.Font.GothamBlack
+        label.TextScaled = true
+        label.TextStrokeTransparency = 0
+        label.TextStrokeColor3 = Color3.fromRGB(20, 10, 40)
+        label.Rotation = -8
+        local gradient = Instance.new("UIGradient")
+        gradient.Color = ColorSequence.new(Color3.fromRGB(255, 220, 90), Color3.fromRGB(255, 120, 40))
+        gradient.Transparency = NumberSequence.new(0, 0.5)
+        gradient.Rotation = 90
+        gradient.Offset = Vector2.new(0, 0.25)
+        gradient.Parent = label
+        assert(gradient:IsA("UIComponent") and not gradient:IsA("GuiObject"))
+        print("style", label.Font.Name, label.TextScaled, label.TextStrokeTransparency, label.Rotation, gradient.Rotation, gradient.Offset.Y)
+        local tween = game:GetService("TweenService"):Create(label, TweenInfo.new(0.2), { TextTransparency = 1, Rotation = 0 })
+        tween:Play()
+        tween.Completed:Wait()
+        print("faded", label.TextTransparency, label.Rotation)
+    )");
+    f.start(false);
+    f.run(0.5f);
+    CHECK_MESSAGE(f.logged("style GothamBlack true 0 -8 90 0.25"), f.dump());
+    CHECK_MESSAGE(f.logged("faded 1 0"), f.dump());
+    CHECK(f.errors() == 0);
+}
+
 TEST_CASE("workspace:Raycast from a script") {
     Fixture f;
     f.script(R"(
@@ -447,6 +562,99 @@ TEST_CASE("the demo obby runs its scripts without errors") {
     CHECK(session.character());
 }
 
+TEST_CASE("the Crystal Isles demo plays a whole round") {
+    // A copy, so nothing is written into the example; with a short round.
+    const fs::path source = Paths::engineData().parent_path() / "examples/CrystalIsles";
+    const fs::path root = fs::temp_directory_path() / "rift_crystal_isles";
+    std::error_code ec;
+    fs::remove_all(root, ec);
+    fs::copy(source, root, fs::copy_options::recursive, ec);
+    REQUIRE_MESSAGE(!ec, ec.message());
+    const fs::path scripts = root / "scenes/CrystalIsles/scripts";
+    {
+        std::ifstream in(scripts / "Config.lua");
+        std::string config((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        in.close();
+        const std::string from = "Config.RoundTime = 120";
+        REQUIRE(config.find(from) != std::string::npos);
+        config.replace(config.find(from), from.size(), "Config.RoundTime = 6");
+        std::ofstream(scripts / "Config.lua", std::ios::trunc) << config;
+    }
+    // The player presses Play, then walks into gems (teleporting onto them).
+    std::ofstream(scripts / "TestPlayer.lua") << R"(
+        local player = game.Players.LocalPlayer
+        local remotes = game.ReplicatedStorage.Remotes
+        local gui = player.PlayerGui
+        task.wait(1)
+        print("menu", gui.MenuGui.Enabled)
+        remotes.StartRound:FireServer()
+        remotes.RoundEvent.OnClientEvent:Connect(function(kind, data)
+            if kind == "Results" then print("results", data.Score, data.Blue + data.Purple + data.Gold, gui.ResultsGui.Enabled) end
+        end)
+        while game.ReplicatedStorage.RoundState.Value ~= "Playing" do task.wait(0.1) end
+        print("hud", gui.HudGui.Enabled)
+        for _ = 1, 3 do
+            task.wait(0.4)
+            local gem = workspace.ActiveGems:GetChildren()[1]
+            if gem then player.Character.HumanoidRootPart.CFrame = CFrame.new(gem:GetPivot().Position) end
+        end
+    )";
+
+    const fs::path previousRoot = Paths::projectRoot();
+    Paths::setProjectRoot(root);
+    Scene scene;
+    const fs::path file = root / "scenes/CrystalIsles/scene.json";
+    const SceneIO::LoadResult loaded = SceneIO::loadScene(scene, file);
+    REQUIRE(loaded.ok);
+    std::string warnings;
+    for (const std::string& w : loaded.warnings) warnings += w + "\n";
+    CHECK_MESSAGE(loaded.warnings.empty(), warnings);
+    CHECK_FALSE(scene.terrain().empty());
+    for (Instance* c : scene.starterPlayer().children) {
+        if (c->cls != ClassId::StarterPlayerScripts) continue;
+        Instance* s = scene.create(ClassId::LocalScript, c);
+        s->name = "TestPlayer";
+        s->source = "scripts/TestPlayer.lua";
+    }
+    ScriptStore store;
+    store.reset(Paths::toUtf8(file.parent_path()));
+    Input input;
+    GameSession::Options options;
+    options.dataStoreFolder = root / "datastores";
+    {
+        GameSession session(scene, store, input, options);
+        session.start();
+        ViewportInput view;
+        view.size = { 1280, 720 };
+        for (int i = 0; i < 60 * 14; ++i) {
+            input.newFrame();
+            session.update(1.0f / 60.0f, view);
+        }
+        std::string out;
+        int errors = 0;
+        bool menu = false, hud = false, results = false;
+        int score = 0, gems = 0;
+        for (const auto& line : session.logLines()) {
+            out += line.text + "\n";
+            if (line.level == LogLevel::Error) ++errors;
+            if (line.text.find("menu true") != std::string::npos) menu = true;
+            if (line.text.find("hud true") != std::string::npos) hud = true;
+            if (line.text.rfind("results ", 0) == 0) {
+                results = line.text.find(" true") != std::string::npos;
+                std::sscanf(line.text.c_str(), "results %d %d", &score, &gems);
+            }
+        }
+        CHECK_MESSAGE(errors == 0, out);
+        CHECK_MESSAGE(menu, out);
+        CHECK_MESSAGE(hud, out);
+        CHECK_MESSAGE(results, out);
+        CHECK_MESSAGE(gems >= 1, out);
+        CHECK_MESSAGE(score >= gems, out);
+    }
+    Paths::setProjectRoot(previousRoot);
+    fs::remove_all(root, ec);
+}
+
 TEST_CASE("every Lua example in the docs compiles") {
     const fs::path root = Paths::engineData().parent_path();
     int blocks = 0;
@@ -488,14 +696,24 @@ TEST_CASE("every example scene loads and runs without script errors") {
         ScriptStore store;
         store.reset(Paths::toUtf8(entry.path().parent_path()));
         Input input;
-        GameSession session(scene, store, input, GameSession::Options{});
-        session.start();
-        for (int i = 0; i < 60; ++i) {
-            input.newFrame();
-            session.update(1.0f / 60.0f, ViewportInput{});
+        // Assets resolve in the example's own project (examples/<name>/scenes/<scene>/scene.json).
+        const fs::path previousRoot = Paths::projectRoot();
+        Paths::setProjectRoot(entry.path().parent_path().parent_path().parent_path());
+        GameSession::Options options;
+        options.dataStoreFolder = fs::temp_directory_path() / "rift_example_datastores";
+        {
+            GameSession session(scene, store, input, options);
+            session.start();
+            for (int i = 0; i < 60; ++i) {
+                input.newFrame();
+                session.update(1.0f / 60.0f, ViewportInput{});
+            }
+            for (const auto& line : session.logLines()) CHECK_MESSAGE(line.level != LogLevel::Error, line.text);
         }
-        for (const auto& line : session.logLines()) CHECK_MESSAGE(line.level != LogLevel::Error, line.text);
+        Paths::setProjectRoot(previousRoot);
     }
+    std::error_code ec;
+    fs::remove_all(fs::temp_directory_path() / "rift_example_datastores", ec);
     CHECK(scenes >= 2);
 }
 
