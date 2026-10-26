@@ -768,6 +768,11 @@ public:
 		// a pointer to the current language definition is provided so callbacks have easy access
 		std::vector<std::string> suggestions;
 
+		// RIFT: optional, parallel to suggestions: a short kind / type shown at the
+		// right of each row, and a sentence shown under the list for the selected one
+		std::vector<std::string> details;
+		std::vector<std::string> descriptions;
+
 		// set this to true if you are building the suggestion list asynchronously and provide it later
 		// this way autocomplete is not cancelled if the suggestion list is empty and the user hits tab or enter
 		bool suggestionsPromise = false;

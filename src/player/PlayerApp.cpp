@@ -120,10 +120,16 @@ void PlayerApp::initWindow() {
     ImGui_ImplOpenGL3_Init("#version 330");
     ImFontConfig config;
     config.OversampleH = 2;
-    font_ = io.Fonts->AddFontFromFileTTF(Paths::toUtf8(Paths::font("Inter-Regular.ttf")).c_str(), 18.0f, &config);
-    bold_ = io.Fonts->AddFontFromFileTTF(Paths::toUtf8(Paths::font("Inter-SemiBold.ttf")).c_str(), 18.0f, &config);
-    medium_ = io.Fonts->AddFontFromFileTTF(Paths::toUtf8(Paths::font("Inter-Medium.ttf")).c_str(), 18.0f, &config);
-    mono_ = io.Fonts->AddFontFromFileTTF(Paths::toUtf8(Paths::font("JetBrainsMono-Regular.ttf")).c_str(), 18.0f, &config);
+    // A missing font file (an older build folder) falls back to the regular one instead of failing.
+    auto load = [&](const char* file) -> ImFont* {
+        std::error_code ec;
+        const fs::path path = Paths::font(file);
+        return fs::exists(path, ec) ? io.Fonts->AddFontFromFileTTF(Paths::toUtf8(path).c_str(), 18.0f, &config) : nullptr;
+    };
+    font_ = load("Inter-Regular.ttf");
+    bold_ = load("Inter-SemiBold.ttf");
+    medium_ = load("Inter-Medium.ttf");
+    mono_ = load("JetBrainsMono-Regular.ttf");
     if (!font_) font_ = io.Fonts->AddFontDefault();
     if (!bold_) bold_ = font_;
     io.FontDefault = font_;
@@ -256,6 +262,7 @@ void PlayerApp::frame(float dt) {
     settings.editor = false;
     settings.grid = false;
     settings.dt = session_->paused() ? 0.0f : dt;
+    settings.hiddenModel = session_->firstPersonCharacter();
     framebuffer_.resize(w, h, 4);
     renderer_->render(session_->clientScene(), camera, settings, framebuffer_); // what the player sees
 

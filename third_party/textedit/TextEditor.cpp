@@ -201,6 +201,10 @@ bool TextEditor::render(const char* title, const ImVec2& size, ImGuiChildFlags c
 		renderFindReplace();
 		renderPopups();
 
+		// RIFT: an accepted autocomplete suggestion (and find / replace) edits the
+		// document above, after the change check, so report those edits too
+		documentChanged |= updateState();
+
 		// handle scrolling caused by actions in this frame
 		handlePossibleScrolling();
 
@@ -1277,7 +1281,7 @@ void TextEditor::handleKeyboardInputs() {
 
 		// clipboard operations
 		else if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_X)) { cut(); }
-		else if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Delete)) { cut(); }
+		else if (ImGui::Shortcut(ImGuiMod_Shift | ImGuiKey_Delete)) { cut(); } // RIFT: Ctrl+Delete deletes a word (Windows)
 
 		else if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_C)) { copy(); }
 		else if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Insert)) { copy(); }
@@ -1292,9 +1296,11 @@ void TextEditor::handleKeyboardInputs() {
 		// remove text
 		else if (!config.readOnly && ImGui::Shortcut(ImGuiKey_Delete, ImGuiInputFlags_Repeat)) { handleDelete(false); }
 		else if (!config.readOnly && ImGui::Shortcut(ImGuiMod_Alt | ImGuiKey_Delete, ImGuiInputFlags_Repeat)) { handleDelete(true); }
+		else if (!config.readOnly && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Delete, ImGuiInputFlags_Repeat)) { handleDelete(true); }
 
 		else if (!config.readOnly && ImGui::Shortcut(ImGuiKey_Backspace, ImGuiInputFlags_Repeat)) { handleBackspace(false); }
 		else if (!config.readOnly && ImGui::Shortcut(ImGuiMod_Alt | ImGuiKey_Backspace, ImGuiInputFlags_Repeat)) { handleBackspace(true); }
+		else if (!config.readOnly && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Backspace, ImGuiInputFlags_Repeat)) { handleBackspace(true); }
 
 		else if (!config.readOnly && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_K)) { removeSelectedLines(); }
 
@@ -1381,7 +1387,7 @@ void TextEditor::handleKeyboardInputs() {
 				for (auto i = 0; i < io.InputQueueCharacters.size(); i++) {
 					const auto character = io.InputQueueCharacters[i];
 
-					if (character == '\n' || character >= 32) {
+					if (character == '\n' || (character >= 32 && character != 127)) { // RIFT: never DEL (Ctrl+Backspace on Windows)
 						handleCharacter(character);
 					}
 				}
@@ -8486,7 +8492,7 @@ void TextEditor::AutoComplete::cancel() {
 //	renderSuggestion
 //
 
-static bool renderSuggestion(const std::string_view& suggestion, const std::string_view& searchTerm, float width, bool selected) {
+static bool renderSuggestion(const std::string_view& suggestion, const std::string_view& searchTerm, float width, bool selected, const std::string_view& detail = {}) {
 	// custom widget to render an autocomplete suggestion in the style of Visual Studio Code
 	auto glyphPos = ImGui::GetCursorScreenPos();
 	const auto size = ImVec2(width, ImGui::GetFrameHeightWithSpacing());
@@ -8500,6 +8506,17 @@ static bool renderSuggestion(const std::string_view& suggestion, const std::stri
 	// highlight selected item
 	if (selected) {
 		drawList->AddRectFilled(glyphPos, glyphPos + size, ImGui::GetColorU32(ImGuiCol_Header));
+	}
+
+	// RIFT: the detail (kind / type), dim, at the right
+	if (!detail.empty()) {
+		const auto padding = ImGui::GetStyle().FramePadding;
+		const auto detailSize = ImGui::CalcTextSize(detail.data(), detail.data() + detail.size());
+		const auto room = width - padding.x * 2.0f - (static_cast<float>(suggestion.size()) + 2.0f) * glyphWidth;
+		if (detailSize.x <= room) {
+			drawList->AddText(ImVec2(glyphPos.x + width - padding.x - detailSize.x, glyphPos.y + padding.y),
+				ImGui::GetColorU32(ImGuiCol_TextDisabled), detail.data(), detail.data() + detail.size());
+		}
 	}
 
 	// process all UTF-8 glyphs in suggestion
@@ -8624,7 +8641,11 @@ bool TextEditor::AutoComplete::render(Document& document, Cursors& cursors, Type
 
 	const auto visibleSuggestions = (suggestions == 0) ? 1 : std::min(static_cast<size_t>(10), suggestions);
 	const auto& style = ImGui::GetStyle();
-	const auto height = ImGui::GetFrameHeightWithSpacing() * visibleSuggestions + style.WindowPadding.y * 2.0f;
+	const auto listHeight = ImGui::GetFrameHeightWithSpacing() * visibleSuggestions;
+	// RIFT: room under the list for the selected suggestion's description
+	const bool describe = suggestions && !state.descriptions.empty();
+	const auto describeHeight = describe ? ImGui::GetTextLineHeightWithSpacing() * 3.0f + style.ItemSpacing.y * 2.0f : 0.0f;
+	const auto height = listHeight + describeHeight + style.WindowPadding.y * 2.0f;
 	ImGui::SetNextWindowSize(ImVec2(configuration.suggestionWidth * glyphSize.x, height));
 
 	const ImGuiWindowFlags flags =
@@ -8679,7 +8700,8 @@ bool TextEditor::AutoComplete::render(Document& document, Cursors& cursors, Type
 					result = true;
 				}
 
-				// render suggestions
+				// render suggestions (RIFT: in a list of their own, so the description stays put)
+				ImGui::BeginChild("##suggestions", ImVec2(0.0f, listHeight), ImGuiChildFlags_None, ImGuiWindowFlags_NoNav);
 				for (size_t i = 0; i < items; i++) {
 					// ensure unique ID
 					ImGui::PushID(static_cast<int>(i));
@@ -8691,7 +8713,8 @@ bool TextEditor::AutoComplete::render(Document& document, Cursors& cursors, Type
 						ImGui::SetScrollHereY(0.5f);
 					}
 
-					if (renderSuggestion(state.suggestions[i].c_str(), state.searchTerm, ImGui::GetContentRegionAvail().x, selected)) {
+					const std::string_view detail = i < state.details.size() ? std::string_view(state.details[i]) : std::string_view();
+					if (renderSuggestion(state.suggestions[i].c_str(), state.searchTerm, ImGui::GetContentRegionAvail().x, selected, detail)) {
 						// user clicked on a suggestion, use it
 						currentSelection = i;
 						requestDeactivation = true;
@@ -8699,6 +8722,15 @@ bool TextEditor::AutoComplete::render(Document& document, Cursors& cursors, Type
 					}
 
 					ImGui::PopID();
+				}
+				ImGui::EndChild();
+
+				if (describe) {
+					ImGui::Separator();
+					const auto& text = currentSelection < state.descriptions.size() ? state.descriptions[currentSelection] : std::string();
+					ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+					ImGui::TextWrapped("%s", text.c_str());
+					ImGui::PopStyleColor();
 				}
 
 			} else {
@@ -8796,6 +8828,8 @@ void TextEditor::AutoComplete::refreshSuggestions() {
 
 	} else {
 		state.suggestions.clear();
+		state.details.clear();
+		state.descriptions.clear();
 	}
 
 	currentSelection = 0;

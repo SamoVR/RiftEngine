@@ -9,6 +9,7 @@
 #include "core/TransformUtil.h"
 
 #include <algorithm>
+#include <unordered_set>
 #include <cmath>
 
 namespace rift {
@@ -716,7 +717,22 @@ void LuaRuntime::Impl::registerInstance() {
                 || (i->cls == ClassId::BindableFunction && name == "OnInvoke")) {
                 fail(name + " is a callback member of " + classInfo(i->cls).name + "; you can only set it");
             }
-            if (i->cls == ClassId::Workspace && name == "CurrentCamera") return sol::make_object(lua, Camera{});
+            if (i->cls == ClassId::Workspace && name == "CurrentCamera") {
+                // The client's Workspace.Camera; the server has no camera object.
+                if (isClient()) {
+                    if (Instance* c = scene.find(me().cameraId)) return instanceFor(c->id);
+                }
+                return sol::make_object(lua, Camera{});
+            }
+            if (i->cls == ClassId::Camera) {
+                // The live camera behind the object (same as the Camera API).
+                static const std::unordered_set<std::string> live = { "CFrame", "Focus", "FieldOfView", "CameraType", "CameraSubject", "ViewportSize",
+                                                                      "ScreenPointToRay", "ViewportPointToRay", "WorldToScreenPoint", "WorldToViewportPoint" };
+                if (live.count(name)) {
+                    sol::userdata camera = sol::make_object(lua, Camera{});
+                    return camera[name].get<sol::object>();
+                }
+            }
             if (i->cls == ClassId::Sound) {
                 if (name == "IsPlaying") return sol::make_object(lua, session.soundPlaying(*i));
                 if (name == "TimePosition") return sol::make_object(lua, session.soundTime(*i));
@@ -737,6 +753,11 @@ void LuaRuntime::Impl::registerInstance() {
             if (key.get_type() != sol::type::string) fail("Instance members are set by name");
             const std::string name = key.as<std::string>();
             Instance* i = need(h);
+            if (i->cls == ClassId::Camera && (name == "CFrame" || name == "FieldOfView" || name == "CameraType")) {
+                sol::userdata camera = sol::make_object(lua, Camera{});
+                camera[name] = sol::object(value); // (value lives on the calling coroutine's stack)
+                return;
+            }
             if (name == "Parent") {
                 if (!scene.find(i->id)) fail("The Parent property of " + i->name + " is locked (it was destroyed)");
                 Instance* newParent = nullptr;

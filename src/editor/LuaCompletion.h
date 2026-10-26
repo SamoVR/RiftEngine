@@ -23,4 +23,15 @@ namespace rift {
 std::vector<std::string> luaCompletions(const std::string& line, size_t termStart, const std::string& term, const Scene& scene,
                                         const Instance* script, const std::string& document);
 
+// The same with what each one is: `detail` is short ("property · Vector3",
+// "method", "Part"), `description` a sentence (may be empty).
+struct LuaCompletion {
+    std::string text, detail, description;
+};
+std::vector<LuaCompletion> luaCompletionItems(const std::string& line, size_t termStart, const std::string& term, const Scene& scene,
+                                              const Instance* script, const std::string& document);
+
+// A one-line description of a global, method, event or common property ("" if unknown).
+const std::string& luaDoc(const std::string& name);
+
 } // namespace rift

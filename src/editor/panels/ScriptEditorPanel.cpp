@@ -158,14 +158,21 @@ void ScriptEditorPanel::open(UiContext& ui, const Editor::ScriptRequest& request
     // Suggestions as you type, and after "." / ":" (Ctrl+Space asks for them).
     TextEditor::AutoCompleteConfig complete;
     complete.triggerDelay = std::chrono::milliseconds(60);
-    complete.suggestionWidth = 34;
+    complete.suggestionWidth = 52;
     Doc* raw = doc.get();
     Editor* owner = &ui.editor;
     complete.callback = [raw, owner](TextEditor::AutoCompleteState& state) {
         const std::string line = raw->editor.GetLineText(state.searchTermStart.line);
         const size_t start = utf8Offset(line, state.searchTermStart.index);
         const Instance* script = raw->scriptId ? owner->scene().find(raw->scriptId) : nullptr;
-        state.suggestions = luaCompletions(line, start, state.searchTerm, owner->scene(), script, raw->editor.GetText());
+        state.suggestions.clear();
+        state.details.clear();
+        state.descriptions.clear();
+        for (LuaCompletion& c : luaCompletionItems(line, start, state.searchTerm, owner->scene(), script, raw->editor.GetText())) {
+            state.suggestions.push_back(std::move(c.text));
+            state.details.push_back(std::move(c.detail));
+            state.descriptions.push_back(std::move(c.description));
+        }
     };
     e.SetAutoCompleteConfig(&complete);
     doc->synced = store.find(request.path)->text;

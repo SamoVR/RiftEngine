@@ -410,6 +410,79 @@ TEST_CASE("a launch pad throws a character that a LocalScript teleported onto it
     CHECK(glm::length(s.rootPart()->position) < 0.5f); // still in its place inside the model
 }
 
+TEST_CASE("workspace.CurrentCamera is the client's Workspace.Camera object") {
+    Fixture f;
+    f.localScript(R"(
+        local camera = workspace.CurrentCamera
+        print("camera", camera.ClassName, camera.Name, camera.Parent == workspace, camera:IsA("Camera"), workspace:FindFirstChild("Camera") == camera)
+        camera.CameraType = Enum.CameraType.Scriptable
+        camera.CFrame = CFrame.new(0, 20, 30)
+        camera.FieldOfView = 50
+        task.wait(0.2)
+        local ray = camera:ScreenPointToRay(10, 10)
+        print("moved", math.floor(camera.CFrame.Position.Y + 0.5), camera.FieldOfView, camera.CameraType.Name, typeof(ray.Direction))
+    )");
+    GameSession& s = f.start(true);
+    f.run(0.5f);
+    CHECK_MESSAGE(f.logged("camera Camera Camera true true true"), f.dump());
+    CHECK_MESSAGE(f.logged("moved 20 50 Scriptable Vector3"), f.dump());
+    CHECK(s.camera().position.y == doctest::Approx(20.0f));
+    // The object mirrors the camera (what the Explorer and Properties show).
+    const Instance* cam = nullptr;
+    for (Instance* c : s.clientScene().workspace().children) if (c->cls == ClassId::Camera) cam = c;
+    REQUIRE(cam);
+    CHECK(cam->fieldOfView == doctest::Approx(50.0f));
+    CHECK(cam->c0.position.y == doctest::Approx(20.0f));
+    CHECK(cam->cameraType == CameraKind::Scriptable);
+}
+
+TEST_CASE("an anchored HumanoidRootPart holds the character in place, even in the air") {
+    Fixture f;
+    Instance* spawn = f.scene.create(ClassId::SpawnLocation, &f.scene.workspace());
+    spawn->position = { 0, 0.2f, 0 };
+    f.script(R"(
+        local player = game.Players:GetPlayers()[1]
+        local character = player.Character or player.CharacterAdded:Wait()
+        task.wait(0.2)
+        character.HumanoidRootPart.CFrame = CFrame.new(0, 12, 0)
+        character.HumanoidRootPart.Anchored = true
+        task.wait(1)
+        character.HumanoidRootPart.Anchored = false
+    )");
+    GameSession& s = f.start(true);
+    f.run(0.4f);
+    REQUIRE(s.rootPart());
+    f.input.setKey(GLFW_KEY_W, true);
+    f.run(0.6f);
+    f.input.setKey(GLFW_KEY_W, false);
+    // Still up there: no falling, no walking.
+    CHECK(s.rootPart()->worldPosition().y == doctest::Approx(12.0f).epsilon(0.02));
+    CHECK(std::abs(s.rootPart()->worldPosition().z) < 0.1f);
+    f.run(1.5f);
+    CHECK(s.rootPart()->worldPosition().y < 3.0f); // unanchored: it falls
+}
+
+TEST_CASE("a dead character's root stays where it died while the body falls apart") {
+    Fixture f;
+    Instance* spawn = f.scene.create(ClassId::SpawnLocation, &f.scene.workspace());
+    spawn->position = { 0, 0.2f, 0 };
+    f.script(R"(
+        local player = game.Players:GetPlayers()[1]
+        local character = player.Character or player.CharacterAdded:Wait()
+        task.wait(0.3)
+        character.Humanoid.Health = 0
+    )");
+    GameSession& s = f.start(true);
+    f.run(0.5f);
+    const Instance* root = nullptr;
+    s.scene().forEachInTree([&](Instance& i) { if (i.name == "HumanoidRootPart") root = &i; });
+    REQUIRE(root);
+    const float y = root->worldPosition().y;
+    f.run(1.5f); // before the respawn
+    CHECK(root->worldPosition().y == doctest::Approx(y).epsilon(0.05)); // did not fall through the floor
+    CHECK(s.camera().position.y > 0.0f);
+}
+
 TEST_CASE("kill bricks work with the Roblox Humanoid pattern, and the player respawns") {
     Fixture f;
     Instance* brick = f.scene.create(ClassId::Part, &f.scene.workspace());

@@ -5,6 +5,23 @@ GitHub release page show the section of the version being installed.
 
 RIFT is in **beta**: versions are 0.x until the engine is complete.
 
+## 0.2.1
+
+### Fixes
+- Games built with 0.2.0 could stop at start with "Could not load font file": the build now includes every font the player uses, and a missing font no longer stops a game.
+- Accepting an autocomplete suggestion (Tab, Enter or a click) changed the script editor's text but not the script the game ran, until the next key press.
+- Ctrl+Backspace and Ctrl+Delete delete a whole word in the script editor.
+- An anchored part in a character (the HumanoidRootPart, a held handle) holds it in place, like Roblox: no walking, no falling.
+- When the character dies, the camera follows the head as the body falls apart instead of dropping through the map inside the head.
+- In first person the player's own character is not drawn, so the camera no longer looks out from inside the head.
+
+### Faster
+- Parts are drawn without their insides (back faces are skipped) and only when they are in view; the shadow pass skips what is outside the shadow map. A busy scene draws about a third fewer triangles.
+
+### Scripting
+- `workspace.CurrentCamera` is a Camera object in the client's Workspace, shown in the Explorer with its CFrame, FieldOfView and CameraType.
+- Autocomplete says what each suggestion is (property and its type, method, event, the class of a child, service, ...) and shows a short description of the selected one.
+
 ## 0.2.0
 
 ### Crystal Isles, a demo game

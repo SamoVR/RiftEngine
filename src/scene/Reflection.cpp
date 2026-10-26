@@ -20,6 +20,7 @@ const std::vector<std::string> kCameraModes = { "ThirdPerson", "FirstPerson" };
 const std::vector<std::string> kTextX = { "Left", "Center", "Right" };
 const std::vector<std::string> kTextY = { "Top", "Center", "Bottom" };
 const std::vector<std::string> kScaleTypes = { "Stretch", "Fit", "Crop" };
+const std::vector<std::string> kCameraTypes = { "Custom", "Scriptable", "Fixed" };
 const std::vector<std::string> kFonts = { "Gotham", "GothamMedium", "GothamBold", "GothamBlack", "SourceSans", "SourceSansSemibold", "SourceSansBold", "Arial", "ArialBold", "Code" };
 const std::vector<std::string> kNormalIds = { "Right", "Top", "Back", "Left", "Bottom", "Front" };
 const std::vector<std::string> kParticleOrientations = { "FacingCamera", "FacingCameraWorldUp", "VelocityParallel", "VelocityPerpendicular" };
@@ -502,6 +503,15 @@ std::vector<ClassInfo> buildClasses() {
         c.props.push_back(field<&Instance::guiRotation>("Rotation", "Appearance").range(-3600.0f, 3600.0f).tip("0: left to right, 90: top to bottom."));
         c.props.push_back(field<&Instance::gradientOffset>("Offset", "Appearance").range(-1.0f, 1.0f).speed(0.01f).tip("Moves the gradient, in fractions of the element's size."));
     }
+    {
+        // Made by the game for each player (Workspace.Camera); never saved.
+        ClassInfo& c = def(ClassId::Camera, "Camera", "The player's view: workspace.CurrentCamera. Custom follows the character; Scriptable is placed by scripts.", false);
+        const uint32_t live = PF_Editor | PF_ScriptRead | PF_ScriptWrite;
+        c.props.push_back(field<&Instance::c0>("CFrame", "Camera").flagsSet(live).tip("Where the camera is and looks (along -Z)."));
+        c.props.push_back(field<&Instance::fieldOfView>("FieldOfView", "Camera").range(1.0f, 120.0f).flagsSet(live).tip("Vertical, in degrees."));
+        c.props.push_back(field<&Instance::cameraType>("CameraType", "Camera").enums("CameraType").flagsSet(live)
+                              .tip("Custom: follows the character. Scriptable: stays where scripts put it. Fixed: stays, turned by the player."));
+    }
 
     // Every class can carry Archivable.
     for (ClassInfo& c : classes) {
@@ -750,6 +760,7 @@ const std::vector<std::pair<std::string, std::vector<std::string>>>& allEnums() 
         { "TextYAlignment", kTextY },
         { "ScaleType", kScaleTypes },
         { "Font", kFonts },
+        { "CameraType", kCameraTypes },
         { "NormalId", kNormalIds },
         { "ParticleOrientation", kParticleOrientations },
         { "TextureMode", kTextureModes },

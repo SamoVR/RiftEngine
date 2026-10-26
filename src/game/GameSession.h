@@ -98,6 +98,12 @@ public:
         // Character (server instances)
         uint64_t characterId = 0, humanoidId = 0, rootPartId = 0;
         glm::vec3 rootOffset{ 0.0f }, rootRotation{ 0.0f }; // the root part's place in the character model
+        // Workspace.Camera in this client's world, and what it was last set to
+        // (a change since then came from the Properties panel or a script).
+        uint64_t cameraId = 0;
+        CFrameValue cameraFrame;
+        float cameraFov = 0.0f;
+        int cameraKind = -1;
         CharacterController* controller = nullptr;
         float lastHealth = 0.0f, respawnTimer = 0.0f, facingYaw = 0.0f, runningSpeed = -1.0f;
         bool dead = false, guiFilled = false, walkTarget = false;
@@ -157,6 +163,9 @@ public:
     GuiSystem& gui() { return *focused().gui; }
     GameCamera& camera() { return focused().camera; }
     const GameCamera& camera() const { return focused().camera; }
+    // The focused player's character while its camera is in first person (it
+    // is not drawn then, so the camera does not look out of the head); 0 otherwise.
+    uint64_t firstPersonCharacter() const;
     AudioSystem* audio() const { return options_.audio; }
     const Options& options() const { return options_; }
     const ViewportInput& viewport() const { return focused().view; }
@@ -260,6 +269,7 @@ private:
     void pickUpTools();
     void updateSlots(Client& c);
     void updateCamera(Client& c, float dt);
+    Instance* cameraObject(Client& c); // (re)makes the client's Workspace.Camera
     void updateSounds();
     void stopAllSounds();
     void deliverRemotes();

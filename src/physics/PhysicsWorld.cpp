@@ -283,6 +283,11 @@ public:
 
         JPH::Vec3 v;
         bool airborne = false;
+        if (input_.anchored) {
+            // Like Roblox: an anchored part holds the whole character in place (no walking, no falling).
+            character_->SetLinearVelocity(JPH::Vec3::sZero());
+            return;
+        }
         if (input_.swimming) {
             // Swimming: drift down slowly, Space swims up, move at a little below walking speed.
             glm::vec3 swim = input_.moveDirection;

@@ -111,6 +111,39 @@ TEST_CASE("completion: members of scene objects, services, types, enums and loca
     CHECK(complete(scene, "local x = 12.").empty());
 }
 
+TEST_CASE("completion: suggestions say what they are") {
+    Scene scene;
+    Instance* door = scene.create(ClassId::Part, &scene.workspace());
+    door->name = "Door";
+    auto find = [](const std::vector<LuaCompletion>& items, const std::string& text) -> const LuaCompletion* {
+        for (const LuaCompletion& c : items) if (c.text == text) return &c;
+        return nullptr;
+    };
+    auto items = luaCompletionItems("workspace.", 10, "", scene, nullptr, "workspace.");
+    REQUIRE(find(items, "Door"));
+    CHECK(find(items, "Door")->detail == "Part");
+    items = luaCompletionItems("workspace.Door.", 15, "", scene, nullptr, "workspace.Door.");
+    REQUIRE(find(items, "Anchored"));
+    CHECK(find(items, "Anchored")->detail == "property: bool");
+    CHECK_FALSE(find(items, "Anchored")->description.empty());
+    REQUIRE(find(items, "Touched"));
+    CHECK(find(items, "Touched")->detail == "event");
+    REQUIRE(find(items, "Material"));
+    CHECK(find(items, "Material")->detail == "property: Enum.Material");
+    items = luaCompletionItems("workspace.Door:", 15, "", scene, nullptr, "workspace.Door:");
+    REQUIRE(find(items, "Destroy"));
+    CHECK(find(items, "Destroy")->detail == "method");
+    CHECK_FALSE(find(items, "Destroy")->description.empty());
+    items = luaCompletionItems("pri", 0, "pri", scene, nullptr, "pri");
+    REQUIRE(find(items, "print"));
+    CHECK(find(items, "print")->detail == "global");
+    // The names-only list is the same, in the same order.
+    const auto names = luaCompletions("workspace.Door.", 15, "", scene, nullptr, "workspace.Door.");
+    items = luaCompletionItems("workspace.Door.", 15, "", scene, nullptr, "workspace.Door.");
+    REQUIRE(names.size() == items.size());
+    for (size_t k = 0; k < names.size(); ++k) CHECK(names[k] == items[k].text);
+}
+
 TEST_CASE("completion: every listed method and event exists in the Lua API") {
     // Instances the script can reach for each class with a method or event in the catalogue.
     Scene scene;
@@ -131,13 +164,15 @@ TEST_CASE("completion: every listed method and event exists in the Lua API") {
                       "  if cls == 'Workspace' then return workspace end\n"
                       "  if cls == 'Players' or cls == 'StarterGui' then return game:GetService(cls) end\n"
                       "  if cls == 'Terrain' then return workspace.Terrain end\n"
+                      "  if cls == 'Camera' then return workspace.CurrentCamera end\n"
                       "  local ok, obj = pcall(Instance.new, cls)\n"
                       "  return ok and obj or nil\n"
                       "end\n";
     int checks = 0;
     auto reachable = [](ClassId cls) {
         const ClassInfo& info = classInfo(cls);
-        return info.creatable || cls == ClassId::Workspace || cls == ClassId::Players || cls == ClassId::StarterGui || cls == ClassId::Terrain;
+        return info.creatable || cls == ClassId::Workspace || cls == ClassId::Players || cls == ClassId::StarterGui || cls == ClassId::Terrain
+            || cls == ClassId::Camera;
     };
     for (const std::string& m : luaapi::methodNames()) {
         for (int c = 0; c < kClassCount; ++c) {

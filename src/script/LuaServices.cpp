@@ -990,10 +990,11 @@ void LuaRuntime::Impl::registerServices() {
             return hum ? instanceOrNil(scene.find(hum)) : nil();
         }, [](Camera&, sol::object) {}),
         "ViewportSize", sol::property([this](Camera&) { return Vector2L{ view().size }; }),
-        "ScreenPointToRay", [screenRay](Camera&, float x, float y) { return screenRay(x, y); },
-        "ViewportPointToRay", [screenRay](Camera&, float x, float y) { return screenRay(x, y); },
-        "WorldToScreenPoint", [worldToScreen](Camera&, const Vector3L& p) { return worldToScreen(p); },
-        "WorldToViewportPoint", [worldToScreen](Camera&, const Vector3L& p) { return worldToScreen(p); });
+        // (self is the Camera value or the Workspace.Camera object)
+        "ScreenPointToRay", [screenRay](sol::object, float x, float y) { return screenRay(x, y); },
+        "ViewportPointToRay", [screenRay](sol::object, float x, float y) { return screenRay(x, y); },
+        "WorldToScreenPoint", [worldToScreen](sol::object, const Vector3L& p) { return worldToScreen(p); },
+        "WorldToViewportPoint", [worldToScreen](sol::object, const Vector3L& p) { return worldToScreen(p); });
 
     // ------------------------------------------------------------ KeyframeSequenceProvider
     lua.new_usertype<KeyframeSequenceProvider>("KeyframeSequenceProvider", sol::no_constructor,

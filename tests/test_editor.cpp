@@ -354,7 +354,9 @@ TEST_CASE("exporting a game makes a self-contained folder") {
     REQUIRE_MESSAGE(r.ok, r.error);
     CHECK(fs::exists(options.outputFolder / "Test Game.exe"));
     CHECK(fs::exists(options.outputFolder / "data" / "shaders" / "part.frag"));
-    CHECK(fs::exists(options.outputFolder / "data" / "fonts" / "Inter-Regular.ttf"));
+    // Every font the player loads (a missing one crashed games built with 0.2.0).
+    for (const char* font : { "Inter-Regular.ttf", "Inter-Medium.ttf", "Inter-SemiBold.ttf", "JetBrainsMono-Regular.ttf" })
+        CHECK_MESSAGE(fs::exists(options.outputFolder / "data" / "fonts" / font), font);
     CHECK(fs::exists(options.outputFolder / "game" / "project.json"));
     CHECK(fs::exists(options.outputFolder / "game" / "scenes" / "Main" / "scene.json"));
     CHECK(fs::exists(options.outputFolder / "game" / "scenes" / "Main" / "scripts" / "FinishScript.lua"));

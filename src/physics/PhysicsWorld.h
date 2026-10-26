@@ -114,6 +114,7 @@ public:
         float walkSpeed = 8.0f;
         float jumpSpeed = 12.0f;
         bool swimming = false;           // in terrain water: no gravity, Space rises
+        bool anchored = false;           // a part of the character is anchored: it stays where it is
     };
 
     virtual ~CharacterController() = default;

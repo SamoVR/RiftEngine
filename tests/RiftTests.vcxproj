@@ -53,6 +53,7 @@
     <ClCompile Include="..\src\editor\EditorCamera.cpp" />
     <ClCompile Include="..\src\editor\EditorSettings.cpp" />
     <ClCompile Include="..\src\editor\LuaCompletion.cpp" />
+    <ClCompile Include="..\src\editor\LuaDocs.cpp" />
     <ClCompile Include="..\src\editor\Templates.cpp" />
     <ClCompile Include="..\src\editor\Updater.cpp" />
   </ItemGroup>

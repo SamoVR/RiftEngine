@@ -11,6 +11,26 @@
 namespace rift {
 
 namespace {
+    // False when the part (its unit box under `world`) is wholly outside the
+    // view of `viewProj`: all eight corners beyond one clip plane.
+    bool partVisible(const glm::mat4& viewProj, const glm::mat4& world) {
+        const glm::mat4 m = viewProj * world;
+        glm::vec4 c[8];
+        for (int i = 0; i < 8; ++i) c[i] = m * glm::vec4((i & 1) ? 0.5f : -0.5f, (i & 2) ? 0.5f : -0.5f, (i & 4) ? 0.5f : -0.5f, 1.0f);
+        for (int axis = 0; axis < 3; ++axis) {
+            bool allBelow = true, allAbove = true;
+            for (const glm::vec4& p : c) {
+                allBelow &= p[axis] < -p.w;
+                allAbove &= p[axis] > p.w;
+            }
+            if (allBelow || allAbove) return false;
+        }
+        return true;
+    }
+
+    // Parts are closed shapes: their back faces are never seen, so they are
+    // skipped. Imported meshes may be open or single-sided: drawn both sides.
+    bool doubleSided(const Instance& p) { return p.cls == ClassId::MeshPart; }
     constexpr int kMaxLights = 16;
     constexpr float kPi = 3.14159265358979f;
 
@@ -160,7 +180,7 @@ void Renderer::drawLines(const std::vector<LineVertex>& lines, const glm::mat4& 
 // ============================================================================
 //  Scene traversal
 // ============================================================================
-void Renderer::collect(const Scene& scene, const glm::vec3& cameraPos, std::vector<DrawItem>& opaque, std::vector<DrawItem>& transparent,
+void Renderer::collect(const Scene& scene, const glm::vec3& cameraPos, uint64_t hidden, std::vector<DrawItem>& opaque, std::vector<DrawItem>& transparent,
                        std::vector<const Instance*>& lights, std::vector<glm::mat4>& lightFrames) const {
     // One pass down the tree with the parent frame carried along (no
     // repeated walks up the ancestor chain).
@@ -172,6 +192,12 @@ void Renderer::collect(const Scene& scene, const glm::vec3& cameraPos, std::vect
         stack.pop_back();
         const Instance& i = *n.inst;
         const glm::mat4 frame = i.hasTransform() ? n.frame * i.localFrame() : n.frame;
+        if (hidden && i.id == hidden) {
+            // Only the tools it holds are drawn.
+            for (auto it = i.children.rbegin(); it != i.children.rend(); ++it)
+                if ((*it)->cls == ClassId::Tool) stack.push_back({ *it, frame });
+            continue;
+        }
         if (i.isBasePart()) {
             if (i.visible && i.transparency < 0.999f) {
                 const glm::mat4 world = frame * glm::scale(glm::mat4(1.0f), i.size);
@@ -188,9 +214,17 @@ void Renderer::collect(const Scene& scene, const glm::vec3& cameraPos, std::vect
     }
 }
 
-void Renderer::drawParts(const std::vector<DrawItem>& items, const RenderSettings& settings) {
+void Renderer::drawParts(const std::vector<DrawItem>& items, const RenderSettings& settings, const glm::mat4& viewProj) {
+    bool culling = true;
+    glEnable(GL_CULL_FACE);
     for (const DrawItem& d : items) {
         const Instance& p = *d.part;
+        if (!partVisible(viewProj, d.world)) continue; // off screen
+        if (doubleSided(p) == culling) {
+            culling = !culling;
+            if (culling) glEnable(GL_CULL_FACE);
+            else glDisable(GL_CULL_FACE);
+        }
         partShader_->setMat4("uModel", d.world);
         partShader_->setMat3("uNormalMatrix", glm::transpose(glm::inverse(glm::mat3(d.world))));
         partShader_->setVec3("uColor", p.color.vec());
@@ -214,6 +248,7 @@ void Renderer::drawParts(const std::vector<DrawItem>& items, const RenderSetting
         ++stats_.drawCalls;
         stats_.triangles += static_cast<int>(mesh.triangleCount());
     }
+    glDisable(GL_CULL_FACE); // what is drawn next (grid, sky, effects) is seen from both sides
 }
 
 // ============================================================================
@@ -338,7 +373,7 @@ void Renderer::render(const Scene& scene, const RenderCamera& camera, const Rend
     std::vector<DrawItem> opaque, transparent;
     std::vector<const Instance*> lights;
     std::vector<glm::mat4> lightFrames;
-    collect(scene, camera.position, opaque, transparent, lights, lightFrames);
+    collect(scene, camera.position, settings.hiddenModel, opaque, transparent, lights, lightFrames);
     stats_.parts = static_cast<int>(opaque.size() + transparent.size());
     terrain_.update(scene.terrain());
     const float time = std::chrono::duration<float>(std::chrono::steady_clock::now() - start_).count();
@@ -369,7 +404,7 @@ void Renderer::render(const Scene& scene, const RenderCamera& camera, const Rend
         shadowShader_->use();
         shadowShader_->setMat4("uLightViewProj", lightViewProj);
         for (const DrawItem& d : opaque) {
-            if (!d.part->castShadow) continue;
+            if (!d.part->castShadow || !partVisible(lightViewProj, d.world)) continue;
             shadowShader_->setMat4("uModel", d.world);
             meshFor(*d.part).draw();
             ++stats_.drawCalls;
@@ -446,8 +481,7 @@ void Renderer::render(const Scene& scene, const RenderCamera& camera, const Rend
     applyLighting(*partShader_);
     partShader_->setVec3("uTint", settings.hoverColor);
     partShader_->setInt("uTexture", 0);
-    glDisable(GL_CULL_FACE); // wedges and thin parts are visible from inside too
-    drawParts(opaque, settings);
+    drawParts(opaque, settings, viewProj);
 
     // Sky behind everything that was drawn.
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
@@ -498,7 +532,7 @@ void Renderer::render(const Scene& scene, const RenderCamera& camera, const Rend
     if (!transparent.empty()) {
         partShader_->use();
         if (settings.wireframe) glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-        drawParts(transparent, settings);
+        drawParts(transparent, settings, viewProj);
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     }
     // Particles, beams and trails: premultiplied, so LightEmission can turn

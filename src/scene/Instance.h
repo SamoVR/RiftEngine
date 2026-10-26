@@ -48,6 +48,8 @@ enum class ClassId : uint8_t {
     // 2D GUI
     ScreenGui, Frame, TextLabel, TextButton, ImageLabel, ImageButton,
     UIGradient, // modifies its parent GUI element; not drawn itself
+    // The player's camera (workspace.CurrentCamera; made by the game for each client)
+    Camera,
     Count
 };
 constexpr int kClassCount = static_cast<int>(ClassId::Count);
@@ -69,6 +71,7 @@ enum class CameraMode : int { ThirdPerson, FirstPerson };
 enum class TextXAlignment : int { Left, Center, Right };
 enum class TextYAlignment : int { Top, Center, Bottom };
 enum class ScaleType : int { Stretch, Fit, Crop };
+enum class CameraKind : int { Custom, Scriptable, Fixed }; // Enum.CameraType
 // Enum.Font: Roblox's names, so scripts carry over. RIFT draws them with Inter
 // (regular, medium, semibold, and semibold made heavier for Black) and Code
 // with JetBrains Mono.
@@ -245,6 +248,8 @@ struct Instance {
     float textStrokeTransparency = 1.0f;  // 1: no outline
     float guiRotation = 0.0f;             // degrees clockwise (GuiObject.Rotation, UIGradient.Rotation)
     glm::vec2 gradientOffset{ 0.0f };     // UIGradient.Offset, in fractions of the element's size
+    float fieldOfView = 70.0f;            // Camera (CFrame is c0)
+    CameraKind cameraType = CameraKind::Custom;
     Color3 imageColor{ 1.0f, 1.0f, 1.0f };
     float imageTransparency = 0.0f;
     ScaleType scaleType = ScaleType::Stretch;

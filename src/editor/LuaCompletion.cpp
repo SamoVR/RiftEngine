@@ -180,7 +180,7 @@ namespace {
         if (name == "LocalPlayer") return ofClass(ClassId::Player);
         if (name == "PrimaryPart" || name == "RootPart") return ofClass(ClassId::Part);
         if (name == "Terrain" && cls == ClassId::Workspace) return scene.terrainInstance() ? instance(scene.terrainInstance()) : ofClass(ClassId::Terrain);
-        if (name == "CurrentCamera") return none();
+        if (name == "CurrentCamera") return ofClass(ClassId::Camera);
         const PropertyInfo* p = findProperty(cls, name);
         if (!p) {
             Instance probe;
@@ -329,10 +329,14 @@ namespace {
     }
 }
 
-std::vector<std::string> luaCompletions(const std::string& line, size_t termStart, const std::string& term, const Scene& scene,
-                                        const Instance* script, const std::string& document) {
+std::vector<LuaCompletion> luaCompletionItems(const std::string& line, size_t termStart, const std::string& term, const Scene& scene,
+                                              const Instance* script, const std::string& document) {
     Ctx ctx{ scene, script, document };
-    std::vector<std::string> candidates;
+    std::vector<LuaCompletion> candidates;
+    auto add = [&](const std::string& text, std::string detail, std::string description = {}) {
+        if (description.empty()) description = luaDoc(text);
+        candidates.push_back({ text, std::move(detail), std::move(description) });
+    };
     termStart = std::min(termStart, line.size());
     const char sep = termStart > 0 ? line[termStart - 1] : 0;
     const bool member = (sep == '.' || sep == ':') && !(termStart > 1 && line[termStart - 2] == '.');
@@ -346,58 +350,92 @@ std::vector<std::string> luaCompletions(const std::string& line, size_t termStar
             case Res::AnyInstance: {
                 const ClassId cls = r.kind == Res::AnyInstance ? ClassId::Folder : r.cls;
                 if (sep == ':') {
-                    candidates = luaapi::instanceMembers(cls, true);
+                    for (const std::string& m : luaapi::instanceMembers(cls, true)) add(m, "method");
                 } else {
                     // Children first: they are what you usually want.
                     if (r.kind == Res::Inst)
-                        for (const Instance* child : r.inst->children) if (validIdentifier(child->name)) candidates.push_back(child->name);
-                    for (const std::string& m : luaapi::instanceMembers(cls, false)) candidates.push_back(m);
+                        for (const Instance* child : r.inst->children)
+                            if (validIdentifier(child->name)) add(child->name, classInfo(child->cls).name, classInfo(child->cls).description);
+                    Instance probe;
+                    probe.cls = cls;
+                    for (const std::string& m : luaapi::instanceMembers(cls, false)) {
+                        if (luaapi::hasEvent(probe, m)) {
+                            add(m, "event");
+                            continue;
+                        }
+                        const PropertyInfo* p = findProperty(cls, m);
+                        std::string type = p ? (p->enumType.empty() ? std::string(typeName(p->type)) : "Enum." + p->enumType) : std::string();
+                        if (type == "Instance") type = "object";
+                        const std::string& doc = luaDoc(m);
+                        add(m, type.empty() ? "property" : "property: " + type, doc.empty() && p ? p->tooltip : doc);
+                    }
                 }
                 break;
             }
             case Res::Game:
-                if (sep == ':') candidates = { "FindFirstChild", "FindService", "GetChildren", "GetService", "IsA", "WaitForChild" };
-                else candidates = luaapi::serviceNames();
+                if (sep == ':') {
+                    for (const char* m : { "FindFirstChild", "FindService", "GetChildren", "GetService", "IsA", "WaitForChild" }) add(m, "method");
+                } else {
+                    for (const std::string& svc : luaapi::serviceNames()) {
+                        const ClassInfo* info = classByName(svc);
+                        add(svc, "service", info ? info->description : std::string());
+                    }
+                }
                 break;
-            case Res::Library: if (sep == '.') candidates = luaapi::libraryMembers(r.name); break;
-            case Res::TypeTable: if (sep == '.') candidates = luaapi::typeStatics(r.name); break;
-            case Res::Value: candidates = luaapi::valueMembers(r.name); break;
+            case Res::Library:
+                if (sep == '.') for (const std::string& m : luaapi::libraryMembers(r.name)) add(m, r.name);
+                break;
+            case Res::TypeTable:
+                if (sep == '.') for (const std::string& m : luaapi::typeStatics(r.name)) add(m, r.name);
+                break;
+            case Res::Value:
+                for (const std::string& m : luaapi::valueMembers(r.name)) add(m, r.name);
+                break;
             case Res::EnumRoot:
-                if (sep == '.') for (const auto& [name, items] : luaapi::enums()) candidates.push_back(name);
+                if (sep == '.') for (const auto& [name, items] : luaapi::enums()) add(name, "enum");
                 break;
             case Res::None: {
                 // Enum.Material.<here>
                 if (chain.size() == 2 && chain[0].name == "Enum" && sep == '.') {
-                    for (const auto& [name, items] : luaapi::enums()) if (name == chain[1].name) candidates = items;
+                    for (const auto& [name, items] : luaapi::enums())
+                        if (name == chain[1].name) for (const std::string& item : items) add(item, "Enum." + name);
                 }
                 break;
             }
         }
     } else {
         // A word on its own: keywords, globals, the file's own names.
-        candidates = luaapi::keywords();
-        for (const std::string& g : luaapi::globals()) candidates.push_back(g);
-        for (std::string& w : documentWords(document, term)) candidates.push_back(std::move(w));
+        for (const std::string& k : luaapi::keywords()) add(k, "keyword");
+        for (const std::string& g : luaapi::globals()) add(g, "global");
+        for (const std::string& w : documentWords(document, term)) add(w, "in this script");
     }
 
     // Exact-case prefix, then any-case prefix, then anywhere; no duplicates.
-    std::vector<std::pair<int, std::string>> ranked;
+    std::vector<std::pair<int, size_t>> ranked;
     std::unordered_set<std::string> seen;
-    for (const std::string& cand : candidates) {
+    for (size_t k = 0; k < candidates.size(); ++k) {
+        const std::string& cand = candidates[k].text;
         if (!seen.insert(cand).second) continue;
         int rank = -1;
         if (startsWith(cand, term, false)) rank = 0;
         else if (startsWith(cand, term, true)) rank = 1;
         else if (term.size() >= 2 && containsCaseless(cand, term)) rank = 2;
         if (rank < 0 || (cand == term && !member)) continue;
-        ranked.emplace_back(rank, cand);
+        ranked.emplace_back(rank, k);
     }
     std::stable_sort(ranked.begin(), ranked.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
-    std::vector<std::string> out;
-    for (auto& [rank, text] : ranked) {
-        out.push_back(std::move(text));
+    std::vector<LuaCompletion> out;
+    for (const auto& [rank, k] : ranked) {
+        out.push_back(std::move(candidates[k]));
         if (out.size() >= 80) break;
     }
+    return out;
+}
+
+std::vector<std::string> luaCompletions(const std::string& line, size_t termStart, const std::string& term, const Scene& scene,
+                                        const Instance* script, const std::string& document) {
+    std::vector<std::string> out;
+    for (LuaCompletion& c : luaCompletionItems(line, termStart, term, scene, script, document)) out.push_back(std::move(c.text));
     return out;
 }
 

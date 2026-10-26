@@ -118,7 +118,8 @@ ExportResult exportGame(const Project& project, const ExportOptions& o) {
         std::error_code exists;
         if (fs::exists(o.engineData / folder, exists) && !copy.copyTree(o.engineData / folder, data / folder)) return r;
     }
-    for (const char* f : { "Inter-Regular.ttf", "Inter-SemiBold.ttf", "Inter-LICENSE.txt" })
+    for (const char* f : { "Inter-Regular.ttf", "Inter-Medium.ttf", "Inter-SemiBold.ttf", "Inter-LICENSE.txt",
+                          "JetBrainsMono-Regular.ttf", "JetBrainsMono-LICENSE.txt" })
         if (!copy.copyFile(o.engineData / "fonts" / f, data / "fonts" / f)) return r;
     if (!copy.copyFile(o.engineData / "icons" / "rift.png", data / "icons" / "rift.png")) return r;
 

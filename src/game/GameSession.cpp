@@ -68,6 +68,7 @@ GameSession::GameSession(const Scene& editScene, ScriptStore& scripts, Input& in
         c->scene = std::make_unique<Scene>();
         c->replicator = std::make_unique<Replicator>(*scene_, *c->scene);
         c->replicator->start();
+        cameraObject(*c); // Workspace.Camera, before any LocalScript asks for it
         setUpClientPlayer(*c);
     }
     std::vector<Scene*> clientScenes;
@@ -475,6 +476,7 @@ void GameSession::updateCharacter(Client& c, float dt) {
     if (glm::length(root->velocity - c.controller->velocity()) > 0.01f) c.controller->setVelocity(root->velocity);
 
     CharacterController::Input in;
+    Scene::forEachDescendant(*model, [&](Instance& p) { if (p.isBasePart() && p.anchored) in.anchored = true; });
     in.walkSpeed = hum->walkSpeed;
     in.jumpSpeed = hum->jumpPower;
     in.swimming = scene_->terrain().waterAt(actual + glm::vec3(0.0f, 0.3f, 0.0f)) > 0.0f; // chest-deep in terrain water
@@ -590,9 +592,12 @@ void GameSession::placeCharacter(Client& c, float dt) {
         Scene::forEachDescendant(*model, [&](Instance& j) { if (j.cls == ClassId::Motor6D) joints.push_back(&j); });
         for (Instance* j : joints) scene_->destroy(j);
         c.controller->setInput({});
-        // Fall apart: the limbs drop (they become ordinary unanchored parts).
+        // Fall apart: the limbs drop (they become ordinary unanchored parts);
+        // the invisible root stays where the character died (the camera looks there).
         physics_->destroyCharacter(c.controller);
         c.controller = nullptr;
+        root->anchored = true;
+        root->velocity = glm::vec3(0.0f);
         physics_->setIgnored(model->id, false);
         for (Instance* part : model->children) {
             if (!part->isBasePart()) continue;
@@ -812,9 +817,35 @@ void GameSession::pickUpTools() {
 // ============================================================================
 //  Camera
 // ============================================================================
+Instance* GameSession::cameraObject(Client& c) {
+    if (Instance* old = c.cameraId ? c.scene->find(c.cameraId) : nullptr) c.scene->destroy(old);
+    Instance* cam = c.scene->create(ClassId::Camera, &c.scene->workspace());
+    cam->name = "Camera";
+    cam->archivable = false;
+    c.cameraId = cam->id;
+    c.cameraKind = -1;
+    return cam;
+}
+
+uint64_t GameSession::firstPersonCharacter() const {
+    const Client& c = focused();
+    const bool firstPerson = c.camera.type == CameraType::Custom && c.camera.zoom < 1.0f;
+    return firstPerson && !c.dead ? c.characterId : 0;
+}
+
 void GameSession::updateCamera(Client& c, float dt) {
     (void)dt;
     GameCamera& camera = c.camera;
+    // Workspace.Camera: the camera as an object (the Explorer and Properties
+    // show it). Edits made to it since the last frame steer the camera.
+    Instance* camInst = c.cameraId ? c.scene->find(c.cameraId) : nullptr;
+    if (!camInst || camInst->parent != &c.scene->workspace()) {
+        camInst = cameraObject(c);
+    } else if (c.cameraKind >= 0) {
+        if (camInst->cameraType != static_cast<CameraKind>(c.cameraKind)) camera.type = static_cast<CameraType>(camInst->cameraType);
+        if (camInst->fieldOfView != c.cameraFov) camera.fieldOfView = std::clamp(camInst->fieldOfView, 1.0f, 120.0f);
+        if (camInst->c0 != c.cameraFrame) camera.setFrame(camInst->c0.matrix());
+    }
     const bool firstPersonMode = scene_->starterPlayer().cameraMode == CameraMode::FirstPerson;
     const float maxZoom = std::max(1.0f, scene_->starterPlayer().cameraMaxZoom);
     if (firstPersonMode) camera.zoom = 0.5f;
@@ -834,6 +865,8 @@ void GameSession::updateCamera(Client& c, float dt) {
         }
         const Instance* root = c.rootPartId ? scene_->find(c.rootPartId) : nullptr;
         glm::vec3 focus = root ? root->worldPosition() + glm::vec3(0.0f, 0.8f, 0.0f) : camera.position;
+        // Dead: the camera follows the head as it falls.
+        if (c.dead) for (uint64_t id : c.deathPieces) if (const Instance* p = scene_->find(id); p && p->name == "Head") focus = p->worldPosition();
         if (!root && c.dead) focus = camera.position + camera.lookVector() * camera.zoom;
         const float yaw = glm::radians(camera.yaw), pitch = glm::radians(camera.pitch);
         const glm::vec3 forward(-std::sin(yaw) * std::cos(pitch), std::sin(pitch), -std::cos(yaw) * std::cos(pitch));
@@ -843,11 +876,16 @@ void GameSession::updateCamera(Client& c, float dt) {
             RaycastFilter filter;
             filter.respectCanCollide = true;
             if (c.characterId) filter.instances.push_back(c.characterId);
+            for (uint64_t id : c.deathPieces) filter.instances.push_back(id); // the body that fell apart
             if (auto hit = physics_->raycast(focus, -forward * (distance + 0.3f), filter)) distance = std::max(0.3f, hit->distance - 0.3f);
         }
         camera.position = focus - forward * distance;
         camera.lookAt(camera.position, camera.position + forward);
     }
+    camInst->c0 = c.cameraFrame = CFrameValue::fromMatrix(camera.frame());
+    camInst->fieldOfView = c.cameraFov = camera.fieldOfView;
+    camInst->cameraType = static_cast<CameraKind>(camera.type);
+    c.cameraKind = static_cast<int>(camera.type);
     if (options_.audio && c.index == focus_) options_.audio->setListener(camera.position, camera.lookVector(), camera.upVector());
 }
 

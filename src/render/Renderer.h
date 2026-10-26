@@ -43,6 +43,7 @@ struct RenderSettings {
     float shadowDistance = 140.0f; // studs around the camera that get shadows
     std::unordered_set<uint64_t> selected;
     uint64_t hovered = 0;
+    uint64_t hiddenModel = 0;      // not drawn, except the tools in it (the player's own character in first person)
     glm::vec3 selectionColor{ 0.62f, 0.45f, 1.0f };
     glm::vec3 hoverColor{ 0.85f, 0.8f, 1.0f };
     float dt = 0.0f;               // seconds since the last frame: moves particles and trails (0 = frozen)
@@ -110,9 +111,9 @@ private:
     std::vector<LineVertex> lines_, linesOnTop_;
     RenderStats stats_;
 
-    void collect(const Scene& scene, const glm::vec3& cameraPos, std::vector<DrawItem>& opaque, std::vector<DrawItem>& transparent,
+    void collect(const Scene& scene, const glm::vec3& cameraPos, uint64_t hidden, std::vector<DrawItem>& opaque, std::vector<DrawItem>& transparent,
                  std::vector<const Instance*>& lights, std::vector<glm::mat4>& lightFrames) const;
-    void drawParts(const std::vector<DrawItem>& items, const RenderSettings& settings);
+    void drawParts(const std::vector<DrawItem>& items, const RenderSettings& settings, const glm::mat4& viewProj);
     void drawLines(const std::vector<LineVertex>& lines, const glm::mat4& viewProj);
     void addEditorOverlays(const Scene& scene, const RenderSettings& settings, const std::vector<const Instance*>& lights,
                            const std::vector<glm::mat4>& lightFrames);

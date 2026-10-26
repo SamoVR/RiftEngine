@@ -235,6 +235,7 @@ const char* classIcon(ClassId cls) {
         case ClassId::ImageLabel: return ICON_FA_IMAGE;
         case ClassId::ImageButton: return ICON_FA_IMAGE;
         case ClassId::UIGradient: return ICON_FA_PALETTE;
+        case ClassId::Camera: return ICON_FA_VIDEO;
         case ClassId::IntValue: case ClassId::NumberValue: return ICON_FA_HASHTAG;
         case ClassId::StringValue: return ICON_FA_QUOTE_LEFT;
         case ClassId::BoolValue: return ICON_FA_TOGGLE_ON;

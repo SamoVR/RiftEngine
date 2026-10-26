@@ -76,6 +76,7 @@ namespace {
         { "Ctrl+,", "Preferences" },
         { "Ctrl+Shift+F", "Find (and replace) in all scripts" },
         { "Ctrl+Space (in a script)", "Show suggestions" },
+        { "Ctrl+Backspace / Ctrl+Delete", "Delete the word before / after the cursor" },
         { "[ / ] (Terrain Editor)", "Smaller / larger brush" },
         { "Ctrl+B / Ctrl+F5", "Build the game / Run it in the player" },
         { "Esc (while playing)", "Give the mouse back to the editor" },

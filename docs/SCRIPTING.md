@@ -649,7 +649,11 @@ clicking the viewport).
 
 ## Camera
 
-`workspace.CurrentCamera` is the player's camera; control it from a LocalScript.
+`workspace.CurrentCamera` is the player's camera: the **Camera** object in the
+client's Workspace (while playing, the Explorer's Client view shows it, and its
+CFrame, FieldOfView and CameraType can be changed in Properties). Control it from
+a LocalScript. Zoomed all the way in (first person), the player's own character
+is not drawn, only the tool it holds.
 
 | | |
 |---|---|

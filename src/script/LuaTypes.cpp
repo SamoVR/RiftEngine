@@ -65,7 +65,6 @@ namespace {
             out.push_back(std::move(t));
         }
         add("MouseBehavior", { "Default", "LockCenter", "LockCurrentPosition" });
-        add("CameraType", { "Custom", "Scriptable", "Fixed" });
         add("CoreGuiType", { "PlayerList", "Health", "Backpack", "Chat", "All", "EmotesMenu" });
         add("PlaybackState", { "Begin", "Playing", "Paused", "Completed", "Cancelled", "Delayed" });
         add("HumanoidStateType", { "FallingDown", "Running", "RunningNoPhysics", "Climbing", "StrafingNoPhysics", "Ragdoll", "GettingUp", "Jumping",

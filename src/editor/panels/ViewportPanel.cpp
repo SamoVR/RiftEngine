@@ -156,6 +156,7 @@ void ViewportPanel::draw(UiContext& ui) {
     rs.shadows = settings.shadows;
     for (uint64_t id : editor.selection()) rs.selected.insert(id);
     rs.hovered = editView ? hoveredId_ : 0;
+    if (GameSession* s = editView ? nullptr : editor.session()) rs.hiddenModel = s->firstPersonCharacter();
     framebuffer_.resize(static_cast<int>(size_.x), static_cast<int>(size_.y), settings.msaa);
     ui.renderer.render(editor.scene(), camera, rs, framebuffer_);
     if (editor.thumbnailRequest) {

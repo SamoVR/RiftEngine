@@ -66,6 +66,10 @@ bool methodApplies(const std::string& name, const Instance& i) {
         { "GetPlayers", [](const Instance& x) { return x.cls == ClassId::Players; } },
         { "GetPlayerFromCharacter", [](const Instance& x) { return x.cls == ClassId::Players; } },
         { "Raycast", [](const Instance& x) { return x.cls == ClassId::Workspace; } },
+        { "ScreenPointToRay", [](const Instance& x) { return x.cls == ClassId::Camera; } },
+        { "ViewportPointToRay", [](const Instance& x) { return x.cls == ClassId::Camera; } },
+        { "WorldToScreenPoint", [](const Instance& x) { return x.cls == ClassId::Camera; } },
+        { "WorldToViewportPoint", [](const Instance& x) { return x.cls == ClassId::Camera; } },
         { "GetPartBoundsInBox", [](const Instance& x) { return x.cls == ClassId::Workspace; } },
         { "GetPartsInPart", [](const Instance& x) { return x.cls == ClassId::Workspace; } },
         { "TakeDamage", [](const Instance& x) { return x.cls == ClassId::Humanoid; } },
@@ -128,8 +132,9 @@ const std::vector<std::string>& methodNames() {
         "GetDescendants", "GetExtentsSize", "GetFullName", "GetMass", "GetMaterialColor", "GetMouse", "GetPartBoundsInBox", "GetPartsInPart",
         "GetPivot", "GetPlayerFromCharacter", "GetPlayers", "GetPlayingAnimationTracks", "GetPropertyChangedSignal", "GetState", "GetTags",
         "GetTouchingParts", "HasTag", "Invoke", "InvokeClient", "InvokeServer", "IsA", "IsAncestorOf", "IsDescendantOf", "Kick", "LoadAnimation",
-        "LoadCharacter", "MoveTo", "Pause", "PivotTo", "Play", "Raycast", "Remove", "RemoveTag", "Resume", "SetAttribute", "SetCoreGuiEnabled",
-        "SetMaterialColor", "SetPrimaryPartCFrame", "Stop", "TakeDamage", "UnequipTools", "WaitForChild",
+        "LoadCharacter", "MoveTo", "Pause", "PivotTo", "Play", "Raycast", "Remove", "RemoveTag", "Resume", "ScreenPointToRay", "SetAttribute", "SetCoreGuiEnabled",
+        "SetMaterialColor", "SetPrimaryPartCFrame", "Stop", "TakeDamage", "UnequipTools", "ViewportPointToRay", "WaitForChild",
+        "WorldToScreenPoint", "WorldToViewportPoint",
     });
     return list;
 }
@@ -163,6 +168,7 @@ std::vector<std::string> instanceMembers(ClassId cls, bool methods) {
     if (cls == ClassId::Players) out.insert(out.end(), { "LocalPlayer", "PlayerAdded" });
     if (cls == ClassId::Sound) out.insert(out.end(), { "IsPlaying", "TimePosition", "TimeLength" });
     if (cls == ClassId::Workspace) out.insert(out.end(), { "CurrentCamera", "Terrain" });
+    if (cls == ClassId::Camera) out.insert(out.end(), { "Focus", "CameraSubject", "ViewportSize" });
     for (const std::string& e : eventNames()) if (hasEvent(probe, e)) out.push_back(e);
     return sorted(std::move(out));
 }
