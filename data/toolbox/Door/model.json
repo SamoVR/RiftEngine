@@ -1,0 +1,136 @@
+{
+ "format": "rift-toolbox",
+ "version": 1,
+ "name": "Door",
+ "description": "A door in a frame that slides open and shut with a ProximityPrompt (E).",
+ "created": 0,
+ "instances": [
+  {
+   "class": "Model",
+   "id": "00000000007b0001",
+   "name": "Door",
+   "props": {
+    "Position": [
+     0,
+     3,
+     0
+    ]
+   }
+  },
+  {
+   "class": "Part",
+   "id": "00000000007b0002",
+   "name": "LeftPost",
+   "parent": "00000000007b0001",
+   "props": {
+    "Size": [
+     0.6,
+     6,
+     0.6
+    ],
+    "Position": [
+     -2.3,
+     0,
+     0
+    ],
+    "Color": [
+     0.3529,
+     0.2745,
+     0.2157
+    ],
+    "Material": 5
+   }
+  },
+  {
+   "class": "Part",
+   "id": "00000000007b0003",
+   "name": "RightPost",
+   "parent": "00000000007b0001",
+   "props": {
+    "Size": [
+     0.6,
+     6,
+     0.6
+    ],
+    "Position": [
+     2.3,
+     0,
+     0
+    ],
+    "Color": [
+     0.3529,
+     0.2745,
+     0.2157
+    ],
+    "Material": 5
+   }
+  },
+  {
+   "class": "Part",
+   "id": "00000000007b0004",
+   "name": "Top",
+   "parent": "00000000007b0001",
+   "props": {
+    "Size": [
+     5.2,
+     0.6,
+     0.6
+    ],
+    "Position": [
+     0,
+     3.3,
+     0
+    ],
+    "Color": [
+     0.3529,
+     0.2745,
+     0.2157
+    ],
+    "Material": 5
+   }
+  },
+  {
+   "class": "Part",
+   "id": "00000000007b0005",
+   "name": "Panel",
+   "parent": "00000000007b0001",
+   "props": {
+    "Size": [
+     4,
+     5.9,
+     0.3
+    ],
+    "Position": [
+     0,
+     -0.05,
+     0
+    ],
+    "Color": [
+     0.5882,
+     0.4118,
+     0.2745
+    ],
+    "Material": 16
+   }
+  },
+  {
+   "class": "ProximityPrompt",
+   "id": "00000000007b0006",
+   "name": "ProximityPrompt",
+   "parent": "00000000007b0005",
+   "props": {
+    "ActionText": "Open",
+    "ObjectText": "Door",
+    "MaxActivationDistance": 8.0
+   }
+  },
+  {
+   "class": "Script",
+   "id": "00000000007b0007",
+   "name": "DoorScript",
+   "parent": "00000000007b0005",
+   "_text": "-- Slides the door up and down when a player presses E at it.\nlocal panel = script.Parent\nlocal prompt = panel:WaitForChild(\"ProximityPrompt\")\nlocal TweenService = game:GetService(\"TweenService\")\n\nlocal closed = panel.CFrame\nlocal isOpen = false\n\nprompt.Triggered:Connect(function(player)\n\tisOpen = not isOpen\n\tprompt.ActionText = isOpen and \"Close\" or \"Open\"\n\tlocal goal = isOpen and closed * CFrame.new(0, panel.Size.Y - 0.3, 0) or closed\n\tTweenService:Create(panel, TweenInfo.new(0.6, Enum.EasingStyle.Quad), { CFrame = goal }):Play()\nend)\n"
+  }
+ ],
+ "files": []
+}

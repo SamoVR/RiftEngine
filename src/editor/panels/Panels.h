@@ -16,6 +16,7 @@
 #include "editor/Editor.h"
 #include "game/GameSession.h"
 #include "project/Git.h"
+#include "project/Toolbox.h"
 #include "render/Framebuffer.h"
 #include "ui/GameOverlay.h"
 
@@ -48,6 +49,7 @@ struct UiContext {
 // Drag and drop payload types.
 inline constexpr const char* kAssetPayload = "RIFT_ASSET";        // stored asset path (UTF-8, NUL-terminated)
 inline constexpr const char* kInstancesPayload = "RIFT_INSTANCES"; // uint64_t ids
+inline constexpr const char* kToolboxPayload = "RIFT_TOOLBOX";     // "<item folder>\n<name>" (UTF-8, NUL-terminated)
 
 // The Insert menu's items (main menu, Explorer context menu, toolbar).
 void drawInsertMenuItems(Editor& editor);
@@ -347,6 +349,27 @@ private:
     void drawBranches(UiContext& ui);
     void drawGraph(UiContext& ui);
     void drawDetails(UiContext& ui);
+};
+
+// ---------------------------------------------------------------------------
+// The asset library: models that come with RIFT and the ones you saved.
+class ToolboxPanel {
+public:
+    void draw(UiContext& ui, bool* open);
+
+private:
+    std::vector<ToolboxItem> items_;
+    bool stale_ = true;
+    double listedAt_ = -100.0;
+    int tab_ = 0; // all, RIFT, mine
+    std::string filter_, nameDraft_, descriptionDraft_;
+    bool openSave_ = false, openRename_ = false, openDelete_ = false;
+    ToolboxItem target_;
+    Framebuffer thumbnailTarget_;
+    std::unordered_set<std::string> failed_; // pictures that could not be made
+    std::filesystem::path thumbnailPath(const ToolboxItem& item) const;
+    bool renderThumbnail(UiContext& ui, const ToolboxItem& item);
+    void drawPopups(UiContext& ui);
 };
 
 // ---------------------------------------------------------------------------

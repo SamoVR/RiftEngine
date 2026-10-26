@@ -1,0 +1,134 @@
+{
+ "format": "rift-toolbox",
+ "version": 1,
+ "name": "Street Lamp",
+ "description": "A lamp post whose light comes on at night (it is always on; change the PointLight to taste).",
+ "created": 0,
+ "instances": [
+  {
+   "class": "Model",
+   "id": "00000000007b0001",
+   "name": "StreetLamp",
+   "props": {
+    "Position": [
+     0,
+     4,
+     0
+    ]
+   }
+  },
+  {
+   "class": "Part",
+   "id": "00000000007b0002",
+   "name": "Base",
+   "parent": "00000000007b0001",
+   "props": {
+    "Size": [
+     1.2,
+     0.4,
+     1.2
+    ],
+    "Position": [
+     0,
+     -3.8,
+     0
+    ],
+    "Color": [
+     0.1569,
+     0.1647,
+     0.1882
+    ],
+    "Material": 2
+   }
+  },
+  {
+   "class": "Part",
+   "id": "00000000007b0003",
+   "name": "Pole",
+   "parent": "00000000007b0001",
+   "props": {
+    "Size": [
+     0.35,
+     7.6,
+     0.35
+    ],
+    "Position": [
+     0,
+     0,
+     0
+    ],
+    "Color": [
+     0.1569,
+     0.1647,
+     0.1882
+    ],
+    "Material": 2
+   }
+  },
+  {
+   "class": "Part",
+   "id": "00000000007b0004",
+   "name": "Cap",
+   "parent": "00000000007b0001",
+   "props": {
+    "Size": [
+     1.4,
+     0.3,
+     1.4
+    ],
+    "Position": [
+     0,
+     4.15,
+     0
+    ],
+    "Color": [
+     0.1569,
+     0.1647,
+     0.1882
+    ],
+    "Material": 2
+   }
+  },
+  {
+   "class": "Part",
+   "id": "00000000007b0005",
+   "name": "Light",
+   "parent": "00000000007b0001",
+   "props": {
+    "Size": [
+     0.9,
+     0.6,
+     0.9
+    ],
+    "Position": [
+     0,
+     3.7,
+     0
+    ],
+    "Color": [
+     1.0,
+     0.8824,
+     0.6275
+    ],
+    "Material": 3,
+    "CastShadow": false
+   }
+  },
+  {
+   "class": "PointLight",
+   "id": "00000000007b0006",
+   "name": "PointLight",
+   "parent": "00000000007b0005",
+   "props": {
+    "Color": [
+     1.0,
+     0.8392,
+     0.5882
+    ],
+    "Range": 20.0,
+    "Brightness": 2.0
+   }
+  }
+ ],
+ "files": []
+}

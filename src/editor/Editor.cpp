@@ -8,6 +8,7 @@
 #include "core/TransformUtil.h"
 #include "platform/Input.h"
 #include "project/Git.h"
+#include "project/Toolbox.h"
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <algorithm>
@@ -537,9 +538,11 @@ Instance* Editor::insertionParent() {
     return &scene().workspace();
 }
 
-glm::vec3 Editor::placementPoint(const glm::vec3& size) const {
+glm::vec3 Editor::placementPoint(const glm::vec3& size) const { return placementPointAt(viewportSize * 0.5f, size); }
+
+glm::vec3 Editor::placementPointAt(const glm::vec2& viewPoint, const glm::vec3& size) const {
     glm::vec3 origin, dir;
-    camera_.ray(viewportSize * 0.5f, viewportSize, origin, dir);
+    camera_.ray(viewPoint, viewportSize, origin, dir);
     glm::vec3 point = camera_.position() + camera_.forward() * 16.0f;
     if (auto hit = pickSurface(session_ ? session_->scene() : *scene_, origin, dir)) {
         point = hit->position + hit->normal * (std::abs(hit->normal.y) > 0.5f ? size.y * 0.5f : std::max(size.x, size.z) * 0.5f);
@@ -952,7 +955,7 @@ nlohmann::json Editor::freshIds(nlohmann::json snapshot) {
         }
         // References inside the copy (a Beam's attachments) follow too.
         if (e.contains("props") && e["props"].is_object()) {
-            for (const char* ref : { "Attachment0", "Attachment1", "Part0", "Part1" }) {
+            for (const char* ref : { "Attachment0", "Attachment1", "Part0", "Part1", "Adornee" }) {
                 if (!e["props"].contains(ref) || !e["props"][ref].is_string()) continue;
                 auto it = remap.find(e["props"][ref].get<std::string>());
                 if (it != remap.end()) e["props"][ref] = it->second;
@@ -962,7 +965,7 @@ nlohmann::json Editor::freshIds(nlohmann::json snapshot) {
     // Each copied script gets its own file (Roblox copies the Source).
     for (auto& e : snapshot) {
         const std::string cls = e.value("class", std::string());
-        if (cls != "Script" && cls != "ModuleScript") continue;
+        if (cls != "Script" && cls != "LocalScript" && cls != "ModuleScript") continue;
         std::string text;
         if (e.contains("_text") && e["_text"].is_string()) text = e["_text"].get<std::string>();
         e.erase("_text");
@@ -979,13 +982,94 @@ nlohmann::json Editor::copySnapshot(const std::vector<const Instance*>& roots) {
     // Carry the script text along, so pasting into another scene works too.
     for (auto& e : snapshot) {
         const std::string cls = e.value("class", std::string());
-        if (cls != "Script" && cls != "ModuleScript") continue;
+        if (cls != "Script" && cls != "LocalScript" && cls != "ModuleScript") continue;
         const std::string source = e.contains("props") && e["props"].contains("Source") ? e["props"]["Source"].get<std::string>() : std::string();
         if (!source.empty() && scripts_.load(source)) {
             if (const ScriptStore::Entry* entry = scripts_.find(source)) e["_text"] = entry->text;
         }
     }
     return snapshot;
+}
+
+bool Editor::saveSelectionToToolbox(const std::string& name, const std::string& description, ToolboxItem* out) {
+    std::vector<const Instance*> roots;
+    for (Instance* i : selectionRoots()) {
+        if (!i->isService()) roots.push_back(i);
+    }
+    if (roots.empty()) {
+        notify("Select what to save to the Toolbox", NoticeLevel::Warning);
+        return false;
+    }
+    std::string error;
+    ToolboxItem item;
+    const std::string title = name.empty() ? roots[0]->name : name;
+    if (!Toolbox::save(copySnapshot(roots), title, description, hasProject() ? project().root() : std::filesystem::path(), &item, &error)) {
+        notify("Could not save to the Toolbox: " + error, NoticeLevel::Error);
+        return false;
+    }
+    notify("Saved " + item.name + " to the Toolbox", NoticeLevel::Success);
+    if (out) *out = item;
+    return true;
+}
+
+bool Editor::insertToolboxItem(const ToolboxItem& item, const glm::vec2* viewPoint) {
+    if (!hasScene()) return false;
+    nlohmann::json snapshot;
+    std::string error;
+    if (!Toolbox::load(item, hasProject() ? project().root() : std::filesystem::path(), snapshot, &error)) {
+        notify("Could not insert " + item.name + ": " + error, NoticeLevel::Error);
+        return false;
+    }
+    // Moved so the whole thing sits on the surface under the view's middle (or the drop point):
+    // built in a scratch scene to measure it.
+    {
+        Scene scratch;
+        std::vector<Instance*> roots = SceneIO::subtreesFromJson(scratch, snapshot, &scratch.workspace(), true);
+        glm::vec3 lo(1e30f), hi(-1e30f);
+        bool any = false, movable = !roots.empty();
+        for (Instance* r : roots) {
+            movable = movable && r->hasTransform();
+            Scene::forEachDescendant(*r, [&](Instance& p) {
+                if (!p.isBasePart()) return;
+                const glm::mat4 f = p.worldFrame();
+                const glm::vec3 half = (glm::abs(glm::vec3(f[0])) * p.size.x + glm::abs(glm::vec3(f[1])) * p.size.y + glm::abs(glm::vec3(f[2])) * p.size.z) * 0.5f;
+                const glm::vec3 c(f[3]);
+                lo = glm::min(lo, c - half);
+                hi = glm::max(hi, c + half);
+                any = true;
+            });
+        }
+        if (any && movable) {
+            const glm::vec3 size = hi - lo;
+            const glm::vec3 target = viewPoint ? placementPointAt(*viewPoint, size) : placementPoint(size);
+            const glm::vec3 delta = target - (lo + hi) * 0.5f;
+            std::unordered_map<std::string, std::string> texts; // the script text rides along by id
+            for (const auto& e : snapshot)
+                if (e.contains("_text") && e.contains("id")) texts[e["id"].get<std::string>()] = e["_text"].get<std::string>();
+            std::vector<const Instance*> moved;
+            for (Instance* r : roots) {
+                r->position += delta;
+                moved.push_back(r);
+            }
+            snapshot = SceneIO::subtreesToJson(moved);
+            for (auto& e : snapshot) {
+                auto it = e.contains("id") ? texts.find(e["id"].get<std::string>()) : texts.end();
+                if (it != texts.end()) e["_text"] = it->second;
+            }
+        }
+    }
+    snapshot = freshIds(std::move(snapshot));
+    std::vector<PlacedSubtree> placement;
+    std::vector<uint64_t> newRoots;
+    for (const auto& e : snapshot) {
+        if (e.contains("parent")) continue;
+        placement.push_back({ scene().workspace().id, Scene::npos });
+        newRoots.push_back(idFromString(e["id"].get<std::string>()));
+    }
+    if (newRoots.empty()) return false;
+    execute(std::make_unique<CreateCommand>("Insert " + item.name, std::move(snapshot), std::move(placement)));
+    selection_ = newRoots;
+    return true;
 }
 
 void Editor::copySelection() {

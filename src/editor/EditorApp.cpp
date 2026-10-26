@@ -293,6 +293,12 @@ void EditorApp::frame(float dt) {
         if (settings_.showGitRepository) sourceControl_.drawRepository(ui, &settings_.showGitRepository, center);
         sourceControl_.drawDiff(ui, center);
         sourceControl_.drawPopups(ui);
+        if (editor_->toolboxSaveRequest) settings_.showToolbox = true;
+        if (settings_.showToolbox) {
+            // First shown: a tab next to the Assets (its cards like the width).
+            if (ImGuiWindow* w = ImGui::FindWindowByName("###Assets")) ImGui::SetNextWindowDockID(w->DockId, ImGuiCond_FirstUseEver);
+            toolbox_.draw(ui, &settings_.showToolbox);
+        }
         if (settings_.showTerrain) {
             // First shown: a tab next to the Properties.
             if (ImGuiWindow* w = ImGui::FindWindowByName("###Properties")) ImGui::SetNextWindowDockID(w->DockId, ImGuiCond_FirstUseEver);
@@ -358,6 +364,7 @@ void EditorApp::buildDefaultLayout(ImGuiID dockspace) {
     ImGui::DockBuilderDockWindow("###Terrain", rightBottom);
     ImGui::DockBuilderDockWindow("###Output", bottom);
     ImGui::DockBuilderDockWindow("###Assets", bottom);
+    ImGui::DockBuilderDockWindow("###Toolbox", bottom);
     ImGui::DockBuilderDockWindow("###Animation", bottom);
     ImGui::DockBuilderDockWindow("###Find", bottom);
     ImGui::DockBuilderFinish(dockspace);
@@ -553,6 +560,7 @@ void EditorApp::drawMenuBar() {
         ImGui::MenuItem(ICON_FA_SLIDERS "  Properties", nullptr, &settings_.showProperties);
         ImGui::MenuItem(ICON_FA_TERMINAL "  Output", nullptr, &settings_.showOutput);
         ImGui::MenuItem(ICON_FA_FOLDER_OPEN "  Assets", nullptr, &settings_.showAssets);
+        ImGui::MenuItem(ICON_FA_TOOLBOX "  Toolbox", nullptr, &settings_.showToolbox);
         ImGui::MenuItem(ICON_FA_CODE_BRANCH "  Git Changes", nullptr, &settings_.showSourceControl);
         ImGui::MenuItem(ICON_FA_SITEMAP "  Git Repository", nullptr, &settings_.showGitRepository);
         ImGui::MenuItem(ICON_FA_MOUNTAIN_SUN "  Terrain Editor", nullptr, &settings_.showTerrain);

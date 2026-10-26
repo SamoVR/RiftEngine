@@ -54,6 +54,7 @@ private:
     ScriptEditorPanel scripts_;
     AssetBrowserPanel assets_;
     SourceControlPanel sourceControl_;
+    ToolboxPanel toolbox_;
     TerrainPanel terrain_;
     AnimationPanel animation_;
     FindPanel find_;

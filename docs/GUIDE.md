@@ -204,6 +204,20 @@ into its assets folder.
 
 ![An imported model](images/models.jpg)
 
+### Toolbox
+
+The **Toolbox** (View > Toolbox, a tab next to Assets) is a library of models
+you can drop into any project. **RIFT** has ready-made ones (a door that opens
+with E, a bench to sit on, a sign, a street lamp, a tree, a treasure chest);
+**My Models** are the ones you saved. Click a card to put it in the middle of
+the view, or drag it to where it should go; one Ctrl+Z takes it out again.
+
+To save your own, select it and press **Save Selection** (or right-click it in
+the Explorer > **Save to Toolbox**). Its scripts and the images, models and
+sounds it uses are saved with it, and copied into a project when you insert it.
+Right-click a card to rename it, delete it, make a new picture of it or find its
+folder (`%APPDATA%/RIFT/Toolbox`).
+
 ### GUI
 
 ScreenGuis in StarterGui are drawn over the viewport while editing (View > GUI

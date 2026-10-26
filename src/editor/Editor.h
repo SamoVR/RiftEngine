@@ -31,6 +31,7 @@ namespace rift {
 class Input;
 class AudioSystem;
 class Renderer;
+struct ToolboxItem;
 
 enum class Tool { Select, Move, Rotate, Scale };
 enum class SelectMode { Replace, Toggle, Add };
@@ -80,6 +81,7 @@ public:
     bool hasScene() const { return !scenePath_.empty(); }
     uint64_t saveCount() const { return saveCount_; }  // goes up with every save
     bool thumbnailRequest = false; // the viewport saves the project's thumbnail (set by saveScene)
+    bool toolboxSaveRequest = false; // the Toolbox asks for a name and saves the selection
     const std::filesystem::path& scenePath() const { return scenePath_; }
     std::string sceneName() const;
     bool isDirty() const;
@@ -185,8 +187,15 @@ public:
     void addTag(uint64_t id, const std::string& tag);
     void removeTag(uint64_t id, const std::string& tag);
     void focusSelection();
-    // Where a new part should go: on the surface in the middle of the view.
+    // Where a new part should go: on the surface in the middle of the view (or under a point of it).
     glm::vec3 placementPoint(const glm::vec3& size) const;
+    glm::vec3 placementPointAt(const glm::vec2& viewPoint, const glm::vec3& size) const;
+
+    // ---- Toolbox
+    // The selection as a new item of the user's Toolbox (scripts and project files included).
+    bool saveSelectionToToolbox(const std::string& name, const std::string& description, ToolboxItem* out = nullptr);
+    // A Toolbox item in the scene: in the middle of the view, or under `viewPoint`. One undo step, selected.
+    bool insertToolboxItem(const ToolboxItem& item, const glm::vec2* viewPoint = nullptr);
     Instance* insertionParent();
 
     // ---- scripts

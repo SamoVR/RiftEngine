@@ -1,4 +1,5 @@
 #include "editor/panels/Panels.h"
+#include "core/Paths.h"
 #include "editor/Theme.h"
 #include "core/TransformUtil.h"
 #include "render/Picking.h"
@@ -649,6 +650,16 @@ void ViewportPanel::handleDrop(UiContext& ui) {
             if (auto hit = pickPart(editor.scene(), o, d)) target = hit->part;
         }
         dropAsset(editor, path, target);
+    }
+    if (const ImGuiPayload* p = ImGui::AcceptDragDropPayload(kToolboxPayload)) {
+        // A Toolbox model, landing on the surface under the mouse.
+        const std::string text(static_cast<const char*>(p->Data));
+        const size_t newline = text.find('\n');
+        ToolboxItem item;
+        item.folder = Paths::fromUtf8(text.substr(0, newline));
+        item.name = newline == std::string::npos ? std::string("Model") : text.substr(newline + 1);
+        const glm::vec2 mouse = editor.input().mousePosition() - origin_;
+        if (!editor.playing()) editor.insertToolboxItem(item, &mouse);
     }
     ImGui::EndDragDropTarget();
 }

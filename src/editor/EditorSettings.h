@@ -35,6 +35,7 @@ struct EditorSettings {
     bool showTerrain = false;        // the Terrain Editor
     bool showAnimation = false;      // the Animation Editor
     bool showGitRepository = false;  // Git Repository (branches and history)
+    bool showToolbox = false;        // the asset library
     bool showFind = false;           // Find in Scripts
 
     // Viewport

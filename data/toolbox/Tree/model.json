@@ -1,0 +1,96 @@
+{
+ "format": "rift-toolbox",
+ "version": 1,
+ "name": "Tree",
+ "description": "A simple round tree.",
+ "created": 0,
+ "instances": [
+  {
+   "class": "Model",
+   "id": "00000000007b0001",
+   "name": "Tree",
+   "props": {
+    "Position": [
+     0,
+     3,
+     0
+    ]
+   }
+  },
+  {
+   "class": "Part",
+   "id": "00000000007b0002",
+   "name": "Trunk",
+   "parent": "00000000007b0001",
+   "props": {
+    "Size": [
+     1.0,
+     6,
+     1.0
+    ],
+    "Position": [
+     0,
+     0,
+     0
+    ],
+    "Color": [
+     0.4314,
+     0.3059,
+     0.1961
+    ],
+    "Material": 5
+   }
+  },
+  {
+   "class": "Part",
+   "id": "00000000007b0003",
+   "name": "Leaves",
+   "parent": "00000000007b0001",
+   "props": {
+    "Shape": 1,
+    "Size": [
+     6,
+     6,
+     6
+    ],
+    "Position": [
+     0,
+     4.5,
+     0
+    ],
+    "Color": [
+     0.2941,
+     0.5882,
+     0.2745
+    ],
+    "Material": 20
+   }
+  },
+  {
+   "class": "Part",
+   "id": "00000000007b0004",
+   "name": "Leaves2",
+   "parent": "00000000007b0001",
+   "props": {
+    "Shape": 1,
+    "Size": [
+     4,
+     4,
+     4
+    ],
+    "Position": [
+     1.8,
+     3.2,
+     1.0
+    ],
+    "Color": [
+     0.3333,
+     0.6275,
+     0.2941
+    ],
+    "Material": 20
+   }
+  }
+ ],
+ "files": []
+}

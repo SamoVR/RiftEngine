@@ -1,0 +1,178 @@
+{
+ "format": "rift-toolbox",
+ "version": 1,
+ "name": "Sign",
+ "description": "A signpost with text on its front (a SurfaceGui): edit the TextLabel to change what it says.",
+ "created": 0,
+ "instances": [
+  {
+   "class": "Model",
+   "id": "00000000007b0001",
+   "name": "Sign",
+   "props": {
+    "Position": [
+     0,
+     2.5,
+     0
+    ]
+   }
+  },
+  {
+   "class": "Part",
+   "id": "00000000007b0002",
+   "name": "LeftPost",
+   "parent": "00000000007b0001",
+   "props": {
+    "Size": [
+     0.3,
+     5,
+     0.3
+    ],
+    "Position": [
+     -2.2,
+     0,
+     0
+    ],
+    "Color": [
+     0.3922,
+     0.2941,
+     0.2157
+    ],
+    "Material": 5
+   }
+  },
+  {
+   "class": "Part",
+   "id": "00000000007b0003",
+   "name": "RightPost",
+   "parent": "00000000007b0001",
+   "props": {
+    "Size": [
+     0.3,
+     5,
+     0.3
+    ],
+    "Position": [
+     2.2,
+     0,
+     0
+    ],
+    "Color": [
+     0.3922,
+     0.2941,
+     0.2157
+    ],
+    "Material": 5
+   }
+  },
+  {
+   "class": "Part",
+   "id": "00000000007b0004",
+   "name": "Board",
+   "parent": "00000000007b0001",
+   "props": {
+    "Size": [
+     5,
+     2.4,
+     0.25
+    ],
+    "Position": [
+     0,
+     1.1,
+     0
+    ],
+    "Color": [
+     0.7843,
+     0.6471,
+     0.451
+    ],
+    "Material": 16
+   }
+  },
+  {
+   "class": "SurfaceGui",
+   "id": "00000000007b0005",
+   "name": "SurfaceGui",
+   "parent": "00000000007b0004",
+   "props": {
+    "Face": 5,
+    "CanvasSize": [
+     500.0,
+     240.0
+    ]
+   }
+  },
+  {
+   "class": "TextLabel",
+   "id": "00000000007b0006",
+   "name": "Text",
+   "parent": "00000000007b0005",
+   "props": {
+    "Size": [
+     0.9,
+     0,
+     0.8,
+     0
+    ],
+    "Position": [
+     0.05,
+     0,
+     0.1,
+     0
+    ],
+    "BackgroundTransparency": 1.0,
+    "Text": "Welcome!",
+    "TextScaled": true,
+    "TextColor3": [
+     0.2353,
+     0.1569,
+     0.098
+    ],
+    "Font": 2
+   }
+  },
+  {
+   "class": "SurfaceGui",
+   "id": "00000000007b0007",
+   "name": "SurfaceGui",
+   "parent": "00000000007b0004",
+   "props": {
+    "Face": 2,
+    "CanvasSize": [
+     500.0,
+     240.0
+    ]
+   }
+  },
+  {
+   "class": "TextLabel",
+   "id": "00000000007b0008",
+   "name": "Text",
+   "parent": "00000000007b0007",
+   "props": {
+    "Size": [
+     0.9,
+     0,
+     0.8,
+     0
+    ],
+    "Position": [
+     0.05,
+     0,
+     0.1,
+     0
+    ],
+    "BackgroundTransparency": 1.0,
+    "Text": "Welcome!",
+    "TextScaled": true,
+    "TextColor3": [
+     0.2353,
+     0.1569,
+     0.098
+    ],
+    "Font": 2
+   }
+  }
+ ],
+ "files": []
+}

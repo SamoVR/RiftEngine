@@ -1,0 +1,113 @@
+{
+ "format": "rift-toolbox",
+ "version": 1,
+ "name": "Treasure Chest",
+ "description": "Hold E for a second to open it: it gives the player 10 Coins (if the game has leaderstats) and says so.",
+ "created": 0,
+ "instances": [
+  {
+   "class": "Model",
+   "id": "00000000007b0001",
+   "name": "TreasureChest",
+   "props": {
+    "Position": [
+     0,
+     0.75,
+     0
+    ]
+   }
+  },
+  {
+   "class": "Part",
+   "id": "00000000007b0002",
+   "name": "Box",
+   "parent": "00000000007b0001",
+   "props": {
+    "Size": [
+     3,
+     1.5,
+     2
+    ],
+    "Position": [
+     0,
+     0,
+     0
+    ],
+    "Color": [
+     0.5098,
+     0.3333,
+     0.1765
+    ],
+    "Material": 16
+   }
+  },
+  {
+   "class": "Part",
+   "id": "00000000007b0003",
+   "name": "Lid",
+   "parent": "00000000007b0001",
+   "props": {
+    "Size": [
+     3.1,
+     0.5,
+     2.1
+    ],
+    "Position": [
+     0,
+     1.0,
+     0
+    ],
+    "Color": [
+     0.4706,
+     0.2941,
+     0.1569
+    ],
+    "Material": 16
+   }
+  },
+  {
+   "class": "Part",
+   "id": "00000000007b0004",
+   "name": "Lock",
+   "parent": "00000000007b0001",
+   "props": {
+    "Size": [
+     0.5,
+     0.6,
+     0.15
+    ],
+    "Position": [
+     0,
+     0.55,
+     -1.05
+    ],
+    "Color": [
+     0.9412,
+     0.7843,
+     0.2745
+    ],
+    "Material": 2
+   }
+  },
+  {
+   "class": "ProximityPrompt",
+   "id": "00000000007b0005",
+   "name": "ProximityPrompt",
+   "parent": "00000000007b0003",
+   "props": {
+    "ActionText": "Open",
+    "ObjectText": "Treasure Chest",
+    "HoldDuration": 1.0,
+    "MaxActivationDistance": 8.0
+   }
+  },
+  {
+   "class": "Script",
+   "id": "00000000007b0006",
+   "name": "ChestScript",
+   "parent": "00000000007b0001",
+   "_text": "-- Opens once: the lid tips back and the player gets 10 Coins.\nlocal chest = script.Parent\nlocal lid = chest:WaitForChild(\"Lid\")\nlocal prompt = lid:WaitForChild(\"ProximityPrompt\")\nlocal TweenService = game:GetService(\"TweenService\")\n\nprompt.Triggered:Connect(function(player)\n\tprompt.Enabled = false\n\tlocal hinge = lid.CFrame * CFrame.new(0, 0, 1.05)\n\tlocal open = hinge * CFrame.Angles(math.rad(-70), 0, 0) * CFrame.new(0, 0, -1.05)\n\tTweenService:Create(lid, TweenInfo.new(0.5, Enum.EasingStyle.Back), { CFrame = open }):Play()\n\tlocal stats = player:FindFirstChild(\"leaderstats\")\n\tlocal coins = stats and stats:FindFirstChild(\"Coins\")\n\tif coins then coins.Value = coins.Value + 10 end\n\tgame:Message(player.Name .. \" found the treasure!\", 3)\nend)\n"
+  }
+ ],
+ "files": []
+}

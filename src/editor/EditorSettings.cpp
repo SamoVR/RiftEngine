@@ -38,6 +38,7 @@ namespace {
         f("showTerrain", s.showTerrain);
         f("showAnimation", s.showAnimation);
         f("showGitRepository", s.showGitRepository);
+        f("showToolbox", s.showToolbox);
         f("showGrid", s.showGrid);
         f("showGui", s.showGui);
         f("gridStep", s.gridStep);
@@ -119,6 +120,7 @@ void EditorSettings::resetPreferences() {
     fresh.showTerrain = showTerrain;
     fresh.showAnimation = showAnimation;
     fresh.showGitRepository = showGitRepository;
+    fresh.showToolbox = showToolbox;
     fresh.discordClientId = discordClientId;
     *this = fresh;
 }

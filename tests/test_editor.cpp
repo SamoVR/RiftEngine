@@ -7,6 +7,7 @@
 #include "core/Paths.h"
 #include "scene/SceneIO.h"
 #include "project/Exporter.h"
+#include "project/Toolbox.h"
 
 #include <glm/gtc/epsilon.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -464,4 +465,84 @@ TEST_CASE("terrain: a dab inside one chunk only re-meshes that chunk") {
     for (const auto& [key, c] : t.chunks()) if (before.count(key) && before[key] != c.revision) ++changed;
     CHECK(changed >= 2);
     CHECK(changed <= 8);
+}
+
+TEST_CASE("the Toolbox: save the selection with its scripts and images, insert it into another project") {
+    std::error_code ec;
+    fs::remove_all(Toolbox::userFolder(), ec);
+    std::string savedFolder;
+    {
+        Fixture f;
+        // A model with a textured part and a script in it.
+        const fs::path image = f.project.folder / "assets" / "textures" / "crate.png";
+        fs::create_directories(image.parent_path());
+        std::ofstream(image, std::ios::binary) << "png bytes";
+        Instance* model = f.editor.insert(ClassId::Model);
+        REQUIRE(model);
+        model->name = "Crate";
+        Instance* part = f.editor.scene().create(ClassId::Part, model);
+        part->name = "Box";
+        part->texture.path = "assets/textures/crate.png";
+        f.editor.scripts().create("scripts/CrateScript.lua", "print('crate!')\n");
+        Instance* script = f.editor.scene().create(ClassId::Script, part);
+        script->name = "CrateScript";
+        script->source = "scripts/CrateScript.lua";
+        f.editor.select(model->id);
+        ToolboxItem item;
+        REQUIRE(f.editor.saveSelectionToToolbox("Wooden Crate", "A box", &item));
+        CHECK(item.name == "Wooden Crate");
+        CHECK(item.rootClass == "Model");
+        CHECK(item.objects == 3);
+        CHECK(fs::exists(item.folder / "files" / "assets" / "textures" / "crate.png"));
+        savedFolder = Paths::toUtf8(item.folder);
+        // Saving again with the same name makes a second item.
+        ToolboxItem again;
+        REQUIRE(f.editor.saveSelectionToToolbox("Wooden Crate", "", &again));
+        CHECK(again.folder != item.folder);
+        REQUIRE(Toolbox::remove(again, nullptr));
+    }
+
+    // Built-in items and the saved one are listed.
+    const std::vector<ToolboxItem> items = Toolbox::list();
+    const ToolboxItem* mine = nullptr;
+    int builtIn = 0;
+    for (const ToolboxItem& i : items) {
+        if (i.builtIn) {
+            ++builtIn;
+            CHECK_MESSAGE(classByName(i.rootClass) != nullptr, i.name);
+        }
+        if (!i.builtIn && i.name == "Wooden Crate") mine = &i;
+    }
+    CHECK(builtIn >= 6);
+    REQUIRE(mine);
+
+    // Into a new project: the image comes along, the script gets its own file and text.
+    Fixture other;
+    ToolboxItem item = *mine;
+    REQUIRE(other.editor.insertToolboxItem(item));
+    Instance* crate = other.find("Crate");
+    REQUIRE(crate);
+    CHECK(other.editor.primary() == crate->id);
+    CHECK(fs::exists(other.project.folder / "assets" / "textures" / "crate.png"));
+    Instance* script = other.find("CrateScript");
+    REQUIRE(script);
+    REQUIRE(other.editor.scripts().load(script->source));
+    CHECK(other.editor.scripts().find(script->source)->text == "print('crate!')\n");
+    // One undo step takes it out again.
+    other.editor.undo();
+    CHECK_FALSE(other.find("Crate"));
+
+    // Every built-in item goes in without trouble.
+    for (const ToolboxItem& i : items) {
+        if (!i.builtIn) continue;
+        CHECK_MESSAGE(other.editor.insertToolboxItem(i), i.name);
+    }
+    CHECK(other.find("DoorScript"));
+
+    // Renamed and deleted.
+    REQUIRE(Toolbox::rename(item, "Big Crate", nullptr));
+    CHECK(Toolbox::listFolder(Toolbox::userFolder(), false)[0].name == "Big Crate");
+    REQUIRE(Toolbox::remove(item, nullptr));
+    CHECK(Toolbox::listFolder(Toolbox::userFolder(), false).empty());
+    CHECK(Toolbox::folderName("My: Car?") == "My Car");
 }
