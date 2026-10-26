@@ -1,5 +1,6 @@
 #include "editor/panels/Panels.h"
 #include "editor/Theme.h"
+#include "editor/LuaCompletion.h"
 #include "script/LuaRuntime.h"
 #include "core/Paths.h"
 
@@ -7,6 +8,7 @@
 #include <TextEditor.h>
 #include <imgui_internal.h>
 #include <algorithm>
+#include <chrono>
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
@@ -71,6 +73,16 @@ int scriptErrorLine(const std::string& message, const std::string& chunk) {
 }
 
 namespace {
+    // The byte where the `glyph`-th character of a UTF-8 line starts.
+    size_t utf8Offset(const std::string& line, size_t glyph) {
+        size_t i = 0;
+        for (size_t g = 0; g < glyph && i < line.size(); ++g) {
+            ++i;
+            while (i < line.size() && (static_cast<unsigned char>(line[i]) & 0xC0) == 0x80) ++i;
+        }
+        return i;
+    }
+
     // Text after "chunk:line: " (what to show in the status bar).
     std::string messageOf(const std::string& message) {
         for (size_t k = 0; k + 1 < message.size(); ++k) {
@@ -141,6 +153,21 @@ void ScriptEditorPanel::open(UiContext& ui, const Editor::ScriptRequest& request
     e.SetFindReplaceEnabled(true);
     e.SetLineSpacing(1.15f);
     e.SetShowWhitespacesEnabled(false);
+    // Built-in scripts (the default Animate) can be read, not changed.
+    e.SetReadOnlyEnabled(ScriptStore::isEnginePath(request.path));
+    // Suggestions as you type, and after "." / ":" (Ctrl+Space asks for them).
+    TextEditor::AutoCompleteConfig complete;
+    complete.triggerDelay = std::chrono::milliseconds(60);
+    complete.suggestionWidth = 34;
+    Doc* raw = doc.get();
+    Editor* owner = &ui.editor;
+    complete.callback = [raw, owner](TextEditor::AutoCompleteState& state) {
+        const std::string line = raw->editor.GetLineText(state.searchTermStart.line);
+        const size_t start = utf8Offset(line, state.searchTermStart.index);
+        const Instance* script = raw->scriptId ? owner->scene().find(raw->scriptId) : nullptr;
+        state.suggestions = luaCompletions(line, start, state.searchTerm, owner->scene(), script, raw->editor.GetText());
+    };
+    e.SetAutoCompleteConfig(&complete);
     doc->synced = store.find(request.path)->text;
     e.SetText(doc->synced);
     doc->checkTimer = 0.01f;

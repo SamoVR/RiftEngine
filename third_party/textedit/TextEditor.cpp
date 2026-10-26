@@ -2563,7 +2563,8 @@ void TextEditor::handleCharacter(ImWchar character) {
 
 	endTransaction(transaction);
 
-	if (CodePoint::isWord(character)) {
+	// RIFT: a member access ("part." / "part:") opens the suggestions too.
+	if (CodePoint::isWord(character) || character == '.' || character == ':') {
 		if (!cursors.hasMultiple() && autocomplete.startTyping(cursors)) {
 			makeCursorVisible();
 		}

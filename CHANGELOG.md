@@ -21,6 +21,11 @@ RIFT is in **beta**: versions are 0.x until the engine is complete.
 - Humanoid states: `GetState()`, `StateChanged`, `FreeFalling`, `Swimming`. KeyframeSequenceProvider.
 - The CFrame property type (Motor6D.C0 / C1, Pose.CFrame) with position and rotation fields in Properties.
 
+### Scripting
+- Autocomplete in the script editor: keywords, the API, your own names, and the members of what is before a `.` or `:` (objects in the scene, services, Enum, Vector3 and friends, events, simple locals).
+- **Find in Scripts** (Ctrl+Shift+F): search every script of the scene, jump to a result, replace all.
+- Built-in scripts (the default Animate) open read-only.
+
 ### Fixes
 - `game:GetService("ServerStorage")` returned ReplicatedStorage.
 

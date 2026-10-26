@@ -1,5 +1,6 @@
 // LuaTypes.cpp -- value types exposed to scripts and Value <-> Lua conversion.
 #include "script/LuaInternal.h"
+#include "script/LuaApi.h"
 #include "platform/Input.h"
 #include "core/TransformUtil.h"
 
@@ -88,6 +89,25 @@ const std::vector<const EnumType*>& allEnumTypes() {
     }();
     return list;
 }
+
+} // namespace lua
+
+// The editor's autocomplete reads the same enums the scripts get.
+const std::vector<std::pair<std::string, std::vector<std::string>>>& luaapi::enums() {
+    static const std::vector<std::pair<std::string, std::vector<std::string>>> list = [] {
+        std::vector<std::pair<std::string, std::vector<std::string>>> out;
+        for (const lua::EnumType* t : lua::allEnumTypes()) {
+            std::vector<std::string> items;
+            for (const auto& [name, value] : t->items) if (std::find(items.begin(), items.end(), name) == items.end()) items.push_back(name);
+            out.emplace_back(t->name, std::move(items));
+        }
+        std::sort(out.begin(), out.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+        return out;
+    }();
+    return list;
+}
+
+namespace lua {
 
 // ============================================================================
 //  CFrame helpers

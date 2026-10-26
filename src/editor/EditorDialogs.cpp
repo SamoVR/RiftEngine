@@ -74,6 +74,9 @@ namespace {
         { "Drag on empty space", "Box select" },
         { "Ctrl+N / Ctrl+Shift+N / Ctrl+O", "New scene / New project / Open project" },
         { "Ctrl+,", "Preferences" },
+        { "Ctrl+Shift+F", "Find (and replace) in all scripts" },
+        { "Ctrl+Space (in a script)", "Show suggestions" },
+        { "[ / ] (Terrain Editor)", "Smaller / larger brush" },
         { "Ctrl+B / Ctrl+F5", "Build the game / Run it in the player" },
         { "Esc (while playing)", "Give the mouse back to the editor" },
     };

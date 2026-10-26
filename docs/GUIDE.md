@@ -198,7 +198,9 @@ A **Script** is an object in the Explorer and a `.lua` file in the scene's
 
 - The editor checks the syntax as you type: the line with an error turns red and the toolbar shows the message (click it to jump there).
 - Errors while playing are shown in the Output; click a line to jump to the script and line. The tab marks the line too.
-- Ctrl+S saves (while playing it saves just that file); Ctrl+F finds and replaces; the +/- buttons change the text size.
+- **Suggestions** pop up as you type, and after `.` or `:`: the Lua keywords, the API (`game`, `workspace`, `Vector3.new`, `Enum.Material.Grass`, ...), the names in your file, and the members of what is before the dot: `workspace.Map.` lists Map's children, properties and events, `game:GetService("Players").` the Players service's, `script.Parent.` those of the script's part, and simple locals (`local door = workspace.Door`) are followed too. Tab or Enter takes one; Ctrl+Space asks for them.
+- Ctrl+S saves (while playing it saves just that file); Ctrl+F finds and replaces in the file; the +/- buttons change the text size.
+- **Find in Scripts** (Ctrl+Shift+F, also in the View menu) searches every script of the scene as you type; click a result to open the script at that line. Replace All changes them all (in the editor; saving writes them).
 - The files are plain Lua, so you can also edit them in VS Code or any other editor: changes are picked up within a second. If a script was changed on disk *and* has unsaved edits in RIFT, your RIFT version is kept and you are told.
 - Duplicating or pasting an object gives its scripts their own copies of the files.
 - **ModuleScripts** return a value and are loaded with `require(module)`. Modules in the project's `scripts/` folder are shared by all scenes: `require("Name")` loads `scenes/<scene>/scripts/Name.lua` if it exists, else `scripts/Name.lua`.
@@ -294,6 +296,8 @@ Help > Keyboard Shortcuts lists them in the editor.
 | Ctrl+L | Local / world axes |
 | F2 / F | Rename / Zoom to selection |
 | Ctrl+, | Preferences |
+| Ctrl+Shift+F | Find in all scripts |
+| Ctrl+Space | Suggestions (in a script) |
 
 ## Files and troubleshooting
 

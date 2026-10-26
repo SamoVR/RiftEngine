@@ -56,6 +56,7 @@ private:
     SourceControlPanel sourceControl_;
     TerrainPanel terrain_;
     AnimationPanel animation_;
+    FindPanel find_;
     Updater updater_;
 
     std::string iniPath_;

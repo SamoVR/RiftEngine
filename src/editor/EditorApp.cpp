@@ -298,6 +298,10 @@ void EditorApp::frame(float dt) {
             animation_.draw(ui, &settings_.showAnimation);
         }
         if (!settings_.showAnimation && animation_.attached()) animation_.close(*editor_);
+        if (settings_.showFind) {
+            if (ImGuiWindow* w = ImGui::FindWindowByName("###Output")) ImGui::SetNextWindowDockID(w->DockId, ImGuiCond_FirstUseEver);
+            find_.draw(ui, &settings_.showFind);
+        }
         if (focusExplorer_) {
             ImGui::SetWindowFocus("###Explorer");
             ImGui::SetWindowFocus("###Properties");
@@ -348,6 +352,7 @@ void EditorApp::buildDefaultLayout(ImGuiID dockspace) {
     ImGui::DockBuilderDockWindow("###Output", bottom);
     ImGui::DockBuilderDockWindow("###Assets", bottom);
     ImGui::DockBuilderDockWindow("###Animation", bottom);
+    ImGui::DockBuilderDockWindow("###Find", bottom);
     ImGui::DockBuilderFinish(dockspace);
     settings_.showExplorer = settings_.showProperties = settings_.showOutput = settings_.showAssets = settings_.showSourceControl = true;
     focusExplorer_ = true; // in front of Source Control once both exist
@@ -366,6 +371,12 @@ void EditorApp::handleShortcuts() {
         if (key(ImGuiKey_F5) && !e.playing() && !ImGui::GetIO().KeyCtrl) play();
         if (key(ImGuiMod_Shift | ImGuiKey_F5) && e.playing()) e.stop();
         if (key(ImGuiKey_F6) && e.playing()) e.session()->setPaused(!e.session()->paused());
+        // Find in Scripts works from anywhere, the script editor included.
+        if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_F, ImGuiInputFlags_RouteGlobal)) {
+            settings_.showFind = true;
+            ImGui::SetWindowFocus("###Find");
+            find_.focus();
+        }
     }
     if (io.WantTextInput || scripts_.anyFocused() || ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId)) return;
     // While the game runs in a focused viewport, keys belong to the game.
@@ -538,6 +549,10 @@ void EditorApp::drawMenuBar() {
         ImGui::MenuItem(ICON_FA_CODE_BRANCH "  Source Control", nullptr, &settings_.showSourceControl);
         ImGui::MenuItem(ICON_FA_MOUNTAIN_SUN "  Terrain Editor", nullptr, &settings_.showTerrain);
         ImGui::MenuItem(ICON_FA_PERSON_RUNNING "  Animation Editor", nullptr, &settings_.showAnimation);
+        if (ImGui::MenuItem(ICON_FA_MAGNIFYING_GLASS "  Find in Scripts", "Ctrl+Shift+F", settings_.showFind)) {
+            settings_.showFind = !settings_.showFind;
+            if (settings_.showFind) find_.focus();
+        }
         ImGui::Separator();
         ImGui::MenuItem(ICON_FA_TABLE_CELLS "  Grid", nullptr, &settings_.showGrid);
         ImGui::MenuItem(ICON_FA_DESKTOP "  GUI While Editing", nullptr, &settings_.showGui);

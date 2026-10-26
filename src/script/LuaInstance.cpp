@@ -3,6 +3,7 @@
 // (Parent, CFrame, ClassName, ...), methods (Clone, Destroy, WaitForChild,
 // ...) and events (Touched, Changed, ChildAdded, ...).
 #include "script/LuaInternal.h"
+#include "script/LuaApi.h"
 #include "physics/PhysicsWorld.h"
 #include "core/TransformUtil.h"
 
@@ -15,102 +16,9 @@ using namespace rift::lua;
 
 namespace {
 
-// Roblox's abstract base classes, for IsA / FindFirstChildWhichIsA.
-bool isA(const Instance& i, const std::string& cls) {
-    if (cls == "Instance") return true;
-    if (cls == classInfo(i.cls).name) return true;
-    if (cls == "BasePart") return i.isBasePart();
-    if (cls == "PVInstance") return i.hasTransform() || i.cls == ClassId::Workspace;
-    if (cls == "Model") return i.cls == ClassId::Model || i.cls == ClassId::Workspace;
-    if (cls == "LuaSourceContainer") return i.isScript();
-    if (cls == "BaseScript") return i.cls == ClassId::Script || i.cls == ClassId::LocalScript;
-    if (cls == "GuiObject") return i.isGuiObject();
-    if (cls == "GuiButton") return i.cls == ClassId::TextButton || i.cls == ClassId::ImageButton;
-    if (cls == "GuiBase2d") return i.isGui();
-    if (cls == "LayerCollector") return i.cls == ClassId::ScreenGui;
-    if (cls == "Light") return i.isLight();
-    if (cls == "ValueBase") return i.isValueObject();
-    return false;
-}
-
-bool hasEvent(const Instance& i, const std::string& name) {
-    static const char* common[] = { "Changed", "ChildAdded", "ChildRemoved", "DescendantAdded", "DescendantRemoving",
-                                    "AncestryChanged", "Destroying", "AttributeChanged" };
-    for (const char* e : common) if (name == e) return true;
-    if (i.isBasePart()) return name == "Touched" || name == "TouchEnded";
-    if (i.cls == ClassId::Humanoid) {
-        return name == "Died" || name == "HealthChanged" || name == "Jumping" || name == "Running" || name == "StateChanged"
-            || name == "FreeFalling" || name == "Swimming" || name == "AnimationPlayed";
-    }
-    if (i.cls == ClassId::Animator) return name == "AnimationPlayed";
-    if (i.cls == ClassId::Sound) return name == "Ended";
-    if (i.cls == ClassId::TextButton || i.cls == ClassId::ImageButton) {
-        return name == "Activated" || name == "MouseButton1Click" || name == "MouseButton1Down" || name == "MouseButton1Up"
-            || name == "MouseEnter" || name == "MouseLeave";
-    }
-    if (i.isGuiObject()) return name == "MouseEnter" || name == "MouseLeave";
-    if (i.cls == ClassId::Player) return name == "CharacterAdded" || name == "CharacterRemoving";
-    if (i.cls == ClassId::RemoteEvent) return name == "OnServerEvent" || name == "OnClientEvent";
-    if (i.cls == ClassId::BindableEvent) return name == "Event";
-    if (i.cls == ClassId::Tool) return name == "Equipped" || name == "Unequipped" || name == "Activated" || name == "Deactivated";
-    return false;
-}
-
-// Methods that only exist on some classes. Anything else is shared by all
-// instances. On other classes the name falls through to child lookup, so a
-// button named "Play" is found even though Sound has a :Play() method.
-bool methodApplies(const std::string& name, const Instance& i) {
-    static const std::unordered_map<std::string, bool (*)(const Instance&)> only = {
-        { "Play", [](const Instance& x) { return x.cls == ClassId::Sound; } },
-        { "Stop", [](const Instance& x) { return x.cls == ClassId::Sound; } },
-        { "Pause", [](const Instance& x) { return x.cls == ClassId::Sound; } },
-        { "Resume", [](const Instance& x) { return x.cls == ClassId::Sound; } },
-        { "LoadCharacter", [](const Instance& x) { return x.cls == ClassId::Player; } },
-        { "Kick", [](const Instance& x) { return x.cls == ClassId::Player; } },
-        { "GetMouse", [](const Instance& x) { return x.cls == ClassId::Player; } },
-        { "GetPlayers", [](const Instance& x) { return x.cls == ClassId::Players; } },
-        { "GetPlayerFromCharacter", [](const Instance& x) { return x.cls == ClassId::Players; } },
-        { "Raycast", [](const Instance& x) { return x.cls == ClassId::Workspace; } },
-        { "GetPartBoundsInBox", [](const Instance& x) { return x.cls == ClassId::Workspace; } },
-        { "GetPartsInPart", [](const Instance& x) { return x.cls == ClassId::Workspace; } },
-        { "TakeDamage", [](const Instance& x) { return x.cls == ClassId::Humanoid; } },
-        { "GetTouchingParts", [](const Instance& x) { return x.isBasePart(); } },
-        { "ApplyImpulse", [](const Instance& x) { return x.isBasePart(); } },
-        { "ApplyAngularImpulse", [](const Instance& x) { return x.isBasePart(); } },
-        { "GetMass", [](const Instance& x) { return x.isBasePart(); } },
-        { "GetPivot", [](const Instance& x) { return x.hasTransform(); } },
-        { "PivotTo", [](const Instance& x) { return x.hasTransform(); } },
-        { "SetPrimaryPartCFrame", [](const Instance& x) { return x.cls == ClassId::Model; } },
-        { "MoveTo", [](const Instance& x) { return x.hasTransform() || x.cls == ClassId::Humanoid; } },
-        { "GetBoundingBox", [](const Instance& x) { return x.cls == ClassId::Model || x.isBasePart(); } },
-        { "GetExtentsSize", [](const Instance& x) { return x.cls == ClassId::Model; } },
-        { "FireServer", [](const Instance& x) { return x.cls == ClassId::RemoteEvent; } },
-        { "FireClient", [](const Instance& x) { return x.cls == ClassId::RemoteEvent; } },
-        { "FireAllClients", [](const Instance& x) { return x.cls == ClassId::RemoteEvent; } },
-        { "InvokeServer", [](const Instance& x) { return x.cls == ClassId::RemoteFunction; } },
-        { "InvokeClient", [](const Instance& x) { return x.cls == ClassId::RemoteFunction; } },
-        { "Fire", [](const Instance& x) { return x.cls == ClassId::BindableEvent; } },
-        { "Invoke", [](const Instance& x) { return x.cls == ClassId::BindableFunction; } },
-        { "Activate", [](const Instance& x) { return x.cls == ClassId::Tool; } },
-        { "LoadAnimation", [](const Instance& x) { return x.cls == ClassId::Animator || x.cls == ClassId::Humanoid || x.cls == ClassId::AnimationController; } },
-        { "GetPlayingAnimationTracks", [](const Instance& x) { return x.cls == ClassId::Animator || x.cls == ClassId::Humanoid || x.cls == ClassId::AnimationController; } },
-        { "GetState", [](const Instance& x) { return x.cls == ClassId::Humanoid; } },
-        { "Emit", [](const Instance& x) { return x.cls == ClassId::ParticleEmitter; } },
-        { "FillBlock", [](const Instance& x) { return x.cls == ClassId::Terrain; } },
-        { "FillBall", [](const Instance& x) { return x.cls == ClassId::Terrain; } },
-        { "FillCylinder", [](const Instance& x) { return x.cls == ClassId::Terrain; } },
-        { "Clear", [](const Instance& x) { return x.cls == ClassId::Terrain || x.cls == ClassId::ParticleEmitter; } },
-        { "GetMaterialColor", [](const Instance& x) { return x.cls == ClassId::Terrain; } },
-        { "SetMaterialColor", [](const Instance& x) { return x.cls == ClassId::Terrain; } },
-        { "Deactivate", [](const Instance& x) { return x.cls == ClassId::Tool; } },
-        { "EquipTool", [](const Instance& x) { return x.cls == ClassId::Humanoid; } },
-        { "SetCoreGuiEnabled", [](const Instance& x) { return x.cls == ClassId::StarterGui; } },
-        { "GetCoreGuiEnabled", [](const Instance& x) { return x.cls == ClassId::StarterGui; } },
-        { "UnequipTools", [](const Instance& x) { return x.cls == ClassId::Humanoid; } },
-    };
-    auto it = only.find(name);
-    return it == only.end() || it->second(i);
-}
+using luaapi::hasEvent;
+using luaapi::isA;
+using luaapi::methodApplies;
 
 std::string memberError(const std::string& member, const Instance& i) {
     return "'" + member + "' is not a valid member of " + classInfo(i.cls).name + " \"" + i.fullName() + "\"";

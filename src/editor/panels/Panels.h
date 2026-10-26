@@ -11,6 +11,7 @@
 //   AssetBrowserPanel  the project's files, drag them into the scene
 //   TerrainPanel       Terrain Editor: generate, brushes, material colours
 //   AnimationPanel     Animation Editor: pose a rig on a timeline, save .anim files
+//   FindPanel          Find (and replace) in every script of the scene
 //
 #include "editor/Editor.h"
 #include "game/GameSession.h"
@@ -169,6 +170,28 @@ private:
     void deleteSelected();
     void drawToolbar(UiContext& ui);
     void drawTimeline(UiContext& ui);
+};
+
+// ---------------------------------------------------------------------------
+// Find in Scripts (Ctrl+Shift+F): every script the scene uses, searched as you
+// type; a result opens its script at the line. Replace All edits the scripts
+// in the editor (saved with the scene).
+class FindPanel {
+public:
+    void draw(UiContext& ui, bool* open);
+    void focus(); // put the cursor in the search box
+
+private:
+    struct Hit { int line = 0; size_t column = 0; std::string text; };
+    struct FileHits { uint64_t scriptId = 0; std::string path, title; std::vector<Hit> hits; };
+    std::string query_, replacement_, searched_;
+    bool matchCase_ = false, wholeWord_ = false, focusInput_ = false;
+    std::vector<FileHits> results_;
+    int total_ = 0;
+    float refreshTimer_ = 0.0f;
+
+    void search(Editor& editor);
+    int replaceAll(Editor& editor);
 };
 
 // ---------------------------------------------------------------------------

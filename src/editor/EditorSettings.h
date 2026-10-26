@@ -34,6 +34,7 @@ struct EditorSettings {
     bool showExplorer = true, showProperties = true, showOutput = true, showAssets = true, showSourceControl = true;
     bool showTerrain = false;        // the Terrain Editor
     bool showAnimation = false;      // the Animation Editor
+    bool showFind = false;           // Find in Scripts
 
     // Viewport
     bool showGrid = true;
