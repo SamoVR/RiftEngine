@@ -25,6 +25,8 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 struct GLFWwindow;
@@ -216,45 +218,133 @@ private:
 };
 
 // ---------------------------------------------------------------------------
-// Git for the open project: changes, commit, history, branches, push / pull.
-// git runs on a worker thread; the panel shows a spinner meanwhile.
+// Git for the open project, laid out like Visual Studio: "Git Changes"
+// (stage, commit, push / pull, stashes, conflicts), "Git Repository" (the
+// branches, the commit graph with its lanes, what each commit changed), a
+// diff tab and the main menu's Git menu. git runs on worker threads, and a
+// background refresh never holds up the buttons.
 class SourceControlPanel {
 public:
     ~SourceControlPanel();
-    void draw(UiContext& ui, bool* open);
+    // Every frame: picks up finished git work and refreshes now and then while a window shows.
+    void update(UiContext& ui, bool visible);
+    void draw(UiContext& ui, bool* open);                            // Git Changes
+    void drawRepository(UiContext& ui, bool* open, ImGuiID dock);    // Git Repository
+    void drawDiff(UiContext& ui, ImGuiID dock);                      // the diff tab, while one is open
+    void drawMenu(UiContext& ui, bool* showChanges, bool* showRepository);
+    void drawPopups(UiContext& ui);
     void refresh() { refreshTimer_ = 0.0f; }
+    // "Manage branches" asked for the Git Repository window (once).
+    bool takeRepositoryRequest() { const bool r = openRepository_; openRepository_ = false; return r; }
 
     struct Result {
         bool ok = true;
         std::string output;
         GitStatus status;
+        std::vector<GitGraphCommit> graph;
+        bool haveGraph = false;
         bool reload = false; // files of the open project changed: reload the scene
     };
+    struct Lookup {
+        bool haveDetails = false, haveDiff = false;
+        GitCommitDetails details;
+        std::string diff, diffTitle;
+    };
+    using Work = std::function<Result(const Git&, const std::filesystem::path&)>;
+    using LookupWork = std::function<Lookup(const Git&, const std::filesystem::path&)>;
 
 private:
-    std::future<Result> job_;
-    std::string jobLabel_;
+    // git work: one action at a time, quiet refreshes beside it.
+    std::future<Result> action_, refresh_;
+    std::string actionLabel_;
+    uint64_t generation_ = 0, refreshGeneration_ = 0; // a refresh older than the last action is dropped
+    std::future<Lookup> lookup_;
+    LookupWork pendingLookup_;
+
     GitStatus status_;
     bool haveStatus_ = false;
-    std::filesystem::path root_;  // the project status_ is for
-    std::string gitPath_;         // Preferences value the git below was found with
+    std::filesystem::path project_;  // the project status_ is for
+    std::string gitPath_;            // Preferences value the git below was found with
     std::string gitExe_;
     float refreshTimer_ = 0.0f;
     uint64_t seenSaves_ = 0;
-    std::string message_;
     std::string lastLabel_, lastOutput_;
     bool lastOk_ = true;
-    std::string remoteDraft_, branchDraft_, nameDraft_, emailDraft_;
-    bool identityGlobal_ = true;
-    GitChange discardTarget_;
-    bool openDiscard_ = false, openRemote_ = false, openBranch_ = false;
 
-    void start(UiContext& ui, const std::string& label, std::function<Result(const Git&, const std::filesystem::path&)> work, bool saveFirst);
+    // Git Changes
+    std::string message_;
+    bool amend_ = false;
+    std::string nameDraft_, emailDraft_;
+    bool identityGlobal_ = true;
+
+    // Git Repository
+    std::vector<GitGraphCommit> graph_;
+    bool graphLoaded_ = false;
+    int repoShownFrame_ = -10;
+    std::unordered_map<std::string, size_t> graphIndex_;
+    std::unordered_set<std::string> outgoing_, incoming_;
+    std::string selectedCommit_, scrollToCommit_;
+    GitCommitDetails details_;
+    std::string graphFilter_;
+    int graphLanes_ = 1;
+
+    // The diff tab
+    bool showDiff_ = false, focusDiff_ = false;
+    std::string diffTitle_, diffKey_;
+    std::vector<std::string> diffLines_;
+    int diffAdded_ = 0, diffRemoved_ = 0;
+
+    // Dialogs
+    struct Confirm {
+        std::string title, text, button;
+        bool danger = false;
+        std::function<void(UiContext&)> action;
+    } confirm_;
+    struct Prompt {
+        std::string title, text, hint, value, button;
+        bool refName = true;         // must be a valid branch / tag name
+        bool showCheckbox = false, checkbox = true;
+        std::string checkboxLabel;
+        std::function<void(UiContext&, const std::string&, bool)> action;
+    } prompt_;
+    bool openConfirm_ = false, openPrompt_ = false, openRepository_ = false;
+
+    void start(UiContext& ui, const std::string& label, Work work, bool saveFirst);
+    void apply(Result& r);
     void poll(UiContext& ui);
-    void drawHeader(UiContext& ui);
-    void drawChanges(UiContext& ui);
-    void drawHistory(UiContext& ui);
-    void drawPopups(UiContext& ui);
+    void lookup(LookupWork work);
+    void pollLookup();
+    void selectCommit(const std::string& hash);
+    void openCommitDiff(const std::string& hash, const GitFileChange& file);
+    void openWorkingDiff(const GitChange& change, bool staged);
+    void ask(const std::string& title, const std::string& text, const std::string& button, bool danger, std::function<void(UiContext&)> action);
+    void promptFor(const std::string& title, const std::string& text, const std::string& hint, const std::string& value, const std::string& button,
+                   std::function<void(UiContext&, const std::string&, bool)> action, const std::string& checkboxLabel = "", bool refName = true);
+    bool busy() const { return action_.valid(); }
+
+    // Actions shared by the windows and the menu.
+    void doFetch(UiContext& ui);
+    void doPull(UiContext& ui);
+    void doPush(UiContext& ui);
+    void doSync(UiContext& ui);
+    void doSwitch(UiContext& ui, const std::string& branch);
+    void doCheckoutRemote(UiContext& ui, const std::string& remoteBranch);
+    void doMerge(UiContext& ui, const std::string& what);
+    void newBranch(UiContext& ui, const std::string& startPoint, const std::string& startLabel);
+    void setRemote(UiContext& ui);
+    void commitActions(UiContext& ui, const std::string& hash);
+    void branchActions(UiContext& ui, const GitRef& ref);
+
+    void drawToolbar(UiContext& ui, bool compact);
+    void drawSetup(UiContext& ui);
+    void drawOperation(UiContext& ui);
+    void drawCommitBox(UiContext& ui);
+    void drawChangeList(UiContext& ui);
+    void drawChangeRow(UiContext& ui, const GitChange& change, bool staged, int id);
+    void drawStashes(UiContext& ui);
+    void drawBranches(UiContext& ui);
+    void drawGraph(UiContext& ui);
+    void drawDetails(UiContext& ui);
 };
 
 // ---------------------------------------------------------------------------

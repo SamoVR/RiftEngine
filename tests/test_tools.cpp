@@ -109,8 +109,11 @@ TEST_CASE("a project under git: init, commit, change, discard, branch") {
     REQUIRE(s.repository);
     CHECK(s.branch == "main");
     CHECK(s.changes.empty());
-    REQUIRE(s.history.size() == 1);
-    CHECK(s.history[0].subject == "Create project");
+    CHECK(fs::equivalent(s.root, folder));
+    CHECK(s.projectPrefix.empty());
+    auto history = git.graph(folder);
+    REQUIRE(history.size() == 1);
+    CHECK(history[0].subject == "Create project");
 
     // Builds and autosaves are ignored; a real change shows up.
     write(folder / "Builds" / "Game.exe", "binary");
@@ -125,7 +128,7 @@ TEST_CASE("a project under git: init, commit, change, discard, branch") {
     REQUIRE(git.commitAll(folder, "Add a module", &out));
     s = git.status(folder);
     CHECK(s.changes.empty());
-    CHECK(s.history.size() == 2);
+    CHECK(git.graph(folder).size() == 2);
 
     // Discarding a change restores the committed file.
     write(folder / "scripts" / "Util.lua", "return { broken = true }\n");
@@ -140,7 +143,7 @@ TEST_CASE("a project under git: init, commit, change, discard, branch") {
     REQUIRE(git.switchBranch(folder, "experiment", true, &out));
     s = git.status(folder);
     CHECK(s.branch == "experiment");
-    CHECK(s.branches.size() == 2);
+    CHECK(s.localBranches().size() == 2);
     REQUIRE(git.switchBranch(folder, "main", false, &out));
     CHECK(git.status(folder).branch == "main");
 }

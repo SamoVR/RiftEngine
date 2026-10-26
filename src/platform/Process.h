@@ -13,7 +13,8 @@ struct ProcessResult {
     bool started = false;   // false: the program could not be started (not installed?)
     bool timedOut = false;  // killed after the time limit
     int exitCode = -1;
-    std::string output;     // stdout and stderr, in the order they were written
+    std::string output;     // stdout and stderr, in the order they were written (stdout only with separateErrors)
+    std::string errors;     // stderr, with separateErrors
     bool ok() const { return started && !timedOut && exitCode == 0; }
 };
 
@@ -22,7 +23,7 @@ struct ProcessResult {
 // (0 = no limit). `environment` adds or replaces variables ("NAME=value").
 ProcessResult runProcess(const std::string& exe, const std::vector<std::string>& arguments,
                          const std::string& workingFolder = "", unsigned timeoutMs = 120000,
-                         const std::vector<std::string>& environment = {});
+                         const std::vector<std::string>& environment = {}, bool separateErrors = false);
 
 // The full path of a program on PATH ("" if there is none). "git" finds git.exe.
 std::string findOnPath(const std::string& program);

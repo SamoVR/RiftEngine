@@ -86,7 +86,7 @@ std::string localAppDataFolder() {
 }
 
 ProcessResult runProcess(const std::string& exe, const std::vector<std::string>& arguments, const std::string& workingFolder,
-                         unsigned timeoutMs, const std::vector<std::string>& environment) {
+                         unsigned timeoutMs, const std::vector<std::string>& environment, bool separateErrors) {
     ProcessResult result;
     std::string path = exe;
     if (path.find_first_of("\\/") == std::string::npos) {
@@ -99,6 +99,12 @@ ProcessResult runProcess(const std::string& exe, const std::vector<std::string>&
     HANDLE readPipe = nullptr, writePipe = nullptr;
     if (!CreatePipe(&readPipe, &writePipe, &sa, 0)) { result.output = "could not create a pipe"; return result; }
     SetHandleInformation(readPipe, HANDLE_FLAG_INHERIT, 0);
+    // A second pipe for stderr when the caller parses stdout (warnings must not mix in).
+    HANDLE errRead = nullptr, errWrite = nullptr;
+    if (separateErrors) {
+        if (!CreatePipe(&errRead, &errWrite, &sa, 0)) { CloseHandle(readPipe); CloseHandle(writePipe); result.output = "could not create a pipe"; return result; }
+        SetHandleInformation(errRead, HANDLE_FLAG_INHERIT, 0);
+    }
     HANDLE nul = CreateFileW(L"NUL", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, &sa, OPEN_EXISTING, 0, nullptr);
 
     STARTUPINFOW si{};
@@ -106,7 +112,7 @@ ProcessResult runProcess(const std::string& exe, const std::vector<std::string>&
     si.dwFlags = STARTF_USESTDHANDLES;
     si.hStdInput = nul;
     si.hStdOutput = writePipe;
-    si.hStdError = writePipe;
+    si.hStdError = separateErrors ? errWrite : writePipe;
     PROCESS_INFORMATION pi{};
 
     std::wstring commandLine = quote(widen(path));
@@ -116,9 +122,11 @@ ProcessResult runProcess(const std::string& exe, const std::vector<std::string>&
     const BOOL created = CreateProcessW(nullptr, commandLine.data(), nullptr, nullptr, TRUE, CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT,
                                         env.data(), dir.empty() ? nullptr : dir.c_str(), &si, &pi);
     CloseHandle(writePipe); // only the child writes now
+    if (errWrite) CloseHandle(errWrite);
     if (nul != INVALID_HANDLE_VALUE) CloseHandle(nul);
     if (!created) {
         CloseHandle(readPipe);
+        if (errRead) CloseHandle(errRead);
         result.output = "could not start " + path;
         return result;
     }
@@ -127,13 +135,17 @@ ProcessResult runProcess(const std::string& exe, const std::vector<std::string>&
     // Read while it runs (a full pipe would block the child), until it exits.
     const auto start = std::chrono::steady_clock::now();
     char buffer[4096];
-    auto drain = [&] {
+    auto drainPipe = [&](HANDLE pipe, std::string& into) {
         DWORD available = 0;
-        while (PeekNamedPipe(readPipe, nullptr, 0, nullptr, &available, nullptr) && available > 0) {
+        while (PeekNamedPipe(pipe, nullptr, 0, nullptr, &available, nullptr) && available > 0) {
             DWORD got = 0;
-            if (!ReadFile(readPipe, buffer, std::min<DWORD>(available, sizeof(buffer)), &got, nullptr) || got == 0) break;
-            result.output.append(buffer, got);
+            if (!ReadFile(pipe, buffer, std::min<DWORD>(available, sizeof(buffer)), &got, nullptr) || got == 0) break;
+            into.append(buffer, got);
         }
+    };
+    auto drain = [&] {
+        drainPipe(readPipe, result.output);
+        if (errRead) drainPipe(errRead, result.errors);
     };
     for (;;) {
         drain();
@@ -153,11 +165,12 @@ ProcessResult runProcess(const std::string& exe, const std::vector<std::string>&
     CloseHandle(pi.hThread);
     CloseHandle(pi.hProcess);
     CloseHandle(readPipe);
+    if (errRead) CloseHandle(errRead);
     return result;
 }
 
 #else
-ProcessResult runProcess(const std::string& exe, const std::vector<std::string>&, const std::string&, unsigned, const std::vector<std::string>&) {
+ProcessResult runProcess(const std::string& exe, const std::vector<std::string>&, const std::string&, unsigned, const std::vector<std::string>&, bool) {
     ProcessResult r;
     r.output = exe + " cannot be started on this platform";
     return r;

@@ -248,16 +248,27 @@ thrown away on **Stop** (Shift+F5). **Pause** (F6) freezes the game.
 ## Source control
 
 RIFT works with **Git** (install [Git for Windows](https://git-scm.com/download/win)
-once). The **Source Control** panel (a tab next to the Explorer; View > Source
-Control) shows the project's repository:
+once), laid out like Visual Studio's source control. Everything is also in the
+**Git** menu.
 
-- **Initialize repository** turns a project into one, with a `.gitignore` that leaves out builds and autosaves. New projects can start as repositories (the checkbox in New Project, or Preferences > Source Control).
-- **Changes** lists the files that differ from the last commit. Write a message and **Commit** (Ctrl+Enter): the scene is saved first and every change is recorded. Right-click a file to discard its changes.
-- **History** lists the commits; right-click one to copy its id or open it on GitHub.
-- The **branch** box switches branches or creates a new one; the project reloads with that branch's files.
-- **Push** and **Pull** send and get commits. To back the project up on GitHub, create an empty repository there and paste its address under "Connect to GitHub". Signing in happens in Git's own window the first time.
+**Git Changes** (a tab next to the Explorer) is where you commit:
 
-The first commit asks for your name and email if git does not know them yet.
+- **Create Git Repository** turns a project into one, with a `.gitignore` that leaves out builds and autosaves. New projects can start as repositories (the checkbox in New Project, or Preferences > Source Control).
+- The top row picks the **branch** (or checks out one from the server), and has **Fetch**, **Pull** (with how many commits are waiting), **Push** (with how many are yours) and **Sync** (pull, then push).
+- **Changes** lists the files that differ from the last commit; **Staged Changes** the ones going into the next commit. Hover a file for **+** (stage), **-** (unstage) and undo; click it to see its diff. **Commit Staged** records what is staged, or **Commit All** everything when nothing is staged (Ctrl+Enter). The arrow next to it has Commit and Push / Sync and **Stash All**; **Amend** replaces the last commit.
+- When a pull or merge clashes with your changes, the conflicted files are listed with **Keep Mine**, **Take Theirs** and **Mark Resolved**, and **Abort** goes back.
+- **Stashes** are changes put aside: Apply, Pop or Drop them.
+
+**Git Repository** (Git > Git Repository, or Manage Branches) opens beside the
+viewport, like a document:
+
+- On the left, the **branches**: yours, the server's (Remotes) and tags, with how many commits each is ahead or behind. Double-click to check one out; right-click to merge it into yours, make a branch from it, rename, push or delete it.
+- In the middle, the **history graph** of every branch: each branch has its own coloured lane, merges join them, and badges show where branches and tags point. Arrows mark commits that are only yours (outgoing) or only on the server (incoming). Filter by message, author or id.
+- On the right, the selected commit: its message, author, parents and the files it changed; click a file for its diff. Right-click a commit (or Actions) to make a branch or tag there, check it out, revert it, cherry-pick it or reset your branch to it.
+
+To back the project up on GitHub, create an empty repository there and paste
+its address in "Connect to a Server". Signing in happens in Git's own window
+the first time. The first commit asks for your name and email if git does not know them yet.
 
 ## Building a game
 

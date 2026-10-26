@@ -282,11 +282,17 @@ void EditorApp::frame(float dt) {
         if (settings_.showProperties) properties_.draw(ui, &settings_.showProperties);
         if (settings_.showOutput) output_.draw(ui, &settings_.showOutput);
         if (settings_.showAssets) assets_.draw(ui, &settings_.showAssets);
+        sourceControl_.update(ui, settings_.showSourceControl || settings_.showGitRepository);
+        if (sourceControl_.takeRepositoryRequest()) settings_.showGitRepository = true;
         if (settings_.showSourceControl) {
             // First shown (no saved layout for it): a tab next to the Explorer.
             if (ImGuiWindow* w = ImGui::FindWindowByName("###Explorer")) ImGui::SetNextWindowDockID(w->DockId, ImGuiCond_FirstUseEver);
             sourceControl_.draw(ui, &settings_.showSourceControl);
         }
+        // Git Repository and diffs open as tabs beside the viewport, like documents.
+        if (settings_.showGitRepository) sourceControl_.drawRepository(ui, &settings_.showGitRepository, center);
+        sourceControl_.drawDiff(ui, center);
+        sourceControl_.drawPopups(ui);
         if (settings_.showTerrain) {
             // First shown: a tab next to the Properties.
             if (ImGuiWindow* w = ImGui::FindWindowByName("###Properties")) ImGui::SetNextWindowDockID(w->DockId, ImGuiCond_FirstUseEver);
@@ -547,7 +553,8 @@ void EditorApp::drawMenuBar() {
         ImGui::MenuItem(ICON_FA_SLIDERS "  Properties", nullptr, &settings_.showProperties);
         ImGui::MenuItem(ICON_FA_TERMINAL "  Output", nullptr, &settings_.showOutput);
         ImGui::MenuItem(ICON_FA_FOLDER_OPEN "  Assets", nullptr, &settings_.showAssets);
-        ImGui::MenuItem(ICON_FA_CODE_BRANCH "  Source Control", nullptr, &settings_.showSourceControl);
+        ImGui::MenuItem(ICON_FA_CODE_BRANCH "  Git Changes", nullptr, &settings_.showSourceControl);
+        ImGui::MenuItem(ICON_FA_SITEMAP "  Git Repository", nullptr, &settings_.showGitRepository);
         ImGui::MenuItem(ICON_FA_MOUNTAIN_SUN "  Terrain Editor", nullptr, &settings_.showTerrain);
         ImGui::MenuItem(ICON_FA_PERSON_RUNNING "  Animation Editor", nullptr, &settings_.showAnimation);
         if (ImGui::MenuItem(ICON_FA_MAGNIFYING_GLASS "  Find in Scripts", "Ctrl+Shift+F", settings_.showFind)) {
@@ -578,6 +585,11 @@ void EditorApp::drawMenuBar() {
         if (ImGui::MenuItem(ICON_FA_UP_RIGHT_FROM_SQUARE "  Run in Player", "Ctrl+F5", false, !e.playing())) runInPlayer();
         theme::tooltip("Saves, then runs the project in the standalone player, the way players will see it.");
         ImGui::EndMenu();
+    }
+
+    {
+        UiContext ui{ e, *renderer_, window_, 0.0f };
+        sourceControl_.drawMenu(ui, &settings_.showSourceControl, &settings_.showGitRepository);
     }
 
     if (ImGui::BeginMenu("Help")) {
