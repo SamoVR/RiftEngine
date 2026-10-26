@@ -5,6 +5,7 @@
 #include "script/ScriptStore.h"
 #include "physics/PhysicsWorld.h"
 #include "platform/Input.h"
+#include <algorithm>
 #include "core/Paths.h"
 #include "editor/Templates.h"
 
@@ -292,5 +293,100 @@ TEST_CASE("the Sword template hurts another player it hits") {
     REQUIRE(hum);
     CHECK_MESSAGE(hum->health < 100.0f, g.dump());
     CHECK(s.scene().find(s.client(0).humanoidId)->health == doctest::Approx(100.0f)); // not itself
+    CHECK(g.errors() == 0);
+}
+
+TEST_CASE("the backpack: ` opens the inventory, search, drag tools between it and the bar") {
+    Game g;
+    for (int k = 1; k <= 10; ++k) g.tool("Tool" + std::to_string(k));
+    g.tool("Sword");
+    g.tool("Shield");
+    GameSession& s = g.start(1);
+    g.run(0.1f);
+    GameSession::Client& c = s.client(0);
+    // Ten fit on the bar; all twelve are in the inventory.
+    CHECK(s.hotbar(0).size() == 10);
+    CHECK(c.inventory.size() == 12);
+    const uint64_t sword = c.inventory[10];
+    CHECK(std::find(c.hotbarTools.begin(), c.hotbarTools.end(), sword) == c.hotbarTools.end());
+    CHECK_FALSE(s.inventory(0).open);
+    CHECK(s.inventory(0).button);
+
+    g.tapKey(GLFW_KEY_GRAVE_ACCENT);
+    GameSession::InventoryView inv = s.inventory(0);
+    REQUIRE(inv.open);
+    CHECK(inv.cells.size() == 12);
+    CHECK(s.hotbar(0).size() == 10);
+
+    // Frames with the mouse at a place, the left button down or up.
+    ViewportInput view;
+    auto frame = [&](glm::vec2 mouse, bool down) {
+        view.mouse = mouse;
+        g.input.newFrame();
+        g.input.setMouseButton(GLFW_MOUSE_BUTTON_LEFT, down);
+        s.update(1.0f / 60.0f, view);
+    };
+    auto center = [](glm::vec2 pos, glm::vec2 size) { return pos + size * 0.5f; };
+    auto drag = [&](glm::vec2 from, glm::vec2 to) {
+        frame(from, true);
+        frame((from + to) * 0.5f, true);
+        frame(to, true);
+        frame(to, false);
+    };
+
+    // Typing in the search box filters the tools, and number keys type instead of equipping.
+    frame(center(inv.searchPos, inv.searchSize), true);
+    frame(center(inv.searchPos, inv.searchSize), false);
+    CHECK(c.searchFocused);
+    g.input.newFrame();
+    for (char ch : std::string("sw")) g.input.addText(static_cast<unsigned char>(ch));
+    g.input.setKey(GLFW_KEY_1, true);
+    s.update(1.0f / 60.0f, view);
+    g.input.newFrame();
+    g.input.setKey(GLFW_KEY_1, false);
+    s.update(1.0f / 60.0f, view);
+    CHECK(c.inventorySearch == "sw");
+    CHECK(c.equipped == 0);
+    inv = s.inventory(0);
+    REQUIRE(inv.cells.size() == 1);
+    CHECK(inv.cells[0].tool == sword);
+
+    // Drag the Sword onto slot 3: Tool3 leaves the bar (still in the inventory).
+    const uint64_t tool3 = c.hotbarTools[2];
+    std::vector<GameSession::HotbarSlot> bar = s.hotbar(0);
+    drag(center(inv.cells[0].pos, inv.cells[0].size), center(bar[2].pos, bar[2].size));
+    CHECK(c.hotbarTools[2] == sword);
+    CHECK(std::find(c.hotbarTools.begin(), c.hotbarTools.end(), tool3) == c.hotbarTools.end());
+    CHECK(c.inventory.size() == 12);
+    CHECK_FALSE(c.searchFocused); // clicked away from the box
+
+    // Slots swap when dragged onto each other.
+    const uint64_t tool1 = c.hotbarTools[0], tool6 = c.hotbarTools[5];
+    bar = s.hotbar(0);
+    drag(center(bar[0].pos, bar[0].size), center(bar[5].pos, bar[5].size));
+    CHECK(c.hotbarTools[0] == tool6);
+    CHECK(c.hotbarTools[5] == tool1);
+
+    // Dragged into the inventory: off the bar, so key 4 does nothing.
+    const uint64_t tool4 = c.hotbarTools[3];
+    bar = s.hotbar(0);
+    inv = s.inventory(0);
+    drag(center(bar[3].pos, bar[3].size), center(inv.gridPos, inv.gridSize));
+    CHECK(c.hotbarTools[3] == 0);
+    CHECK(std::find(c.inventory.begin(), c.inventory.end(), tool4) != c.inventory.end());
+
+    // A click (no drag) on a tool in the inventory equips it.
+    inv = s.inventory(0);
+    REQUIRE_FALSE(inv.cells.empty());
+    frame(center(inv.cells[0].pos, inv.cells[0].size), true);
+    frame(center(inv.cells[0].pos, inv.cells[0].size), false);
+    CHECK(c.equipped == inv.cells[0].tool);
+
+    // Closed again: only the filled slots show.
+    g.tapKey(GLFW_KEY_GRAVE_ACCENT);
+    CHECK_FALSE(s.inventory(0).open);
+    CHECK(s.hotbar(0).size() == 9);
+    g.tapKey(GLFW_KEY_4);
+    CHECK(c.equipped == inv.cells[0].tool);
     CHECK(g.errors() == 0);
 }

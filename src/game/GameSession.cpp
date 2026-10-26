@@ -22,6 +22,29 @@ namespace {
     constexpr size_t kMaxLogLines = 2000;
     constexpr int kMaxPlayers = 8;
     constexpr int kHotbarSlots = 10;
+    constexpr int kInventoryColumns = 10;
+
+    bool containsNoCase(const std::string& text, const std::string& needle) {
+        if (needle.empty()) return true;
+        auto lower = [](char ch) { return static_cast<char>(std::tolower(static_cast<unsigned char>(ch))); };
+        return std::search(text.begin(), text.end(), needle.begin(), needle.end(), [&](char a, char b) { return lower(a) == lower(b); }) != text.end();
+    }
+
+    // Where the bar goes: `count` slots of `size` and, after them, the inventory button.
+    struct BarGeometry { float size, gap, margin; glm::vec2 start; float buttonSize; glm::vec2 buttonPos; };
+    BarGeometry barGeometry(const glm::vec2& view, int count, bool button) {
+        BarGeometry g;
+        // Slots grow with the view (about 60 px on a 1080p screen).
+        g.size = std::clamp(view.y * 0.058f, 40.0f, 84.0f);
+        g.gap = g.size * 0.1f;
+        g.margin = g.size * 0.25f;
+        g.buttonSize = button ? std::floor(g.size * 0.72f) : 0.0f;
+        const float slots = count > 0 ? count * g.size + (count - 1) * g.gap : 0.0f;
+        const float width = slots + (button ? (count > 0 ? g.gap * 2.0f : 0.0f) + g.buttonSize : 0.0f);
+        g.start = glm::vec2((view.x - width) * 0.5f, view.y - g.size - g.margin);
+        g.buttonPos = glm::vec2(g.start.x + width - g.buttonSize, view.y - g.margin - g.buttonSize);
+        return g;
+    }
 
 
     float wrapDegrees(float a) {
@@ -152,7 +175,10 @@ void GameSession::fillBackpack(Client& c) {
     for (Instance* item : std::vector<Instance*>(starter->children)) {
         if (Instance* copy = scene_->cloneSubtree(*item)) scene_->setParent(copy, backpack);
     }
-    c.slots.clear();
+    c.inventory.clear();
+    c.hotbarTools.fill(0);
+    c.dragTool = 0;
+    c.dragging = false;
     c.equipped = 0;
     updateSlots(c);
 }
@@ -264,29 +290,100 @@ void GameSession::update(float dt, const ViewportInput& view) {
     }
 }
 
-// The Backpack bar: number keys and clicks equip, the left button uses the
+// The Backpack bar and inventory: number keys and clicks equip, ` opens the
+// inventory (drag tools between it and the bar), the left button uses the
 // tool, Backspace drops it.
 void GameSession::handleInput(Client& c) {
     updateSlots(c);
-    const std::vector<HotbarSlot> bar = hotbar(c.index);
-    auto toggle = [&](const HotbarSlot& slot) {
-        if (slot.equipped) unequipTools(c.index);
-        else equipTool(c.index, slot.tool);
+    if (!c.backpackBar && c.inventoryOpen) setInventoryOpen(c.index, false);
+    const glm::vec2 m = c.view.mouse;
+    auto inside = [&](const glm::vec2& p, const glm::vec2& s) { return m.x >= p.x && m.y >= p.y && m.x <= p.x + s.x && m.y <= p.y + s.y; };
+    auto toggle = [&](uint64_t tool) {
+        if (tool == c.equipped) unequipTools(c.index);
+        else equipTool(c.index, tool);
     };
-    if (c.view.keyboard && !c.dead) {
+
+    // Typing in the inventory's search box: the keys are the box's.
+    if (c.searchFocused && (!c.inventoryOpen || !c.view.keyboard)) c.searchFocused = false;
+    const bool typing = c.searchFocused;
+    if (typing) {
+        for (char ch : input_.text()) {
+            if (static_cast<unsigned char>(ch) >= 32 && c.inventorySearch.size() < 40) c.inventorySearch += ch;
+        }
+        if (input_.keyPressed(GLFW_KEY_BACKSPACE) && !c.inventorySearch.empty()) {
+            size_t n = c.inventorySearch.size() - 1; // a whole UTF-8 character
+            while (n > 0 && (static_cast<unsigned char>(c.inventorySearch[n]) & 0xC0) == 0x80) --n;
+            c.inventorySearch.erase(n);
+        }
+        if (!input_.text().empty() || input_.keyPressed(GLFW_KEY_BACKSPACE)) c.inventoryScroll = 0;
+        if (input_.keyPressed(GLFW_KEY_ENTER) || input_.keyPressed(GLFW_KEY_KP_ENTER) || input_.keyPressed(GLFW_KEY_ESCAPE)) c.searchFocused = false;
+    }
+    if (c.view.keyboard && !typing && c.backpackBar && input_.keyPressed(GLFW_KEY_GRAVE_ACCENT)) setInventoryOpen(c.index, !c.inventoryOpen);
+
+    const std::vector<HotbarSlot> bar = hotbar(c.index);
+    if (c.view.keyboard && !typing && !c.dead) {
         for (const HotbarSlot& slot : bar) {
+            if (!slot.tool) continue;
             const int key = slot.number == 0 ? GLFW_KEY_0 : GLFW_KEY_1 + slot.number - 1;
-            if (input_.keyPressed(key)) toggle(slot);
+            if (input_.keyPressed(key)) toggle(slot.tool);
         }
         if (input_.keyPressed(GLFW_KEY_BACKSPACE) && c.equipped) dropTool(c.index);
     }
+
+    const InventoryView inv = inventory(c.index);
     bool overBar = false;
+    c.overInventory = false;
     if (c.view.hovered) {
-        for (const HotbarSlot& slot : bar) {
-            const glm::vec2 m = c.view.mouse;
-            if (m.x < slot.pos.x || m.y < slot.pos.y || m.x > slot.pos.x + slot.size.x || m.y > slot.pos.y + slot.size.y) continue;
+        const bool press = input_.mousePressed(GLFW_MOUSE_BUTTON_LEFT);
+        auto startDrag = [&](uint64_t tool, int from) {
+            c.dragTool = tool;
+            c.dragFrom = from;
+            c.dragStart = m;
+            c.dragging = false;
+        };
+        if (inv.open && inside(inv.pos, inv.size)) {
+            overBar = c.overInventory = true;
+            if (input_.scroll() != 0.0f) c.inventoryScroll = std::clamp(c.inventoryScroll + (input_.scroll() > 0.0f ? -1 : 1), 0, inv.maxScroll);
+            if (press) {
+                c.searchFocused = inside(inv.searchPos, inv.searchSize);
+                if (inside(inv.gridPos, inv.gridSize)) {
+                    for (const InventoryView::Cell& cell : inv.cells)
+                        if (inside(cell.pos, cell.size)) startDrag(cell.tool, -1);
+                }
+            }
+        } else if (press) {
+            c.searchFocused = false;
+        }
+        if (inv.button && inside(inv.buttonPos, inv.buttonSize)) {
             overBar = true;
-            if (input_.mousePressed(GLFW_MOUSE_BUTTON_LEFT) && !c.dead) toggle(slot);
+            if (press) setInventoryOpen(c.index, !c.inventoryOpen);
+        }
+        for (const HotbarSlot& slot : bar) {
+            if (!inside(slot.pos, slot.size)) continue;
+            overBar = true;
+            if (!press || !slot.tool) continue;
+            // With the inventory open, slots can be dragged; a click still equips.
+            if (inv.open) startDrag(slot.tool, slot.index);
+            else if (!c.dead) toggle(slot.tool);
+        }
+    }
+    // Dragging between the inventory and the bar.
+    if (c.dragTool) {
+        overBar = true;
+        if (glm::length(m - c.dragStart) > 6.0f) c.dragging = true;
+        if (!input_.mouseDown(GLFW_MOUSE_BUTTON_LEFT)) {
+            if (c.dragging) {
+                int target = -1;
+                for (const HotbarSlot& slot : bar)
+                    if (inside(slot.pos, slot.size)) target = slot.index;
+                if (target >= 0) assignHotbar(c.index, c.dragTool, target);
+                else if (c.dragFrom >= 0 && inv.open && inside(inv.pos, inv.size)) assignHotbar(c.index, c.dragTool, -1); // back into the inventory
+            } else if (!c.dead && scene_->find(c.dragTool)) {
+                toggle(c.dragTool);
+            }
+            c.dragTool = 0;
+            c.dragFrom = -1;
+            c.dragging = false;
         }
     }
     // Using the held tool.
@@ -300,6 +397,8 @@ void GameSession::handleInput(Client& c) {
         c.activating = false;
         if (tool) activateTool(tool->id, false);
     }
+    // Keys typed into the search box don't walk the character or reach scripts.
+    if (typing || c.searchFocused) c.view.keyboard = false;
 }
 
 // ============================================================================
@@ -643,12 +742,19 @@ void GameSession::updateSlots(Client& c) {
             if (!held) held = item->id;
         }
     }
-    c.slots.erase(std::remove_if(c.slots.begin(), c.slots.end(), [&](uint64_t id) {
-        return std::find(present.begin(), present.end(), id) == present.end();
-    }), c.slots.end());
+    // Gone tools leave; new ones join the inventory and the first free slot of the bar.
+    auto gone = [&](uint64_t id) { return std::find(present.begin(), present.end(), id) == present.end(); };
+    c.inventory.erase(std::remove_if(c.inventory.begin(), c.inventory.end(), gone), c.inventory.end());
+    for (uint64_t& slot : c.hotbarTools) if (slot && gone(slot)) slot = 0;
     for (uint64_t id : present) {
-        if (std::find(c.slots.begin(), c.slots.end(), id) == c.slots.end()) c.slots.push_back(id);
+        if (std::find(c.inventory.begin(), c.inventory.end(), id) != c.inventory.end()) continue;
+        c.inventory.push_back(id);
+        if (std::find(c.hotbarTools.begin(), c.hotbarTools.end(), id) != c.hotbarTools.end()) continue;
+        for (uint64_t& slot : c.hotbarTools) {
+            if (!slot) { slot = id; break; }
+        }
     }
+    if (c.dragTool && gone(c.dragTool)) c.dragTool = 0;
     if (held != c.equipped) {
         // A script parented a tool into (or out of) the character.
         c.equipped = held;
@@ -668,23 +774,102 @@ std::vector<GameSession::HotbarSlot> GameSession::hotbar(int client) const {
     std::vector<HotbarSlot> bar;
     if (client < 0 || client >= clientCount()) return bar;
     const Client& c = *clients_[static_cast<size_t>(client)];
-    if (!c.backpackBar || c.slots.empty()) return bar;
-    const int count = std::min(static_cast<int>(c.slots.size()), kHotbarSlots);
-    // Slots grow with the view (about 60 px on a 1080p screen).
-    const float size = std::clamp(c.view.size.y * 0.058f, 40.0f, 84.0f);
-    const float gap = size * 0.1f, margin = size * 0.25f;
-    const float width = count * size + (count - 1) * gap;
-    const glm::vec2 start((c.view.size.x - width) * 0.5f, c.view.size.y - size - margin);
-    for (int k = 0; k < count; ++k) {
+    if (!c.backpackBar) return bar;
+    // The filled slots; all ten (empty ones to drop tools on) while the inventory is open.
+    std::vector<int> shown;
+    for (int k = 0; k < kHotbarSlots; ++k)
+        if (c.inventoryOpen || c.hotbarTools[static_cast<size_t>(k)]) shown.push_back(k);
+    const BarGeometry g = barGeometry(c.view.size, static_cast<int>(shown.size()), c.inventoryOpen || !c.inventory.empty());
+    for (size_t k = 0; k < shown.size(); ++k) {
         HotbarSlot slot;
-        slot.tool = c.slots[static_cast<size_t>(k)];
-        slot.number = (k + 1) % 10;
-        slot.equipped = slot.tool == c.equipped;
-        slot.pos = start + glm::vec2(k * (size + gap), 0.0f);
-        slot.size = glm::vec2(size);
+        slot.index = shown[k];
+        slot.tool = c.hotbarTools[static_cast<size_t>(slot.index)];
+        slot.number = (slot.index + 1) % 10;
+        slot.equipped = slot.tool && slot.tool == c.equipped;
+        slot.pos = g.start + glm::vec2(static_cast<float>(k) * (g.size + g.gap), 0.0f);
+        slot.size = glm::vec2(g.size);
         bar.push_back(slot);
     }
     return bar;
+}
+
+GameSession::InventoryView GameSession::inventory(int client) const {
+    InventoryView v;
+    if (client < 0 || client >= clientCount()) return v;
+    const Client& c = *clients_[static_cast<size_t>(client)];
+    if (!c.backpackBar) return v;
+    int filled = 0;
+    for (uint64_t t : c.hotbarTools) filled += t ? 1 : 0;
+    v.button = c.inventoryOpen || !c.inventory.empty();
+    const BarGeometry g = barGeometry(c.view.size, c.inventoryOpen ? kHotbarSlots : filled, v.button);
+    v.buttonPos = g.buttonPos;
+    v.buttonSize = glm::vec2(g.buttonSize);
+    if (!c.inventoryOpen) return v;
+    v.open = true;
+
+    std::vector<uint64_t> tools;
+    for (uint64_t id : c.inventory) {
+        const Instance* t = scene_->find(id);
+        if (!t) continue;
+        ++v.toolCount;
+        if (containsNoCase(t->name, c.inventorySearch)) tools.push_back(id);
+    }
+    const float size = g.size, gap = g.gap, pad = std::floor(size * 0.3f);
+    const float gridWidth = kInventoryColumns * size + (kInventoryColumns - 1) * gap;
+    const float searchHeight = std::floor(size * 0.5f);
+    const int rowsTotal = std::max(1, (static_cast<int>(tools.size()) + kInventoryColumns - 1) / kInventoryColumns);
+    const int maxRows = std::clamp(static_cast<int>((c.view.size.y * 0.5f - searchHeight - pad * 3.0f) / (size + gap)), 1, 4);
+    const int rows = std::min(rowsTotal, maxRows);
+    v.maxScroll = rowsTotal - rows;
+    const int scroll = std::clamp(c.inventoryScroll, 0, v.maxScroll);
+    v.size = glm::vec2(gridWidth + pad * 2.0f, pad * 3.0f + searchHeight + rows * (size + gap) - gap);
+    v.pos = glm::vec2((c.view.size.x - v.size.x) * 0.5f, g.start.y - gap * 3.0f - v.size.y);
+    v.searchSize = glm::vec2(std::floor(v.size.x * 0.36f), searchHeight);
+    v.searchPos = glm::vec2(v.pos.x + v.size.x - pad - v.searchSize.x, v.pos.y + pad);
+    v.gridPos = glm::vec2(v.pos.x + pad, v.pos.y + pad * 2.0f + searchHeight);
+    v.gridSize = glm::vec2(gridWidth, rows * (size + gap) - gap);
+    for (size_t k = 0; k < tools.size(); ++k) {
+        const int row = static_cast<int>(k) / kInventoryColumns - scroll;
+        if (row < 0 || row >= rows) continue;
+        InventoryView::Cell cell;
+        cell.tool = tools[k];
+        const auto slot = std::find(c.hotbarTools.begin(), c.hotbarTools.end(), cell.tool);
+        cell.hotbarIndex = slot == c.hotbarTools.end() ? -1 : static_cast<int>(slot - c.hotbarTools.begin());
+        cell.equipped = cell.tool == c.equipped;
+        cell.pos = v.gridPos + glm::vec2(static_cast<float>(k % kInventoryColumns) * (size + gap), static_cast<float>(row) * (size + gap));
+        cell.size = glm::vec2(size);
+        v.cells.push_back(cell);
+    }
+    return v;
+}
+
+void GameSession::setInventoryOpen(int client, bool open) {
+    if (client < 0 || client >= clientCount()) return;
+    Client& c = *clients_[static_cast<size_t>(client)];
+    c.inventoryOpen = open && c.backpackBar;
+    if (!c.inventoryOpen) {
+        c.searchFocused = false;
+        c.dragTool = 0;
+        c.dragging = false;
+        c.inventoryScroll = 0;
+    }
+}
+
+void GameSession::assignHotbar(int client, uint64_t tool, int index) {
+    if (client < 0 || client >= clientCount() || index >= kHotbarSlots) return;
+    Client& c = *clients_[static_cast<size_t>(client)];
+    if (std::find(c.inventory.begin(), c.inventory.end(), tool) == c.inventory.end()) return;
+    const auto at = std::find(c.hotbarTools.begin(), c.hotbarTools.end(), tool);
+    const int from = at == c.hotbarTools.end() ? -1 : static_cast<int>(at - c.hotbarTools.begin());
+    if (index < 0) {
+        if (from >= 0) c.hotbarTools[static_cast<size_t>(from)] = 0;
+        return;
+    }
+    if (from == index) return;
+    const uint64_t previous = c.hotbarTools[static_cast<size_t>(index)];
+    c.hotbarTools[static_cast<size_t>(index)] = tool;
+    // From another slot: the two swap. From the inventory: the old one stays only in the inventory.
+    if (from >= 0) c.hotbarTools[static_cast<size_t>(from)] = previous;
 }
 
 void GameSession::equipTool(int client, uint64_t toolId) {
@@ -851,7 +1036,8 @@ void GameSession::updateCamera(Client& c, float dt) {
     if (firstPersonMode) camera.zoom = 0.5f;
     const bool firstPerson = camera.zoom < 1.0f;
     const bool rotating = c.view.hovered && input_.mouseDown(GLFW_MOUSE_BUTTON_RIGHT);
-    c.mouseLock = (firstPerson && c.view.hovered) || (c.scriptMouseLock && c.index == focus_);
+    // The inventory frees the mouse, like Roblox's.
+    c.mouseLock = !c.inventoryOpen && ((firstPerson && c.view.hovered) || (c.scriptMouseLock && c.index == focus_));
 
     if (camera.type == CameraType::Custom) {
         if (rotating || (c.mouseLock && c.index == focus_)) {
@@ -859,7 +1045,7 @@ void GameSession::updateCamera(Client& c, float dt) {
             camera.yaw = wrapDegrees(camera.yaw - d.x * 0.3f);
             camera.pitch = std::clamp(camera.pitch - d.y * 0.3f, -80.0f, 80.0f);
         }
-        if (c.view.hovered && input_.scroll() != 0.0f && !firstPersonMode) {
+        if (c.view.hovered && input_.scroll() != 0.0f && !firstPersonMode && !c.overInventory) {
             camera.zoom = std::clamp(camera.zoom * (1.0f - input_.scroll() * 0.12f), 0.5f, maxZoom);
             if (camera.zoom < 1.0f && input_.scroll() < 0.0f) camera.zoom = 1.0f; // zoom back out of first person
         }

@@ -26,6 +26,7 @@
 #include "script/RemoteValue.h"
 #include "core/Log.h"
 
+#include <array>
 #include <deque>
 #include <filesystem>
 #include <memory>
@@ -73,10 +74,26 @@ public:
 
     // One slot of a player's Backpack bar (screen pixels, relative to the view).
     struct HotbarSlot {
-        uint64_t tool = 0;
+        uint64_t tool = 0;   // 0: an empty slot (shown while the inventory is open)
+        int index = 0;       // 0..9
         int number = 0;      // the key that equips it (1..9, 0 for the tenth)
         bool equipped = false;
         glm::vec2 pos{ 0.0f }, size{ 0.0f };
+    };
+    // The inventory the ` key opens (Roblox's backpack): every tool in a grid
+    // with a search box, above the bar; tools are dragged into the bar's slots.
+    struct InventoryView {
+        bool open = false;
+        glm::vec2 pos{ 0.0f }, size{ 0.0f };             // the window
+        glm::vec2 searchPos{ 0.0f }, searchSize{ 0.0f };
+        glm::vec2 gridPos{ 0.0f }, gridSize{ 0.0f };     // cells outside are scrolled away
+        struct Cell { uint64_t tool = 0; int hotbarIndex = -1; bool equipped = false; glm::vec2 pos{ 0.0f }, size{ 0.0f }; };
+        std::vector<Cell> cells;
+        int toolCount = 0;                                // before the search
+        int maxScroll = 0;                                // rows that can be scrolled away
+        // The button beside the bar that opens it.
+        bool button = false;
+        glm::vec2 buttonPos{ 0.0f }, buttonSize{ 0.0f };
     };
 
     // One player: its client world and everything that belongs to it.
@@ -110,8 +127,17 @@ public:
         glm::vec3 walkTo{ 0.0f };
         std::vector<uint64_t> deathPieces;
 
-        // Tools: the order of the Backpack bar, what is held, the mouse button.
-        std::vector<uint64_t> slots;
+        // Tools: the bar's ten numbered slots (0 = empty), every tool in the
+        // order it arrived (the inventory), what is held, the mouse button.
+        std::array<uint64_t, 10> hotbarTools{};
+        std::vector<uint64_t> inventory;
+        bool inventoryOpen = false, searchFocused = false, overInventory = false;
+        std::string inventorySearch;
+        int inventoryScroll = 0;      // rows scrolled away
+        uint64_t dragTool = 0;        // pressed on a slot or cell; dragging once it moves
+        int dragFrom = -1;            // the bar slot it came from (-1: the inventory)
+        bool dragging = false;
+        glm::vec2 dragStart{ 0.0f };
         uint64_t equipped = 0;
         bool activating = false;
         std::unordered_map<uint64_t, glm::mat4> toolOffsets; // other parts of the held tool, relative to its Handle
@@ -174,6 +200,8 @@ public:
     void setPaused(bool paused) { paused_ = paused; }
     // First-person / MouseBehavior.LockCenter: the host should hide and lock the cursor.
     bool wantsMouseLock() const { return focused().mouseLock; }
+    // The focused player is typing into a text box of the game (Esc is the box's).
+    bool typing() const { return focused().searchFocused; }
     void setMouseLockRequested(int client, bool lock);
 
     // ---- the focused player (ids are the same on every side)
@@ -194,6 +222,10 @@ public:
     void dropTool(int client);                  // into the world (CanBeDropped)
     void activateTool(uint64_t tool, bool down);// Activated / Deactivated on the server and its owner
     std::vector<HotbarSlot> hotbar(int client) const;
+    InventoryView inventory(int client) const;
+    void setInventoryOpen(int client, bool open);
+    // Puts a tool in a bar slot (0..9; -1 takes it off the bar). A tool already there swaps places.
+    void assignHotbar(int client, uint64_t tool, int index);
 
     // ---- client <-> server messages (delivered next frame)
     void postRemote(RemoteMessage message);

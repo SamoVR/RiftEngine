@@ -434,7 +434,11 @@ NumberValue / StringValue / BoolValue children, is shown in the top right corner
 A **Tool** is something a character can hold: a sword, a flashlight, a
 building tool. Tools in **StarterPack** are copied into every player's
 `Backpack` when the character spawns; the backpack bar at the bottom of the
-screen shows them, and the number keys (or a click) equip them. A tool needs a
+screen shows them, and the number keys (or a click) equip them. The bar has ten
+numbered slots; tools that don't fit wait in the **inventory**, which the
+<kbd>`</kbd> key (the key left of 1) or the backpack button opens, like Roblox's:
+every tool in a grid with a search box. Drag a tool onto a slot to put it on the
+bar, or from the bar into the inventory to take it off. A tool needs a
 part named **Handle** (unless `RequiresHandle` is false): the character's right
 hand holds it, placed by `GripPos` and `GripRotation`.
 
@@ -458,7 +462,7 @@ a child of the character; an unequipped one lives in the player's Backpack.
 A dropped tool lies in Workspace until a character touches it.
 
 **Built-in GUI**: `StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)`
-hides the backpack bar (`PlayerList` the leaderboard, `All` both);
+hides the backpack bar and inventory (`PlayerList` the leaderboard, `All` both);
 `:GetCoreGuiEnabled(type)` reads it. Call it from a LocalScript.
 
 ## Terrain

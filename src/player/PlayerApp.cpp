@@ -229,7 +229,7 @@ void PlayerApp::frame(float dt) {
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 
-    if (input_.keyPressed(GLFW_KEY_ESCAPE)) menuOpen_ = !menuOpen_;
+    if (input_.keyPressed(GLFW_KEY_ESCAPE) && !(session_ && session_->typing())) menuOpen_ = !menuOpen_;
     if (input_.keyPressed(GLFW_KEY_F11) || (input_.alt() && input_.keyPressed(GLFW_KEY_ENTER))) setFullscreen(!fullscreen_);
 
     int w = 0, h = 0;

@@ -196,40 +196,174 @@ void drawGameHud(GameSession& session, TextureCache& textures, ImDrawList* draw,
     ImFont* bold = fonts.bold ? fonts.bold : font;
     const float base = ImGui::GetFontSize();
 
-    // ---- Backpack bar (bottom centre): the player's tools
+    // ---- Backpack: the bar (bottom centre), the button beside it and the inventory above it
     {
         const Scene& world = session.clientScene();
+        const GameSession::Client& me = session.focused();
         const glm::vec2 mouse = session.viewport().mouse;
         const bool hoveredView = session.viewport().hovered;
+        auto over = [&](const glm::vec2& p, const glm::vec2& s) {
+            return hoveredView && mouse.x >= p.x && mouse.y >= p.y && mouse.x <= p.x + s.x && mouse.y <= p.y + s.y;
+        };
         const Instance* hoveredTool = nullptr;
         glm::vec2 hoveredPos(0.0f);
-        for (const GameSession::HotbarSlot& slot : session.hotbar(session.focus())) {
-            const Instance* tool = world.find(slot.tool);
-            if (!tool) continue;
-            const ImVec2 a(origin.x + slot.pos.x, origin.y + slot.pos.y);
-            const ImVec2 b(a.x + slot.size.x, a.y + slot.size.y);
-            const bool over = hoveredView && mouse.x >= slot.pos.x && mouse.y >= slot.pos.y && mouse.x <= slot.pos.x + slot.size.x && mouse.y <= slot.pos.y + slot.size.y;
-            if (over) { hoveredTool = tool; hoveredPos = slot.pos; }
-            const float r = slot.size.x * 0.14f;
-            draw->AddRectFilled(a, b, slot.equipped ? IM_COL32(58, 52, 86, 220) : over ? IM_COL32(40, 40, 52, 210) : IM_COL32(20, 20, 28, 190), r);
-            draw->AddRect(a, b, slot.equipped ? IM_COL32(167, 139, 250, 255) : IM_COL32(255, 255, 255, 40), r, 0, slot.equipped ? 2.5f : 1.0f);
-            const float pad = slot.size.x * 0.12f;
+        const uint64_t dragged = me.dragging ? me.dragTool : 0;
+
+        // One tool's tile: its icon, or its name wrapped to the tile.
+        auto tile = [&](const Instance* tool, const ImVec2& a, const ImVec2& b, bool equipped, bool hot, float alpha) {
+            const float w = b.x - a.x;
+            const float r = w * 0.14f;
+            const int fill = static_cast<int>((equipped ? 220 : hot ? 210 : 190) * alpha);
+            draw->AddRectFilled(a, b, equipped ? IM_COL32(58, 52, 86, fill) : hot ? IM_COL32(40, 40, 52, fill) : IM_COL32(20, 20, 28, fill), r);
+            draw->AddRect(a, b, equipped ? IM_COL32(167, 139, 250, static_cast<int>(255 * alpha)) : IM_COL32(255, 255, 255, static_cast<int>(40 * alpha)), r, 0,
+                          equipped ? 2.5f : 1.0f);
+            if (!tool) return;
+            const float pad = w * 0.12f;
+            const ImU32 tint = IM_COL32(255, 255, 255, static_cast<int>(255 * alpha));
             if (auto tex = tool->texture.path.empty() ? nullptr : textures.get(tool->texture.path)) {
-                draw->AddImage(static_cast<ImTextureID>(tex->id()), ImVec2(a.x + pad, a.y + pad), ImVec2(b.x - pad, b.y - pad), ImVec2(0, 1), ImVec2(1, 0));
+                draw->AddImage(static_cast<ImTextureID>(tex->id()), ImVec2(a.x + pad, a.y + pad), ImVec2(b.x - pad, b.y - pad), ImVec2(0, 1), ImVec2(1, 0), tint);
             } else {
-                // No icon: the tool's name, wrapped to the slot.
-                const float textSize = base * 0.8f;
-                const float wrap = slot.size.x - pad;
+                // Smaller text for long words, so none breaks in the middle.
+                const float wrap = w - pad;
+                float textSize = base * 0.8f;
+                float widest = 0.0f;
+                for (size_t start = 0; start < tool->name.size();) {
+                    size_t end = tool->name.find(' ', start);
+                    if (end == std::string::npos) end = tool->name.size();
+                    widest = std::max(widest, font->CalcTextSizeA(textSize, FLT_MAX, 0.0f, tool->name.c_str() + start, tool->name.c_str() + end).x);
+                    start = end + 1;
+                }
+                if (widest > wrap) textSize = std::max(base * 0.5f, std::floor(textSize * wrap / widest));
                 const ImVec2 t = font->CalcTextSizeA(textSize, FLT_MAX, wrap, tool->name.c_str());
                 draw->PushClipRect(ImVec2(a.x + 2.0f, a.y + 2.0f), ImVec2(b.x - 2.0f, b.y - 2.0f), true);
-                draw->AddText(font, textSize, ImVec2(a.x + (slot.size.x - std::min(t.x, wrap)) * 0.5f, a.y + (slot.size.y - t.y) * 0.5f),
-                              IM_COL32(240, 240, 248, 255), tool->name.c_str(), nullptr, wrap);
+                draw->AddText(font, textSize, ImVec2(a.x + (w - std::min(t.x, wrap)) * 0.5f, a.y + (b.y - a.y - t.y) * 0.5f),
+                              IM_COL32(240, 240, 248, static_cast<int>(255 * alpha)), tool->name.c_str(), nullptr, wrap);
                 draw->PopClipRect();
             }
-            char number[4];
-            std::snprintf(number, sizeof(number), "%d", slot.number);
-            draw->AddText(bold, base * 0.72f, ImVec2(a.x + pad * 0.6f, a.y + pad * 0.35f), IM_COL32(255, 255, 255, 170), number);
+        };
+        auto number = [&](int n, const ImVec2& a, float w, int alpha) {
+            char text[4];
+            std::snprintf(text, sizeof(text), "%d", n);
+            draw->AddText(bold, base * 0.72f, ImVec2(a.x + w * 0.072f, a.y + w * 0.042f), IM_COL32(255, 255, 255, alpha), text);
+        };
+        auto at = [&](const glm::vec2& p) { return ImVec2(origin.x + p.x, origin.y + p.y); };
+
+        // The inventory: every tool, a search box, scrolled with the wheel.
+        const GameSession::InventoryView inv = session.inventory(session.focus());
+        if (inv.open) {
+            const ImVec2 a = at(inv.pos), b = at(inv.pos + inv.size);
+            const float r = base * 0.6f;
+            draw->AddRectFilled(a, b, IM_COL32(16, 16, 22, 205), r);
+            draw->AddRect(a, b, IM_COL32(255, 255, 255, 30), r);
+            const ImVec2 sa = at(inv.searchPos), sb = at(inv.searchPos + inv.searchSize);
+            const float titleSize = base * 1.05f;
+            const float titleY = sa.y + (inv.searchSize.y - titleSize) * 0.5f;
+            draw->AddText(bold, titleSize, ImVec2(at(inv.gridPos).x, titleY), IM_COL32(255, 255, 255, 235), "Backpack");
+            char count[48];
+            std::snprintf(count, sizeof(count), "%d tool%s", inv.toolCount, inv.toolCount == 1 ? "" : "s");
+            const float titleWidth = bold->CalcTextSizeA(titleSize, FLT_MAX, 0.0f, "Backpack").x;
+            draw->AddText(font, base * 0.85f, ImVec2(at(inv.gridPos).x + titleWidth + base * 0.7f, titleY + (titleSize - base * 0.85f) * 0.6f),
+                          IM_COL32(190, 190, 205, 200), count);
+            // Search box
+            draw->AddRectFilled(sa, sb, me.searchFocused ? IM_COL32(44, 44, 58, 240) : IM_COL32(32, 32, 42, 220), inv.searchSize.y * 0.5f);
+            if (me.searchFocused) draw->AddRect(sa, sb, IM_COL32(167, 139, 250, 255), inv.searchSize.y * 0.5f, 0, 1.5f);
+            const float textSize = base * 0.9f;
+            const float textY = sa.y + (inv.searchSize.y - textSize) * 0.5f;
+            const float textX = sa.x + inv.searchSize.y * 0.5f;
+            // A small magnifier.
+            const ImVec2 lens(textX + textSize * 0.33f, textY + textSize * 0.45f);
+            draw->AddCircle(lens, textSize * 0.27f, IM_COL32(200, 200, 215, 200), 12, 1.6f);
+            draw->AddLine(ImVec2(lens.x + textSize * 0.2f, lens.y + textSize * 0.2f), ImVec2(lens.x + textSize * 0.42f, lens.y + textSize * 0.42f), IM_COL32(200, 200, 215, 200), 1.8f);
+            const float queryX = textX + textSize * 1.1f;
+            draw->PushClipRect(sa, sb, true);
+            if (me.inventorySearch.empty() && !me.searchFocused) {
+                draw->AddText(font, textSize, ImVec2(queryX, textY), IM_COL32(160, 160, 175, 200), "Search");
+            } else {
+                draw->AddText(font, textSize, ImVec2(queryX, textY), IM_COL32(245, 245, 250, 255), me.inventorySearch.c_str());
+                if (me.searchFocused && std::fmod(ImGui::GetTime(), 1.0) < 0.55) {
+                    const float caret = queryX + font->CalcTextSizeA(textSize, FLT_MAX, 0.0f, me.inventorySearch.c_str()).x + 1.0f;
+                    draw->AddLine(ImVec2(caret, textY), ImVec2(caret, textY + textSize), IM_COL32(245, 245, 250, 255), 1.5f);
+                }
+            }
+            draw->PopClipRect();
+            // Tools
+            if (inv.cells.empty()) {
+                const char* none = inv.toolCount ? "No tools match the search." : "No tools yet. Tools you pick up show up here.";
+                const ImVec2 t = font->CalcTextSizeA(base, FLT_MAX, 0.0f, none);
+                draw->AddText(font, base, ImVec2(at(inv.gridPos).x + (inv.gridSize.x - t.x) * 0.5f, at(inv.gridPos).y + (inv.gridSize.y - t.y) * 0.5f),
+                              IM_COL32(180, 180, 195, 220), none);
+            }
+            for (const GameSession::InventoryView::Cell& cell : inv.cells) {
+                const Instance* tool = world.find(cell.tool);
+                if (!tool) continue;
+                const bool hot = over(cell.pos, cell.size);
+                if (hot && !dragged) { hoveredTool = tool; hoveredPos = cell.pos; }
+                tile(tool, at(cell.pos), at(cell.pos + cell.size), cell.equipped, hot, cell.tool == dragged ? 0.35f : 1.0f);
+                if (cell.hotbarIndex >= 0) number((cell.hotbarIndex + 1) % 10, at(cell.pos), cell.size.x, 150);
+            }
+            // More rows below or above: a thin scroll bar.
+            if (inv.maxScroll > 0) {
+                const float cell = inv.cells.empty() ? inv.gridSize.y : inv.cells[0].size.y * 1.1f;
+                const float visible = std::max(1.0f, std::round((inv.gridSize.y + cell * 0.1f) / cell));
+                const float track = inv.gridSize.y;
+                const float thumb = std::max(base, track * visible / (visible + static_cast<float>(inv.maxScroll)));
+                const float t = std::clamp(static_cast<float>(me.inventoryScroll) / inv.maxScroll, 0.0f, 1.0f);
+                const float x = at(inv.gridPos).x + inv.gridSize.x + base * 0.35f;
+                const float y = at(inv.gridPos).y + (track - thumb) * t;
+                draw->AddRectFilled(ImVec2(x, y), ImVec2(x + base * 0.22f, y + thumb), IM_COL32(255, 255, 255, 90), base * 0.11f);
+            }
         }
+
+        // The bar: numbered slots (empty ones only while the inventory is open).
+        for (const GameSession::HotbarSlot& slot : session.hotbar(session.focus())) {
+            const Instance* tool = slot.tool ? world.find(slot.tool) : nullptr;
+            const bool hot = over(slot.pos, slot.size);
+            const ImVec2 a = at(slot.pos), b = at(slot.pos + slot.size);
+            if (!tool) {
+                // An empty slot to drop a tool on.
+                const float r = slot.size.x * 0.14f;
+                draw->AddRectFilled(a, b, hot && dragged ? IM_COL32(58, 52, 86, 170) : IM_COL32(20, 20, 28, 110), r);
+                draw->AddRect(a, b, IM_COL32(255, 255, 255, hot && dragged ? 120 : 45), r, 0, 1.0f);
+                number(slot.number, a, slot.size.x, 110);
+                continue;
+            }
+            if (hot && !dragged) { hoveredTool = tool; hoveredPos = slot.pos; }
+            tile(tool, a, b, slot.equipped, hot, slot.tool == dragged ? 0.35f : 1.0f);
+            if (hot && dragged && dragged != slot.tool) draw->AddRect(a, b, IM_COL32(167, 139, 250, 200), slot.size.x * 0.14f, 0, 2.0f);
+            number(slot.number, a, slot.size.x, 170);
+        }
+
+        // The button that opens the inventory: a little backpack.
+        if (inv.button) {
+            const bool hot = over(inv.buttonPos, inv.buttonSize);
+            const ImVec2 a = at(inv.buttonPos), b = at(inv.buttonPos + inv.buttonSize);
+            const float w = inv.buttonSize.x;
+            draw->AddRectFilled(a, b, inv.open ? IM_COL32(58, 52, 86, 225) : hot ? IM_COL32(40, 40, 52, 215) : IM_COL32(20, 20, 28, 190), w * 0.18f);
+            draw->AddRect(a, b, inv.open ? IM_COL32(167, 139, 250, 255) : IM_COL32(255, 255, 255, 45), w * 0.18f, 0, inv.open ? 2.0f : 1.0f);
+            const ImU32 ink = IM_COL32(235, 235, 245, 235);
+            const ImVec2 c(a.x + w * 0.5f, a.y + w * 0.54f);
+            const float bw = w * 0.42f, bh = w * 0.44f;
+            draw->AddRect(ImVec2(c.x - bw * 0.5f, c.y - bh * 0.5f), ImVec2(c.x + bw * 0.5f, c.y + bh * 0.5f), ink, w * 0.08f, 0, 2.0f);   // the bag
+            draw->AddLine(ImVec2(c.x - bw * 0.5f, c.y - bh * 0.05f), ImVec2(c.x + bw * 0.5f, c.y - bh * 0.05f), ink, 1.6f);           // its flap
+            draw->AddRectFilled(ImVec2(c.x - w * 0.045f, c.y - bh * 0.12f), ImVec2(c.x + w * 0.045f, c.y + bh * 0.08f), ink, 1.0f);   // the buckle
+            draw->PathArcTo(ImVec2(c.x, c.y - bh * 0.5f), bw * 0.24f, 3.14159f, 6.28318f, 10);                                        // the handle
+            draw->PathStroke(ink, 0, 2.0f);
+            if (hot && !dragged) {
+                const char* tip = inv.open ? "Close the backpack (`)" : "Backpack (`)";
+                const ImVec2 t = font->CalcTextSizeA(base * 0.9f, FLT_MAX, 0.0f, tip);
+                const ImVec2 p(b.x - t.x, a.y - t.y - base * 0.9f);
+                draw->AddRectFilled(ImVec2(p.x - 6.0f, p.y - 4.0f), ImVec2(p.x + t.x + 6.0f, p.y + t.y + 4.0f), IM_COL32(14, 14, 20, 230), 5.0f);
+                draw->AddText(font, base * 0.9f, p, IM_COL32(240, 240, 248, 255), tip);
+            }
+        }
+
+        // The tool being dragged follows the mouse.
+        if (const Instance* tool = dragged ? world.find(dragged) : nullptr) {
+            const float w = inv.cells.empty() ? std::clamp(session.viewport().size.y * 0.058f, 40.0f, 84.0f) : inv.cells[0].size.x;
+            const ImVec2 a(origin.x + mouse.x - w * 0.5f, origin.y + mouse.y - w * 0.5f);
+            tile(tool, a, ImVec2(a.x + w, a.y + w), false, true, 0.85f);
+        }
+
         if (hoveredTool) {
             const std::string& tip = hoveredTool->text.empty() ? hoveredTool->name : hoveredTool->text;
             const ImVec2 t = font->CalcTextSizeA(base * 0.9f, FLT_MAX, 0.0f, tip.c_str());
