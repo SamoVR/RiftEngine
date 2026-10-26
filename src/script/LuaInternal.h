@@ -168,6 +168,16 @@ struct LuaRuntime::Impl : public SceneObserver {
     // it is destroyed before the state is closed.
     size_t memoryUsed = 0;
     size_t memoryLimit = 512u * 1024u * 1024u;
+    // Objects the running script made since it last yielded (Instance.new,
+    // Clone): a loop that makes them without ever waiting is stopped before
+    // the world fills up with tens of thousands of parts.
+    size_t createdSinceYield = 0, fallingSinceYield = 0;
+    static constexpr size_t kMaxCreatedSinceYield = 20000;
+    // Unanchored parts put into the Workspace: thousands dropped in one heap
+    // would take physics seconds per frame.
+    static constexpr size_t kMaxFallingSinceYield = 2000;
+    void countCreated(size_t n);
+    void countFalling(const Instance& i); // after i was parented
     // Destroyed instances that scripts still hold: a read-only snapshot, so
     // `child.Name` in a ChildRemoved / Destroying handler works like Roblox.
     // Dropped when Lua collects the handle (declared before `lua`: the

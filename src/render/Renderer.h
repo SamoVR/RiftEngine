@@ -63,6 +63,7 @@ struct SunState {
     glm::vec3 color{ 1.0f };                 // linear, includes brightness
     glm::vec3 skyColor{ 0.4f }, horizonColor{ 0.6f }, ambient{ 0.3f }, groundColor{ 0.2f }, fogColor{ 0.6f };
     float day = 1.0f;                        // 0 night .. 1 day
+    glm::vec3 moonDirection{ 0.0f, 1.0f, 0.0f }; // towards the moon (opposite the sun)
 };
 SunState computeSun(const Instance& lighting);
 

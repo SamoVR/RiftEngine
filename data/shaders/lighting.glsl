@@ -101,7 +101,8 @@ vec3 shadeSurface(vec3 worldPos, vec4 lightPos, vec3 N, vec3 V, vec3 albedo,
     }
 
     // Reflections of the sky with Fresnel.
-    float fresnel = pow(1.0 - max(dot(N, V), 0.0), 5.0);
+    // Only shiny materials (and Reflectance) mirror the sky; matte ones stay matte at grazing angles.
+    float fresnel = pow(1.0 - max(dot(N, V), 0.0), 5.0) * smoothstep(0.3, 0.8, specular);
     float reflectAmount = clamp(reflectance + metallic * 0.5 + fresnel * specular * 0.5, 0.0, 1.0);
     vec3 env = skyAt(reflect(-V, N)) * mix(vec3(1.0), albedo, metallic);
     return mix(light, env, reflectAmount * (1.0 - roughness * 0.7));

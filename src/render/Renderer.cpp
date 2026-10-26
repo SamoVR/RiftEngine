@@ -54,6 +54,7 @@ SunState computeSun(const Instance& L) {
     s.day = smoothstep(-0.12f, 0.18f, sun.y);
     const float sunset = 1.0f - smoothstep(0.0f, 0.45f, std::abs(sun.y)); // warm light near the horizon
 
+    s.moonDirection = glm::normalize(glm::vec3(-sun.x, std::max(0.25f, -sun.y), -sun.z));
     const glm::vec3 sunTint = glm::mix(glm::vec3(1.0f), glm::vec3(1.0f, 0.55f, 0.3f), sunset * 0.8f);
     if (sun.y > -0.05f) {
         s.direction = sun.y < 0.02f ? glm::normalize(glm::vec3(sun.x, 0.02f, sun.z)) : sun;
@@ -488,6 +489,7 @@ void Renderer::render(const Scene& scene, const RenderCamera& camera, const Rend
     skyShader_->use();
     skyShader_->setMat4("uInvViewProj", glm::inverse(viewProj));
     skyShader_->setVec3("uSunDirection", sun.direction);
+    skyShader_->setVec3("uMoonDirection", sun.moonDirection);
     skyShader_->setVec3("uSunColor", sun.day > 0.05f ? sun.color : glm::vec3(0.0f));
     skyShader_->setVec3("uSkyColor", sun.skyColor);
     skyShader_->setVec3("uHorizonColor", sun.horizonColor);

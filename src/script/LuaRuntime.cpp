@@ -153,6 +153,24 @@ void LuaRuntime::Impl::requireSide(NetworkSide wanted, const char* what) const {
 
 Instance* LuaRuntime::Impl::localPlayer() const { return isClient() ? scene.find(me().playerId) : nullptr; }
 Instance* LuaRuntime::Impl::localCharacter() const { return isClient() && me().characterId ? scene.find(me().characterId) : nullptr; }
+void LuaRuntime::Impl::countCreated(size_t n) {
+    createdSinceYield += n;
+    if (createdSinceYield > kMaxCreatedSinceYield) {
+        fail("script made more than " + std::to_string(kMaxCreatedSinceYield) + " objects without yielding (a loop without task.wait()?)");
+    }
+}
+
+void LuaRuntime::Impl::countFalling(const Instance& i) {
+    if (!i.isDescendantOf(&scene.workspace())) return;
+    size_t n = i.isBasePart() && !i.anchored ? 1 : 0;
+    Scene::forEachDescendant(const_cast<Instance&>(i), [&](Instance& d) { if (d.isBasePart() && !d.anchored) ++n; });
+    fallingSinceYield += n;
+    if (n && fallingSinceYield > kMaxFallingSinceYield) {
+        fail("script dropped more than " + std::to_string(kMaxFallingSinceYield)
+             + " unanchored parts into the Workspace without yielding (a loop without task.wait()? anchor them, or wait now and then)");
+    }
+}
+
 GameCamera& LuaRuntime::Impl::cam() { return isClient() ? me().camera : serverCamera; }
 
 // ============================================================================
@@ -292,6 +310,8 @@ void LuaRuntime::Impl::resume(lua_State* T, int nargs) {
     const uint64_t previousScript = currentScript;
     currentScript = script;
     const auto savedDeadline = g_deadline;
+    const size_t savedCreated = createdSinceYield, savedFalling = fallingSinceYield;
+    createdSinceYield = fallingSinceYield = 0;
     g_deadline = std::chrono::steady_clock::now() + std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<double>(kScriptBudgetSeconds));
 
     int nres = 0;
@@ -306,6 +326,8 @@ void LuaRuntime::Impl::resume(lua_State* T, int nargs) {
     }
 
     g_deadline = savedDeadline;
+    createdSinceYield = savedCreated;
+    fallingSinceYield = savedFalling;
     currentScript = previousScript;
     --resumeDepth;
 

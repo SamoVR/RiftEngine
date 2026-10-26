@@ -42,8 +42,8 @@ float fbm(vec3 p) { return noise(p) * 0.55 + noise(p * 2.07) * 0.28 + noise(p * 
 MaterialLook materialLook(int m, vec3 albedo, vec3 p, vec3 n, float t) {
     MaterialLook L;
     L.albedo = albedo;
-    L.roughness = 0.55;
-    L.specular = 0.2;
+    L.roughness = 0.8;   // Plastic: matte, like Roblox
+    L.specular = 0.06;
     L.metallic = 0.0;
     L.reflect = 0.0;
     L.emissive = 0.0;
@@ -51,7 +51,7 @@ MaterialLook materialLook(int m, vec3 albedo, vec3 p, vec3 n, float t) {
     vec2 uv = planarUV(p, n);
 
     if (m == 1) {                                   // SmoothPlastic
-        L.roughness = 0.22; L.specular = 0.45;
+        L.roughness = 0.5; L.specular = 0.14;   // a soft sheen, no mirror
     } else if (m == 2) {                            // Metal: faint brushed streaks
         L.albedo *= 0.92 + 0.12 * noise(vec3(uv.x * 0.6, uv.y * 30.0, 0.0));
         L.roughness = 0.32; L.specular = 0.9; L.metallic = 0.85;

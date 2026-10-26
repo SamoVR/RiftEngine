@@ -357,7 +357,7 @@ struct PhysicsWorld::Impl {
     BroadPhaseLayers bpLayers;
     ObjectVsBroadPhaseFilter objVsBp;
     ObjectPairFilter pairFilter;
-    std::unique_ptr<JPH::TempAllocatorImpl> temp;
+    std::unique_ptr<JPH::TempAllocator> temp; // never aborts: big scenes fall back to the heap
     std::unique_ptr<JPH::JobSystemThreadPool> jobs;
     std::unique_ptr<JPH::PhysicsSystem> system;
 
@@ -390,7 +390,7 @@ struct PhysicsWorld::Impl {
 
     explicit Impl(Scene& s) : scene(s) {
         ensureJolt();
-        temp = std::make_unique<JPH::TempAllocatorImpl>(16 * 1024 * 1024);
+        temp = std::make_unique<JPH::TempAllocatorImplWithMallocFallback>(16 * 1024 * 1024);
         const int threads = std::max(1, static_cast<int>(std::thread::hardware_concurrency()) - 1);
         jobs = std::make_unique<JPH::JobSystemThreadPool>(JPH::cMaxPhysicsJobs, JPH::cMaxPhysicsBarriers, std::min(threads, 8));
         system = std::make_unique<JPH::PhysicsSystem>();

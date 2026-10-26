@@ -10,6 +10,7 @@
 
 #include <GLFW/glfw3.h>
 #include <filesystem>
+#include <chrono>
 #include <cstdio>
 #include <fstream>
 #include <iterator>
@@ -237,6 +238,19 @@ TEST_CASE("runaway loops are stopped and memory is capped; the game keeps going"
     CHECK(f.logged("more than 1 second"));
     CHECK(f.logged("not enough memory"));
     CHECK(f.logged("still alive"));
+}
+
+TEST_CASE("a loop that makes parts without waiting is stopped before it buries the game") {
+    Fixture f;
+    f.script("while true do Instance.new('Part').Parent = workspace end");
+    f.script("for i = 1, 6000 do local p = Instance.new('Part') p.Anchored = true p.Parent = workspace end print('built 6000 anchored')");
+    f.script("task.wait(0.5) print('still alive')");
+    f.start(true);
+    f.run(1.5f);
+    CHECK_MESSAGE(f.logged("unanchored parts into the Workspace without yielding"), f.dump());
+    CHECK_MESSAGE(f.logged("built 6000 anchored"), f.dump()); // anchored parts are cheap
+    CHECK_MESSAGE(f.logged("still alive"), f.dump());
+    CHECK(f.session->scene().size() < 20000);
 }
 
 TEST_CASE("sandbox: no file or process access") {

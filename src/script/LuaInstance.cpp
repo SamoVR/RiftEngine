@@ -107,6 +107,9 @@ void LuaRuntime::Impl::registerInstance() {
     m["Clone"] = [this](const Inst& h) -> sol::object {
         Instance* i = need(h);
         if (i->isService() || i->cls == ClassId::Player) fail(classInfo(i->cls).name + " cannot be cloned");
+        size_t count = 1;
+        Scene::forEachDescendant(*i, [&](Instance&) { ++count; });
+        countCreated(count);
         Instance* copy = scene.cloneSubtree(*i);
         return copy ? instanceFor(copy->id) : nil(); // nil when Archivable is false (Roblox)
     };
@@ -655,11 +658,13 @@ void LuaRuntime::Impl::registerInstance() {
             if (info->id == ClassId::Script || info->id == ClassId::LocalScript || info->id == ClassId::ModuleScript) {
                 fail("Scripts are created in the editor (Insert > Script); clone one from ReplicatedStorage instead");
             }
+            countCreated(1);
             Instance* i = scene.create(info->id);
             if (i->isBasePart()) i->anchored = false; // new parts fall, like Roblox
             if (parent && parent->is<Inst>()) {
                 std::string error;
                 if (!scene.setParent(i, need(parent->as<Inst>()), Scene::npos, &error)) fail(error);
+                countFalling(*i);
             }
             return instanceFor(i->id);
         }),
@@ -766,6 +771,7 @@ void LuaRuntime::Impl::registerInstance() {
                 if (i->cls == ClassId::Player) fail("the Player's Parent cannot be changed");
                 std::string error;
                 if (!scene.setParent(i, newParent, Scene::npos, &error)) fail(error);
+                countFalling(*i);
                 return;
             }
             if (name == "CFrame" && i->hasTransform()) {
