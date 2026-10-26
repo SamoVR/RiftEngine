@@ -175,6 +175,7 @@ namespace {
     Res propertyValue(ClassId cls, const std::string& name, const Instance* inst, const Scene& scene) {
         if (name == "Parent") return inst && inst->parent ? instance(inst->parent) : anyInstance();
         if (name == "CFrame" || name == "Pivot") return value("CFrame");
+        if (name == "BrickColor") return value("BrickColor");
         if (name == "Character") return ofClass(ClassId::Model);
         if (name == "LocalPlayer") return ofClass(ClassId::Player);
         if (name == "PrimaryPart" || name == "RootPart") return ofClass(ClassId::Part);
@@ -250,7 +251,7 @@ namespace {
             }
             case Res::TypeTable:
                 if (r.name == "Instance" && s.name == "new") return ofClassName(s.arg);
-                if (r.name == "Vector3" || r.name == "Vector2" || r.name == "CFrame" || r.name == "Color3" || r.name == "UDim2"
+                if (r.name == "Vector3" || r.name == "Vector2" || r.name == "CFrame" || r.name == "Color3" || r.name == "UDim2" || r.name == "BrickColor"
                     || r.name == "Random" || r.name == "NumberRange" || r.name == "NumberSequence" || r.name == "ColorSequence")
                     return value(r.name);
                 return none();

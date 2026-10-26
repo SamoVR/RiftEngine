@@ -116,6 +116,15 @@ and local axes (Ctrl+L).
 
 Every change can be undone (Ctrl+Z / Ctrl+Y); the Edit menu shows what will be undone.
 
+### Colours and materials
+
+The paint bucket in the toolbar colours the selected parts (and the parts in
+selected models); the bar under it shows their colour. Its palette has
+Roblox's 64 BrickColors, the colours you used last, a picker and a hex field.
+The button next to it changes their **material**: a grid of every material
+with a preview, grouped and searchable. In Properties, the palette button next
+to any colour and the Material field open the same pickers.
+
 ### Inserting
 
 The toolbar has buttons for a part and a script; the arrow next to them and the

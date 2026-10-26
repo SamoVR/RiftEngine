@@ -4,6 +4,7 @@
 // ...) and events (Touched, Changed, ChildAdded, ...).
 #include "script/LuaInternal.h"
 #include "script/LuaApi.h"
+#include "scene/BrickColor.h"
 #include "physics/PhysicsWorld.h"
 #include "core/TransformUtil.h"
 
@@ -697,6 +698,7 @@ void LuaRuntime::Impl::registerInstance() {
                 Instance* root = model ? model->findFirstChild("HumanoidRootPart") : nullptr;
                 return instanceOrNil(root);
             }
+            if (i->isBasePart() && name == "BrickColor") return sol::make_object(lua, BrickColorL{ nearestBrickColor(i->color) });
             if (i->cls == ClassId::Tool && name == "Grip") {
                 return sol::make_object(lua, CFrame::fromMat4(TransformUtil::compose(i->gripPos, i->gripRotation, glm::vec3(1.0f))));
             }
@@ -748,6 +750,11 @@ void LuaRuntime::Impl::registerInstance() {
             if (name == "CFrame" && i->hasTransform()) {
                 if (!value.is<CFrame>()) fail("CFrame must be a CFrame");
                 setFrame(*i, value.as<CFrame>());
+                return;
+            }
+            if (name == "BrickColor" && i->isBasePart()) {
+                if (!value.is<BrickColorL>()) fail("BrickColor must be a BrickColor");
+                scene.setProperty(*i, "Color", brickColors()[static_cast<size_t>(value.as<BrickColorL>().index)].color);
                 return;
             }
             if (name == "Grip" && i->cls == ClassId::Tool) {

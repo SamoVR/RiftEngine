@@ -63,6 +63,7 @@ const std::vector<const EnumType*>& allEnumTypes();
 
 struct Inst { uint64_t id = 0; };
 struct AnimTrack { uint64_t id = 0; };   // an AnimationTrack (GameSession::animation())
+struct BrickColorL { int index = 0; };   // a BrickColor: an index into brickColors()
 struct KeyframeSequenceProvider {};
 
 // ============================================================================

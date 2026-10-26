@@ -1,6 +1,7 @@
 // LuaTypes.cpp -- value types exposed to scripts and Value <-> Lua conversion.
 #include "script/LuaInternal.h"
 #include "script/LuaApi.h"
+#include "scene/BrickColor.h"
 #include "platform/Input.h"
 #include "core/TransformUtil.h"
 
@@ -9,6 +10,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <random>
 
 namespace rift {
 
@@ -297,6 +299,45 @@ void LuaRuntime::Impl::registerTypes() {
         },
         sol::meta_function::equal_to, [](const Color3& a, const Color3& b) { return a == b; },
         sol::meta_function::to_string, [](const Color3& c) { return num(c.r) + ", " + num(c.g) + ", " + num(c.b); });
+
+    // ------------------------------------------------------------ BrickColor (Roblox's named colours)
+    auto brick = [](int index) { return BrickColorL{ std::clamp(index, 0, static_cast<int>(brickColors().size()) - 1) }; };
+    auto named = [brick](const char* name) { return brick(brickColorByName(name)); };
+    lua.new_usertype<BrickColorL>("BrickColor",
+        "new", sol::factories(
+            [brick](const std::string& name) {
+                const int i = brickColorByName(name);
+                if (i < 0) fail("BrickColor.new: unknown colour \"" + name + "\"");
+                return brick(i);
+            },
+            [brick](const Color3& c) { return brick(nearestBrickColor(c)); },
+            [brick](double number) {
+                const int i = brickColorByNumber(static_cast<int>(number));
+                return brick(i >= 0 ? i : brickColorByName("Medium stone grey"));
+            },
+            [brick](double r, double g, double b) {
+                return brick(nearestBrickColor(Color3(static_cast<float>(r / 255.0), static_cast<float>(g / 255.0), static_cast<float>(b / 255.0))));
+            }),
+        "Random", [brick]() {
+            static std::mt19937 rng{ std::random_device{}() };
+            return brick(static_cast<int>(rng() % brickColors().size()));
+        },
+        "White", [named]() { return named("White"); },
+        "Gray", [named]() { return named("Medium stone grey"); },
+        "DarkGray", [named]() { return named("Dark stone grey"); },
+        "Black", [named]() { return named("Black"); },
+        "Red", [named]() { return named("Bright red"); },
+        "Yellow", [named]() { return named("Bright yellow"); },
+        "Green", [named]() { return named("Dark green"); },
+        "Blue", [named]() { return named("Bright blue"); },
+        "Name", sol::property([](const BrickColorL& b) { return std::string(brickColors()[static_cast<size_t>(b.index)].name); }),
+        "Number", sol::property([](const BrickColorL& b) { return brickColors()[static_cast<size_t>(b.index)].number; }),
+        "Color", sol::property([](const BrickColorL& b) { return brickColors()[static_cast<size_t>(b.index)].color; }),
+        "r", sol::property([](const BrickColorL& b) { return brickColors()[static_cast<size_t>(b.index)].color.r; }),
+        "g", sol::property([](const BrickColorL& b) { return brickColors()[static_cast<size_t>(b.index)].color.g; }),
+        "b", sol::property([](const BrickColorL& b) { return brickColors()[static_cast<size_t>(b.index)].color.b; }),
+        sol::meta_function::equal_to, [](const BrickColorL& a, const BrickColorL& b) { return a.index == b.index; },
+        sol::meta_function::to_string, [](const BrickColorL& b) { return std::string(brickColors()[static_cast<size_t>(b.index)].name); });
 
     // ------------------------------------------------------------ UDim / UDim2
     lua.new_usertype<UDim>("UDim",

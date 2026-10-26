@@ -1,5 +1,6 @@
 #include "editor/panels/Panels.h"
 #include "editor/panels/SequenceEditors.h"
+#include "editor/panels/Palettes.h"
 #include "editor/Theme.h"
 #include "core/Paths.h"
 #include "platform/Platform.h"
@@ -306,8 +307,26 @@ void PropertiesPanel::drawProperty(UiContext& ui, const std::vector<Instance*>& 
         case ValueType::Color3: {
             const Color3 c = std::get<Color3>(value);
             float f[3] = { c.r, c.g, c.b };
+            const float button = ImGui::GetFrameHeight();
+            const float inner = ImGui::GetStyle().ItemInnerSpacing.x;
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - button - inner);
             if (ImGui::ColorEdit3("##v", f, ImGuiColorEditFlags_Uint8 | ImGuiColorEditFlags_DisplayRGB | ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_NoOptions))
                 editor.previewProperty(ids, prop.name, Color3(f[0], f[1], f[2]));
+            ImGui::SameLine(0.0f, inner);
+            if (theme::iconButton(ICON_FA_PALETTE, "Colour palette")) ImGui::OpenPopup("##palette");
+            if (ImGui::BeginPopup("##palette")) {
+                Color3 pick = c;
+                const int how = colorPalette(pick, editor.settings());
+                if (how == 1) {
+                    editor.setProperty(ids, prop.name, pick);
+                    rememberColor(editor.settings(), pick);
+                    ImGui::CloseCurrentPopup();
+                } else if (how == 2) {
+                    editor.previewProperty(ids, prop.name, pick);
+                    if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) rememberColor(editor.settings(), pick);
+                }
+                ImGui::EndPopup();
+            }
             break;
         }
         case ValueType::UDim2: {
@@ -339,6 +358,19 @@ void PropertiesPanel::drawProperty(UiContext& ui, const std::vector<Instance*>& 
         }
         case ValueType::Enum: {
             const int index = std::get<EnumValue>(value).index;
+            if (prop.enumType == "Material") {
+                // A picker with previews instead of a plain list.
+                if (materialButton("##v", static_cast<Material>(index), mixed, ImGui::GetContentRegionAvail().x)) ImGui::OpenPopup("##materials");
+                if (ImGui::BeginPopup("##materials")) {
+                    Material pick = static_cast<Material>(index);
+                    if (materialPalette(pick)) {
+                        editor.setProperty(ids, prop.name, EnumValue{ static_cast<int>(pick) });
+                        ImGui::CloseCurrentPopup();
+                    }
+                    ImGui::EndPopup();
+                }
+                break;
+            }
             const char* current = mixed ? "--" : (index >= 0 && index < static_cast<int>(prop.enumNames.size()) ? prop.enumNames[index].c_str() : "?");
             if (ImGui::BeginCombo("##v", current)) {
                 for (int k = 0; k < static_cast<int>(prop.enumNames.size()); ++k) {

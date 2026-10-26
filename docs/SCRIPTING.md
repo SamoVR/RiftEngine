@@ -802,6 +802,13 @@ part.CFrame = part.CFrame * CFrame.Angles(0, math.rad(90), 0)   -- turn 90 degre
 `Color3.fromHSV(h, s, v)`, `Color3.fromHex("#FF8000")`; `R`, `G`, `B`;
 `:Lerp(c, t)`, `:ToHSV()`, `:ToHex()`.
 
+**BrickColor**: Roblox's named colours. `BrickColor.new("Bright red")`,
+`BrickColor.new(21)` (by number), `BrickColor.new(r, g, b)` or
+`BrickColor.new(color3)` (the nearest), `BrickColor.Random()`, `BrickColor.White()`,
+`.Gray()`, `.DarkGray()`, `.Black()`, `.Red()`, `.Yellow()`, `.Green()`, `.Blue()`;
+`Name`, `Number`, `Color`, `r`, `g`, `b`. Parts have `BrickColor` too (the
+nearest named colour; setting it sets `Color`).
+
 **UDim**: `UDim.new(scale, offset)`; `Scale`, `Offset`.
 **UDim2**: `UDim2.new(xScale, xOffset, yScale, yOffset)`, `UDim2.new(udimX, udimY)`,
 `UDim2.fromScale(x, y)`, `UDim2.fromOffset(x, y)`; `X`, `Y`, `Width`, `Height`;

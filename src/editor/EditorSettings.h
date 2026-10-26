@@ -57,6 +57,7 @@ struct EditorSettings {
     float snapRotate = 15.0f;
     float snapScale = 0.5f;
     bool localSpace = false;
+    std::vector<std::string> recentColors; // "#RRGGBB", most recent first (the colour palette)
 
     // Terrain Editor brush
     float terrainSize = 12.0f;      // brush diameter, studs

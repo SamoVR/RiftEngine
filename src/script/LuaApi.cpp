@@ -154,7 +154,7 @@ std::vector<std::string> instanceMembers(ClassId cls, bool methods) {
     for (const PropertyInfo& p : classInfo(cls).props) if (p.has(PF_ScriptRead)) out.push_back(p.name);
     out.insert(out.end(), { "Parent", "ClassName" });
     if (probe.hasTransform()) out.insert(out.end(), { "CFrame", "Orientation" });
-    if (probe.isBasePart()) out.insert(out.end(), { "AssemblyLinearVelocity", "AssemblyAngularVelocity" });
+    if (probe.isBasePart()) out.insert(out.end(), { "AssemblyLinearVelocity", "AssemblyAngularVelocity", "BrickColor" });
     if (cls == ClassId::Model) out.push_back("PrimaryPart");
     if (cls == ClassId::Player) out.insert(out.end(), { "Character", "UserId", "DisplayName" });
     if (cls == ClassId::Humanoid) out.push_back("RootPart");
@@ -172,7 +172,7 @@ const std::vector<std::string>& globals() {
         "tick", "time", "elapsedTime", "pairs", "ipairs", "next", "select", "tostring", "tonumber", "pcall", "xpcall", "unpack", "rawget",
         "rawset", "rawequal", "setmetatable", "getmetatable",
         "math", "string", "table", "task", "coroutine", "os", "utf8",
-        "Instance", "Vector3", "Vector2", "CFrame", "Color3", "UDim", "UDim2", "Enum", "TweenInfo", "Random", "RaycastParams",
+        "Instance", "Vector3", "Vector2", "CFrame", "Color3", "BrickColor", "UDim", "UDim2", "Enum", "TweenInfo", "Random", "RaycastParams",
         "NumberRange", "NumberSequence", "NumberSequenceKeypoint", "ColorSequence", "ColorSequenceKeypoint",
     });
     return list;
@@ -209,6 +209,7 @@ const std::vector<std::string>& typeStatics(const std::string& type) {
         { "Vector2", { "new", "one", "zero" } },
         { "CFrame", sorted({ "new", "lookAt", "Angles", "fromEulerAnglesXYZ", "fromEulerAnglesYXZ", "fromOrientation", "fromAxisAngle", "identity" }) },
         { "Color3", { "fromHSV", "fromHex", "fromRGB", "new" } },
+        { "BrickColor", sorted({ "new", "Random", "White", "Gray", "DarkGray", "Black", "Red", "Yellow", "Green", "Blue" }) },
         { "UDim", { "new" } },
         { "UDim2", { "fromOffset", "fromScale", "new" } },
         { "Instance", { "new" } },
@@ -234,6 +235,7 @@ const std::vector<std::string>& valueMembers(const std::string& type) {
                              "Inverse", "Lerp", "ToWorldSpace", "ToObjectSpace", "PointToWorldSpace", "PointToObjectSpace", "VectorToWorldSpace",
                              "VectorToObjectSpace", "ToEulerAnglesXYZ", "ToOrientation", "GetComponents" }) },
         { "Color3", sorted({ "R", "G", "B", "Lerp", "ToHSV", "ToHex" }) },
+        { "BrickColor", sorted({ "Color", "Name", "Number", "r", "g", "b" }) },
         { "UDim2", sorted({ "X", "Y", "Width", "Height", "Lerp" }) },
         { "UDim", { "Offset", "Scale" } },
         { "RBXScriptSignal", { "Connect", "Once", "Wait" } },

@@ -1,4 +1,5 @@
 #include "editor/EditorApp.h"
+#include "editor/panels/Palettes.h"
 #include "editor/Theme.h"
 #include "audio/AudioSystem.h"
 #include "core/Log.h"
@@ -688,6 +689,53 @@ void EditorApp::drawToolbar() {
         drawInsertMenuItems(e);
         ImGui::EndPopup();
     }
+    separator();
+
+    // Colour and material of the selected parts (and the parts in selected models).
+    std::vector<uint64_t> parts;
+    const Instance* firstPart = nullptr;
+    for (Instance* i : e.selectedInstances()) {
+        auto add = [&](Instance& p) {
+            if (!p.isBasePart()) return;
+            parts.push_back(p.id);
+            if (!firstPart) firstPart = &p;
+        };
+        add(*i);
+        if (i->cls == ClassId::Model) Scene::forEachDescendant(*i, add);
+    }
+    ImGui::BeginDisabled(parts.empty() || e.playing());
+    const bool paintClicked = theme::iconButton(ICON_FA_FILL_DRIP, "Color: paint the selected parts", false, button);
+    if (firstPart) {
+        // The colour they have now, as a bar under the bucket.
+        const ImVec2 a = ImGui::GetItemRectMin(), b = ImGui::GetItemRectMax();
+        const Color3 c = firstPart->color;
+        ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(a.x + 6.0f, b.y - 4.0f), ImVec2(b.x - 6.0f, b.y - 2.0f), ImGui::GetColorU32(ImVec4(c.r, c.g, c.b, 1.0f)), 1.0f);
+    }
+    if (paintClicked) ImGui::OpenPopup("##paintColor");
+    if (ImGui::BeginPopup("##paintColor")) {
+        Color3 pick = firstPart ? firstPart->color : Color3(0.64f, 0.64f, 0.64f);
+        const int how = colorPalette(pick, settings_);
+        if (how == 1) {
+            e.setProperty(parts, "Color", pick);
+            rememberColor(settings_, pick);
+            ImGui::CloseCurrentPopup();
+        } else if (how == 2) {
+            e.previewProperty(parts, "Color", pick);
+            if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) rememberColor(settings_, pick);
+        }
+        ImGui::EndPopup();
+    }
+    ImGui::SameLine(0.0f, 2.0f);
+    if (theme::iconButton(ICON_FA_CUBES_STACKED, "Material: change the selected parts' material", false, button)) ImGui::OpenPopup("##paintMaterial");
+    if (ImGui::BeginPopup("##paintMaterial")) {
+        Material pick = firstPart ? firstPart->material : Material::Plastic;
+        if (materialPalette(pick)) {
+            e.setProperty(parts, "Material", EnumValue{ static_cast<int>(pick) });
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+    ImGui::EndDisabled();
     ImGui::EndDisabled();
 
     // Play controls in the middle

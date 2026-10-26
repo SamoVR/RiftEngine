@@ -5,6 +5,7 @@
 #include "game/GameSession.h"
 #include "platform/Input.h"
 #include "scene/Reflection.h"
+#include "scene/BrickColor.h"
 #include "scene/Scene.h"
 #include "script/LuaApi.h"
 #include "script/ScriptStore.h"
@@ -178,6 +179,49 @@ TEST_CASE("completion: every listed method and event exists in the Lua API") {
             }
         }
         CHECK_MESSAGE(found, all);
+    }
+    std::error_code ec;
+    fs::remove_all(folder, ec);
+}
+
+TEST_CASE("BrickColor: names, numbers, nearest colours and part.BrickColor") {
+    CHECK(brickColors().size() == 64);
+    const int red = brickColorByName("Bright red");
+    REQUIRE(red >= 0);
+    CHECK(brickColors()[static_cast<size_t>(red)].number == 21);
+    CHECK(brickColorByNumber(1004) == brickColorByName("Really red"));
+    CHECK(nearestBrickColor(Color3(0.77f, 0.16f, 0.11f)) == red);
+
+    Scene scene;
+    ScriptStore store;
+    Input input;
+    const fs::path folder = fs::temp_directory_path() / "rift_brickcolor";
+    fs::remove_all(folder);
+    fs::create_directories(folder);
+    store.reset(Paths::toUtf8(folder));
+    store.create("scripts/Bc.lua", R"(
+        local p = Instance.new("Part")
+        p.BrickColor = BrickColor.new("Bright blue")
+        print("blue", p.BrickColor.Name, p.Color == BrickColor.new("Bright blue").Color)
+        print("number", BrickColor.new(21).Name, BrickColor.Red().Name)
+        print("rgb", BrickColor.new(255, 0, 0).Name, BrickColor.new(Color3.new(0, 0, 1)).Name)
+        print("random", typeof(BrickColor.Random().Name))
+        print("bad", (pcall(function() return BrickColor.new("Not a colour") end)))
+    )");
+    Instance* s = scene.create(ClassId::Script, scene.service(ClassId::ScriptService));
+    s->source = "scripts/Bc.lua";
+    {
+        GameSession session(scene, store, input, GameSession::Options{});
+        session.start();
+        ViewportInput view;
+        session.update(1.0f / 60.0f, view);
+        std::string all;
+        for (const auto& line : session.logLines()) all += line.text + "\n";
+        CHECK_MESSAGE(all.find("blue Bright blue true") != std::string::npos, all);
+        CHECK(all.find("number Bright red Bright red") != std::string::npos);
+        CHECK(all.find("rgb Really red Really blue") != std::string::npos);
+        CHECK(all.find("random string") != std::string::npos);
+        CHECK(all.find("bad false") != std::string::npos);
     }
     std::error_code ec;
     fs::remove_all(folder, ec);

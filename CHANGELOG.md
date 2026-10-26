@@ -21,6 +21,11 @@ RIFT is in **beta**: versions are 0.x until the engine is complete.
 - Humanoid states: `GetState()`, `StateChanged`, `FreeFalling`, `Swimming`. KeyframeSequenceProvider.
 - The CFrame property type (Motor6D.C0 / C1, Pose.CFrame) with position and rotation fields in Properties.
 
+### Colours and materials
+- A colour palette with Roblox's 64 BrickColors, recent colours, a picker and a hex field, from the toolbar's paint bucket (for the selected parts) and next to every colour in Properties.
+- A material picker with a preview of every material, grouped and searchable, from the toolbar and the Material property.
+- `BrickColor` in scripts, and `part.BrickColor`.
+
 ### Scripting
 - Autocomplete in the script editor: keywords, the API, your own names, and the members of what is before a `.` or `:` (objects in the scene, services, Enum, Vector3 and friends, events, simple locals).
 - **Find in Scripts** (Ctrl+Shift+F): search every script of the scene, jump to a result, replace all.

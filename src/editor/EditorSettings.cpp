@@ -55,6 +55,7 @@ namespace {
         f("snapRotate", s.snapRotate);
         f("snapScale", s.snapScale);
         f("localSpace", s.localSpace);
+        f("recentColors", s.recentColors);
         f("terrainSize", s.terrainSize);
         f("terrainStrength", s.terrainStrength);
         f("terrainCube", s.terrainCube);
