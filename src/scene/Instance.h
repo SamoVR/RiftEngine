@@ -29,7 +29,8 @@ enum class ClassId : uint8_t {
     // Services: exactly one of each per scene, always at the root.
     Workspace, Players, Lighting, ReplicatedStorage, ServerStorage, ScriptService, StarterGui, StarterPack, StarterPlayer, SoundService,
     // World
-    Part, SpawnLocation, MeshPart, Model, Folder, Tool, Terrain,
+    Part, SpawnLocation, MeshPart, Seat, Model, Folder, Tool, Terrain,
+    ProximityPrompt, // shows "press E" near its part; Triggered when the player does
     PointLight, SpotLight,
     // Effects: points on parts, and what is drawn from them
     Attachment, ParticleEmitter, Beam, Trail,
@@ -257,6 +258,19 @@ struct Instance {
     Color3 imageColor{ 1.0f, 1.0f, 1.0f };
     float imageTransparency = 0.0f;
     ScaleType scaleType = ScaleType::Stretch;
+    // Seat / Humanoid sitting
+    bool disabled = false;                // Seat: nobody sits on it
+    InstanceRef occupant;                 // Seat: the Humanoid sitting on it
+    bool sit = false;                     // Humanoid: sitting (on SeatPart)
+    InstanceRef seatPart;                 // Humanoid: the Seat it sits on
+    // ProximityPrompt
+    std::string actionText = "Interact";
+    std::string objectText;
+    std::string keyboardKeyCode = "E";    // a key name (Enum.KeyCode)
+    float holdDuration = 0.0f;            // seconds the key is held to trigger (0: a press)
+    float maxActivationDistance = 10.0f;
+    bool requiresLineOfSight = true;
+    bool clickablePrompt = true;
     // BillboardGui / SurfaceGui
     InstanceRef adornee;                  // the part it is shown on (none: its parent part)
     glm::vec3 studsOffset{ 0.0f };        // BillboardGui: from the part, along the camera's right / up / back
@@ -271,7 +285,7 @@ struct Instance {
     // ------------------------------------------------------------ queries
     bool isA(ClassId c) const { return cls == c; }
     bool isService() const;
-    bool isBasePart() const;      // Part, SpawnLocation, MeshPart: has geometry and physics
+    bool isBasePart() const;      // Part, SpawnLocation, MeshPart, Seat: has geometry and physics
     bool hasTransform() const;    // anything with position/rotation (parts, models, lights)
     bool isScript() const;        // Script, LocalScript or ModuleScript
     bool isRemote() const;        // RemoteEvent, RemoteFunction, BindableEvent, BindableFunction

@@ -827,6 +827,31 @@ void LuaRuntime::onChatMessage(const std::string& speaker, uint64_t player, cons
     s.flush();
 }
 
+void LuaRuntime::onSeated(Instance& humanoid, bool active, uint64_t seat) {
+    Impl& s = *impl_;
+    s.queueInstanceEvent(humanoid.id, "Seated", [&s, active, seat](lua_State* T) {
+        lua_pushboolean(T, active ? 1 : 0);
+        if (seat) s.pushInstance(T, seat);
+        else lua_pushnil(T);
+        return 2;
+    });
+    s.flush();
+}
+
+void LuaRuntime::onPromptEvent(Instance& prompt, PromptEvent e, Instance* player) {
+    Impl& s = *impl_;
+    static const char* names[] = { "Triggered", "TriggerEnded", "PromptButtonHoldBegan", "PromptButtonHoldEnded", "PromptShown", "PromptHidden" };
+    const uint64_t playerId = player ? player->id : 0;
+    const bool withPlayer = e != PromptEvent::Shown && e != PromptEvent::Hidden;
+    s.queueInstanceEvent(prompt.id, names[static_cast<int>(e)], [&s, playerId, withPlayer](lua_State* T) {
+        if (!withPlayer) return 0;
+        if (playerId) s.pushInstance(T, playerId);
+        else lua_pushnil(T);
+        return 1;
+    });
+    s.flush();
+}
+
 void LuaRuntime::onHumanoidDied(Instance& humanoid) { impl_->queueInstanceEvent(humanoid.id, "Died", nullptr); }
 
 void LuaRuntime::onHealthChanged(Instance& humanoid, float health) {

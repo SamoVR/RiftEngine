@@ -141,8 +141,8 @@ to any colour and the Material field open the same pickers.
 The toolbar has buttons for a part and a script; the arrow next to them and the
 **Insert** menu have everything else:
 
-- **Parts**: Block, Sphere, Cylinder, Wedge, Corner Wedge, Spawn Location. New parts land on the surface in the middle of the view.
-- **Objects**: Model, Folder, Point Light, Spot Light, Sound, value objects.
+- **Parts**: Block, Sphere, Cylinder, Wedge, Corner Wedge, Spawn Location, Seat (characters sit on it). New parts land on the surface in the middle of the view.
+- **Objects**: Model, Folder, Proximity Prompt (into the selected part: "E Interact" for players nearby), Point Light, Spot Light, Sound, value objects.
 - **Code**: Script (server), LocalScript (client), ModuleScript, and under Communication: RemoteEvent, RemoteFunction, BindableEvent, BindableFunction. Scripts go inside the selected object, or into ScriptService / StarterPlayerScripts / ReplicatedStorage; remotes into ReplicatedStorage.
 - **Effects**: Attachment, ParticleEmitter, Beam and Trail, and ready-made Fire, Smoke, Sparkles, Magic Beam and Speed Trail. Select two parts before inserting a beam to stretch it between them (one part: across it); a trail goes on the selected part. Their attachments are made and linked for you. In the Properties panel, click a colour bar or a curve to edit it.
 - **GUI**: ScreenGui, Frame, TextLabel, TextButton, ImageLabel, ImageButton. They go into the selected ScreenGui, BillboardGui, SurfaceGui or Frame, or a new ScreenGui in StarterGui. **BillboardGui** (floats over the selected part, facing the camera) and **SurfaceGui** (covers a face of it) start with a label.

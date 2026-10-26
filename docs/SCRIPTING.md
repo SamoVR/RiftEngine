@@ -15,6 +15,7 @@ are listed at the end.
 - [Players and characters](#players-and-characters)
 - [Tools and the Backpack](#tools-and-the-backpack)
 - [Chat](#chat)
+- [Seats and ProximityPrompts](#seats-and-proximityprompts)
 - [Physics](#physics)
 - [Time and tasks](#time-and-tasks)
 - [Input](#input)
@@ -506,6 +507,39 @@ TextChatService.TextChannels.RBXGeneral:DisplaySystemMessage("Welcome to my game
   `ChatWindowConfiguration.Enabled` and `BubbleChatConfiguration.Enabled`
   (LocalScript).
 - The older **Chat** service: `Chat:Chat(partOrCharacter, text)` shows a bubble.
+
+## Seats and ProximityPrompts
+
+A **Seat** is a part characters sit on when they touch it; Space (a jump) gets
+them up. `Seat.Disabled` keeps everyone off, `Seat.Occupant` is the Humanoid on
+it, and `Seat:Sit(humanoid)` (server) sits one down. The Humanoid has `Sit`
+(set it false to stand up), `SeatPart` and the `Seated(active, seat)` event; its
+state is `Enum.HumanoidStateType.Seated` and the Animate script plays a sitting
+pose.
+
+A **ProximityPrompt** inside a part (or an Attachment or Model) shows "E Interact"
+when a character is within `MaxActivationDistance` (and can see it, with
+`RequiresLineOfSight`). Pressing the key, or clicking the prompt, fires
+`Triggered(player)` on the server and on that player's client.
+
+```lua
+-- Script inside a door part
+local prompt = Instance.new("ProximityPrompt")
+prompt.ActionText = "Open"
+prompt.ObjectText = "Door"
+prompt.HoldDuration = 0.5           -- hold E for half a second
+prompt.Parent = script.Parent
+prompt.Triggered:Connect(function(player)
+    script.Parent.Transparency = 0.8
+    script.Parent.CanCollide = false
+end)
+```
+
+**ProximityPrompt**: `ActionText`, `ObjectText`, `KeyboardKeyCode` (Enum.KeyCode,
+default E), `HoldDuration`, `MaxActivationDistance`, `RequiresLineOfSight`,
+`ClickablePrompt`, `Enabled`; events `Triggered`, `TriggerEnded`,
+`PromptButtonHoldBegan`, `PromptButtonHoldEnded` (with the player), and on the
+client `PromptShown`, `PromptHidden`.
 
 ## Terrain
 

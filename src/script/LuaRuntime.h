@@ -32,6 +32,8 @@ enum class GuiEvent;
 
 // What a Tool reports to the scripts (GameSession decides when).
 enum class ToolEvent { Equipped, Unequipped, Activated, Deactivated };
+// What a ProximityPrompt reports: Triggered, TriggerEnded, PromptButtonHoldBegan / Ended, PromptShown / Hidden.
+enum class PromptEvent { Triggered, TriggerEnded, HoldBegan, HoldEnded, Shown, Hidden };
 
 class LuaRuntime {
 public:
@@ -55,6 +57,8 @@ public:
     void onCharacterRemoving(uint64_t player, Instance& character);
     void onToolEvent(Instance& tool, ToolEvent e);
     void onHumanoidDied(Instance& humanoid);
+    void onSeated(Instance& humanoid, bool active, uint64_t seat);     // Humanoid.Seated
+    void onPromptEvent(Instance& prompt, PromptEvent e, Instance* player);
     void onHealthChanged(Instance& humanoid, float health);
     void onJumping(Instance& humanoid);
     void onRunning(Instance& humanoid, float speed);

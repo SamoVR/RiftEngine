@@ -478,6 +478,44 @@ void drawGameHud(GameSession& session, TextureCache& textures, ImDrawList* draw,
         }
     }
 
+    // ---- ProximityPrompt: the key to press, what it does, and the hold filling up
+    {
+        const GameSession::PromptView pv = session.promptView(session.focus());
+        if (pv.visible) {
+            const ImVec2 a(origin.x + pv.pos.x, origin.y + pv.pos.y), b(a.x + pv.size.x, a.y + pv.size.y);
+            const float h = pv.size.y;
+            const glm::vec2 mouse = session.viewport().mouse;
+            const bool hot = session.viewport().hovered && mouse.x >= pv.pos.x && mouse.y >= pv.pos.y && mouse.x <= pv.pos.x + pv.size.x &&
+                             mouse.y <= pv.pos.y + pv.size.y;
+            draw->AddRectFilled(ImVec2(a.x + 2.0f, a.y + 3.0f), ImVec2(b.x + 2.0f, b.y + 3.0f), IM_COL32(0, 0, 0, 50), h * 0.22f);
+            draw->AddRectFilled(a, b, hot ? IM_COL32(34, 34, 44, 225) : IM_COL32(18, 18, 26, 205), h * 0.22f);
+            // The key in a rounded square, ringed by the hold's progress.
+            const float pad = std::floor(h * 0.16f);
+            const ImVec2 ka(a.x + pad, a.y + pad), kb(a.x + h - pad, b.y - pad);
+            const ImVec2 kc((ka.x + kb.x) * 0.5f, (ka.y + kb.y) * 0.5f);
+            draw->AddRectFilled(ka, kb, IM_COL32(245, 245, 250, 240), h * 0.14f);
+            const float keySize = std::floor(h * (pv.key.size() > 2 ? 0.26f : 0.42f));
+            const ImVec2 kt = bold->CalcTextSizeA(keySize, FLT_MAX, 0.0f, pv.key.c_str());
+            draw->AddText(bold, keySize, ImVec2(kc.x - kt.x * 0.5f, kc.y - kt.y * 0.5f), IM_COL32(20, 20, 28, 255), pv.key.c_str());
+            if (pv.progress > 0.0f) {
+                const float radius = (kb.x - ka.x) * 0.5f + pad * 0.55f;
+                draw->PathArcTo(kc, radius, -1.5708f, -1.5708f + 6.28318f * pv.progress, 40);
+                draw->PathStroke(IM_COL32(255, 255, 255, 235), 0, std::max(2.0f, h * 0.06f));
+            }
+            // ObjectText small above ActionText.
+            const float x = a.x + h + pad * 0.2f;
+            const float actionSize = std::floor(h * 0.34f), objectSize = std::floor(h * 0.25f);
+            draw->PushClipRect(a, ImVec2(b.x - pad * 0.5f, b.y), true);
+            if (!pv.object.empty()) {
+                draw->AddText(font, objectSize, ImVec2(x, a.y + h * 0.5f - objectSize - h * 0.02f), IM_COL32(205, 205, 215, 230), pv.object.c_str());
+                draw->AddText(bold, actionSize, ImVec2(x, a.y + h * 0.5f), IM_COL32(255, 255, 255, 255), pv.action.c_str());
+            } else if (!pv.action.empty()) {
+                draw->AddText(bold, actionSize, ImVec2(x, a.y + (h - actionSize) * 0.5f), IM_COL32(255, 255, 255, 255), pv.action.c_str());
+            }
+            draw->PopClipRect();
+        }
+    }
+
     // ---- chat (top left): what players said, and the box to type in
     {
         const GameSession::ChatView cv = session.chatView(session.focus());

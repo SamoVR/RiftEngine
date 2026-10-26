@@ -466,3 +466,122 @@ TEST_CASE("chat: / opens the box, Enter says it to everyone, Player.Chatted and 
     CHECK(s.bubbles().empty());
     CHECK(g.errors() == 0);
 }
+
+TEST_CASE("seats: touching one sits the character down, Space gets it up, Seat:Sit from a script") {
+    Game g;
+    Instance* seat = g.scene.create(ClassId::Seat, &g.scene.workspace());
+    seat->name = "Chair";
+    seat->size = { 2.0f, 0.4f, 2.0f };
+    seat->position = { 0.0f, 0.2f, 0.0f }; // where the character spawns: it drops onto it
+    Instance* bench = g.scene.create(ClassId::Seat, &g.scene.workspace());
+    bench->name = "Bench";
+    bench->size = { 2.0f, 0.4f, 2.0f };
+    bench->position = { 10.0f, 0.2f, 0.0f };
+    g.script(R"(
+        local Players = game:GetService("Players")
+        Players.PlayerAdded:Connect(function(player)
+            local character = player.Character or player.CharacterAdded:Wait()
+            character:WaitForChild("Humanoid").Seated:Connect(function(active, seat)
+                print("seated", active, seat and seat.Name or "none")
+            end)
+        end)
+        task.wait(2.5)
+        workspace.Bench:Sit(game.Players:GetPlayers()[1].Character.Humanoid)
+    )", g.scene.service(ClassId::ScriptService));
+    GameSession& s = g.start(1);
+    g.run(1.5f);
+    GameSession::Client& c = s.client(0);
+    Instance* hum = s.scene().find(c.humanoidId);
+    Instance* chair = s.scene().find(seat->id);
+    REQUIRE(hum);
+    REQUIRE(chair);
+    CHECK_MESSAGE(hum->sit, g.dump());
+    CHECK(chair->occupant.id == hum->id);
+    CHECK(hum->seatPart.id == chair->id);
+    CHECK(c.state == HumanoidState::Seated);
+    CHECK(g.count("seated true Chair") == 1);
+    // Sitting on it, not standing on it: the root is just above the seat's top.
+    Instance* root = s.scene().find(c.rootPartId);
+    CHECK(root->worldPosition().y == doctest::Approx(0.4f + c.seatHip + 0.05f).epsilon(0.05));
+
+    // Space: up and off.
+    g.tapKey(GLFW_KEY_SPACE);
+    g.run(0.2f);
+    CHECK_FALSE(hum->sit);
+    CHECK(chair->occupant.id == 0);
+    CHECK(g.count("seated false none") == 1);
+
+    // A script sits it on the bench.
+    g.run(1.0f);
+    CHECK_MESSAGE(s.scene().find(bench->id)->occupant.id == hum->id, g.dump());
+    CHECK(g.count("seated true Bench") == 1);
+    CHECK(g.errors() == 0);
+}
+
+TEST_CASE("proximity prompts: shown in reach, E triggers it, holding fills it up") {
+    Game g;
+    Instance* door = g.scene.create(ClassId::Part, &g.scene.workspace());
+    door->name = "Door";
+    door->position = { 0.0f, 1.0f, -4.0f };
+    door->size = { 2.0f, 2.0f, 0.4f };
+    Instance* prompt = g.scene.create(ClassId::ProximityPrompt, door);
+    prompt->actionText = "Open";
+    prompt->objectText = "Door";
+    g.script(R"(
+        local prompt = workspace.Door.ProximityPrompt
+        prompt.Triggered:Connect(function(player) print("triggered by", player.Name) end)
+        prompt.TriggerEnded:Connect(function(player) print("trigger ended") end)
+        prompt.PromptButtonHoldBegan:Connect(function(player) print("hold began") end)
+        prompt.PromptButtonHoldEnded:Connect(function(player) print("hold ended") end)
+    )", g.scene.service(ClassId::ScriptService));
+    g.script(R"(
+        local prompt = workspace:WaitForChild("Door"):WaitForChild("ProximityPrompt")
+        prompt.PromptShown:Connect(function() print("client shown") end)
+        prompt.Triggered:Connect(function(player) print("client triggered", player.Name) end)
+    )", g.starterPlayerScripts(), ClassId::LocalScript);
+    GameSession& s = g.start(1);
+    g.run(1.2f);
+    const GameSession::PromptView v = s.promptView(0);
+    REQUIRE_MESSAGE(v.visible, g.dump());
+    CHECK(v.key == "E");
+    CHECK(v.action == "Open");
+    CHECK(v.object == "Door");
+    CHECK(g.count("client shown") == 1);
+
+    g.tapKey(GLFW_KEY_E);
+    g.run(0.05f);
+    CHECK_MESSAGE(g.count("triggered by Player") == 1, g.dump());
+    CHECK(g.count("client triggered Player") == 1);
+    CHECK(g.count("trigger ended") == 1);
+
+    // Hold for half a second; letting go early does nothing.
+    Instance* live = s.scene().find(prompt->id);
+    live->holdDuration = 0.5f;
+    live->keyboardKeyCode = "F";
+    ViewportInput view;
+    g.input.newFrame();
+    g.input.setKey(GLFW_KEY_F, true);
+    s.update(1.0f / 60.0f, view);
+    g.run(0.2f);
+    CHECK(s.promptView(0).progress > 0.2f);
+    g.input.newFrame();
+    g.input.setKey(GLFW_KEY_F, false);
+    s.update(1.0f / 60.0f, view);
+    CHECK(g.count("hold began") == 1);
+    CHECK(g.count("hold ended") == 1);
+    CHECK(g.count("triggered by Player") == 1);
+    g.input.newFrame();
+    g.input.setKey(GLFW_KEY_F, true);
+    s.update(1.0f / 60.0f, view);
+    g.run(0.6f);
+    CHECK(g.count("triggered by Player") == 2);
+    g.input.newFrame();
+    g.input.setKey(GLFW_KEY_F, false);
+    s.update(1.0f / 60.0f, view);
+
+    // Out of reach: hidden.
+    live->maxActivationDistance = 1.0f;
+    g.run(0.05f);
+    CHECK_FALSE(s.promptView(0).visible);
+    CHECK(g.errors() == 0);
+}

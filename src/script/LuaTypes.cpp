@@ -596,6 +596,7 @@ Value LuaRuntime::Impl::fromLua(const sol::object& o, const PropertyInfo& prop, 
             return wrong("a number");
         case ValueType::String:
             if (t == sol::type::string) return o.as<std::string>();
+            if (o.is<EnumItem>()) return o.as<EnumItem>().name(); // KeyboardKeyCode = Enum.KeyCode.F
             if (t == sol::type::number) return num(o.as<double>()); // Roblox converts numbers for text
             return wrong("a string");
         case ValueType::Asset:

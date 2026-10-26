@@ -1,0 +1,115 @@
+{
+  "format": "rift-animation",
+  "version": 1,
+  "name": "Sit",
+  "loop": true,
+  "priority": "Core",
+  "keyframes": [
+    {
+      "time": 0.0,
+      "poses": {
+        "Right Leg": {
+          "cf": [
+            0,
+            0,
+            0,
+            90,
+            0,
+            2
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Left Leg": {
+          "cf": [
+            0,
+            0,
+            0,
+            90,
+            0,
+            -2
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Right Arm": {
+          "cf": [
+            0,
+            0,
+            0,
+            40,
+            0,
+            4
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Left Arm": {
+          "cf": [
+            0,
+            0,
+            0,
+            40,
+            0,
+            -4
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        }
+      }
+    },
+    {
+      "time": 1.0,
+      "poses": {
+        "Right Leg": {
+          "cf": [
+            0,
+            0,
+            0,
+            90,
+            0,
+            2
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Left Leg": {
+          "cf": [
+            0,
+            0,
+            0,
+            90,
+            0,
+            -2
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Right Arm": {
+          "cf": [
+            0,
+            0,
+            0,
+            40,
+            0,
+            4
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Left Arm": {
+          "cf": [
+            0,
+            0,
+            0,
+            40,
+            0,
+            -4
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        }
+      }
+    }
+  ]
+}

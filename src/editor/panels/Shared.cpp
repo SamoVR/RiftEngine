@@ -117,10 +117,14 @@ void drawInsertMenuItems(Editor& editor) {
     classItem(editor, ClassId::Part, "Wedge", PartShape::Wedge, ICON_FA_STAIRS);
     classItem(editor, ClassId::Part, "Corner Wedge", PartShape::CornerWedge, ICON_FA_MOUNTAIN);
     classItem(editor, ClassId::SpawnLocation, "Spawn Location");
+    classItem(editor, ClassId::Seat, "Seat");
+    theme::tooltip("Characters sit down when they touch it; Space gets them up.");
 
     ImGui::SeparatorText("Objects");
     classItem(editor, ClassId::Model, "Model");
     classItem(editor, ClassId::Folder, "Folder");
+    classItem(editor, ClassId::ProximityPrompt, "Proximity Prompt");
+    theme::tooltip("Goes into the selected part: \"E Interact\" shows up near it, and Triggered fires when a player presses E.");
     classItem(editor, ClassId::PointLight, "Point Light");
     classItem(editor, ClassId::SpotLight, "Spot Light");
     classItem(editor, ClassId::Sound, "Sound");

@@ -12,7 +12,7 @@ namespace rift {
 bool Instance::isService() const { return cls <= ClassId::SoundService; }
 
 bool Instance::isBasePart() const {
-    return cls == ClassId::Part || cls == ClassId::SpawnLocation || cls == ClassId::MeshPart;
+    return cls == ClassId::Part || cls == ClassId::SpawnLocation || cls == ClassId::MeshPart || cls == ClassId::Seat;
 }
 
 bool Instance::hasTransform() const {

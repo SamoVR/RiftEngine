@@ -110,6 +110,14 @@ public:
         std::string text;
         double time = 0.0;
     };
+    // The ProximityPrompt a player sees (view pixels), for drawing and clicking.
+    struct PromptView {
+        bool visible = false;
+        uint64_t prompt = 0;
+        glm::vec2 pos{ 0.0f }, size{ 0.0f }; // the box around the prompt's point
+        float progress = 0.0f;               // a hold under way: 0..1
+        std::string key, action, object;
+    };
     // Where the chat goes (view pixels): the messages, top left, with the box to type in under them.
     struct ChatView {
         bool enabled = false, open = false;
@@ -172,6 +180,16 @@ public:
         uint64_t equipped = 0;
         bool activating = false;
         std::unordered_map<uint64_t, glm::mat4> toolOffsets; // other parts of the held tool, relative to its Handle
+
+        // Seats: the one sat on, how high the hips are above the root, no sitting again until then.
+        uint64_t seatId = 0;
+        float seatHip = 0.25f;
+        double seatCooldownUntil = 0.0;
+        // The ProximityPrompt shown, and its key (or click) being held.
+        uint64_t prompt = 0;
+        glm::vec3 promptPosition{ 0.0f };
+        float promptHold = 0.0f;
+        bool promptPressed = false, promptHolding = false, promptTriggered = false;
 
         // Humanoid state (Enum.HumanoidStateType) for StateChanged and the Animate script.
         HumanoidState state = HumanoidState::Running;
@@ -257,6 +275,10 @@ public:
     void setInventoryOpen(int client, bool open);
     // Puts a tool in a bar slot (0..9; -1 takes it off the bar). A tool already there swaps places.
     void assignHotbar(int client, uint64_t tool, int index);
+
+    // ---- seats and prompts
+    void sit(uint64_t humanoidId, uint64_t seatId); // Seat:Sit(humanoid)
+    PromptView promptView(int client) const;
 
     // ---- chat
     // `client` says `text`: Player.Chatted on the server, a line for everyone and a bubble over the head.
@@ -345,6 +367,10 @@ private:
     void updateTools(Client& c);
     void pickUpTools();
     void updateSlots(Client& c);
+    void sitOn(Client& c, Instance& humanoid, Instance& seat);
+    void standUp(Client& c);
+    void updatePrompt(Client& c, bool typing, bool& overGui);
+    float frameDt_ = 0.0f;
     void updateCamera(Client& c, float dt);
     Instance* cameraObject(Client& c); // (re)makes the client's Workspace.Camera
     void updateSounds();

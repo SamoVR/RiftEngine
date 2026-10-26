@@ -255,6 +255,26 @@ std::vector<ClassInfo> buildClasses() {
         c.props.push_back(field<&Instance::enabled>("Enabled", "Behavior"));
     }
     {
+        ClassInfo& c = def(ClassId::Seat, "Seat", "A part characters sit on when they touch it; jumping gets them up.", true);
+        addTransform(c.props, true);
+        addPartAppearance(c.props, true);
+        addPartPhysics(c.props);
+        c.props.push_back(field<&Instance::disabled>("Disabled", "Behavior").tip("On: nobody can sit on it (whoever sits gets up)."));
+        c.props.push_back(field<&Instance::occupant>("Occupant", "Behavior").flagsSet(PF_ScriptRead | PF_Runtime).tip("The Humanoid sitting on it, or nil."));
+    }
+    {
+        ClassInfo& c = def(ClassId::ProximityPrompt, "ProximityPrompt",
+                           "Put it in a part: near it, players see \"E Interact\"; pressing (or holding) the key fires Triggered.", true);
+        c.props.push_back(field<&Instance::enabled>("Enabled", "Behavior"));
+        c.props.push_back(field<&Instance::actionText>("ActionText", "Text").tip("What the key does: Open, Talk, Pick up."));
+        c.props.push_back(field<&Instance::objectText>("ObjectText", "Text").tip("What it is, shown above (optional): Door, Chest."));
+        c.props.push_back(field<&Instance::keyboardKeyCode>("KeyboardKeyCode", "Behavior").tip("The key: E, F, Q, ... (Enum.KeyCode in scripts)."));
+        c.props.push_back(field<&Instance::holdDuration>("HoldDuration", "Behavior").range(0.0f, 60.0f).speed(0.05f).tip("Seconds to hold the key. 0: one press."));
+        c.props.push_back(field<&Instance::maxActivationDistance>("MaxActivationDistance", "Behavior").range(0.0f, 1000.0f).tip("How close the character has to be, in studs."));
+        c.props.push_back(field<&Instance::requiresLineOfSight>("RequiresLineOfSight", "Behavior").tip("Hidden when a wall is between the character and the prompt."));
+        c.props.push_back(field<&Instance::clickablePrompt>("ClickablePrompt", "Behavior").tip("Clicking the prompt works like the key."));
+    }
+    {
         ClassInfo& c = def(ClassId::MeshPart, "MeshPart", "A part whose shape comes from an imported 3D model.", true);
         addTransform(c.props, true);
         c.props.push_back(field<&Instance::mesh>("MeshId", "Appearance").tip("Model file (.obj, .gltf, .glb) in the project's assets."));
@@ -417,6 +437,8 @@ std::vector<ClassInfo> buildClasses() {
         c.props.push_back(field<&Instance::jumpPower>("JumpPower", "Movement").range(0.0f, 500.0f));
         c.props.push_back(field<&Instance::moveDirection>("MoveDirection", "Movement").flagsSet(PF_ScriptRead | PF_Runtime));
         c.props.push_back(field<&Instance::jump>("Jump", "Movement").flagsSet(PF_ScriptRead | PF_ScriptWrite | PF_Runtime));
+        c.props.push_back(field<&Instance::sit>("Sit", "Movement").flagsSet(PF_ScriptRead | PF_ScriptWrite | PF_Runtime));
+        c.props.push_back(field<&Instance::seatPart>("SeatPart", "Movement").flagsSet(PF_ScriptRead | PF_Runtime));
     }
 
     {
@@ -627,6 +649,10 @@ void applyClassDefaults(Instance& i) {
         case ClassId::Part:
         case ClassId::MeshPart:
             i.size = { 4.0f, 1.0f, 2.0f };
+            break;
+        case ClassId::Seat:
+            i.size = { 2.0f, 0.4f, 2.0f };
+            i.color = { 0.45f, 0.32f, 0.22f };
             break;
         case ClassId::PointLight:
             i.color = { 1.0f, 0.95f, 0.85f };

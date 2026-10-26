@@ -287,6 +287,7 @@ void GameSession::update(float dt, const ViewportInput& view) {
         return;
     }
     time_ += dt;
+    frameDt_ = dt;
     // Bubbles pop after a while.
     bubbles_.erase(std::remove_if(bubbles_.begin(), bubbles_.end(), [&](const ChatBubble& b) { return time_ - b.time > kBubbleSeconds; }), bubbles_.end());
 
@@ -461,6 +462,7 @@ void GameSession::handleInput(Client& c) {
         c.activating = false;
         if (tool) activateTool(tool->id, false);
     }
+    updatePrompt(c, typing || c.searchFocused || c.chatOpen, overBar);
     // Keys typed into the chat or the search box don't walk the character or reach scripts.
     if (typing || c.searchFocused || c.chatOpen) c.view.keyboard = false;
 }
@@ -579,6 +581,7 @@ void GameSession::destroyCharacter(Client& c) {
         forAll([&](LuaRuntime& l) { l.onCharacterRemoving(playerId, *model); });
         scene_->destroy(model);
     }
+    if (c.seatId) standUp(c);
     c.replicator->setLocalCharacter(0);
     c.characterId = c.humanoidId = c.rootPartId = 0;
     c.equipped = 0;
@@ -669,6 +672,32 @@ void GameSession::updateCharacter(Client& c, float dt) {
         if (hum->jump) { in.jump = true; hum->jump = false; }
         in.moveDirection = wish;
     }
+
+    // Seats: touching one sits the character down; jumping (or Sit = false) gets it up.
+    if (c.seatId) {
+        Instance* seat = scene_->find(c.seatId);
+        if (!seat || !seat->isDescendantOf(&scene_->workspace()) || seat->disabled || !hum->sit || c.dead || in.jump) {
+            standUp(c); // and the jump carries on: a hop off the seat
+        } else {
+            const glm::mat4 f = seat->worldFrame();
+            const glm::vec3 top = glm::vec3(f * glm::vec4(0.0f, seat->size.y * 0.5f, 0.0f, 1.0f));
+            const glm::vec3 rootAt = top + glm::normalize(glm::vec3(f[1])) * (c.seatHip + 0.05f);
+            c.controller->teleport(rootAt - glm::vec3(0.0f, kCharacterHeight * 0.5f, 0.0f));
+            c.facingYaw = wrapDegrees(glm::degrees(std::atan2(f[2].x, f[2].z))); // facing the seat's front (-Z)
+            in = CharacterController::Input{};
+            in.anchored = true; // stays where the seat is
+            hum->moveDirection = glm::vec3(0.0f);
+        }
+    } else if (!c.dead && time_ >= c.seatCooldownUntil && c.controller) {
+        const glm::vec3 feet = c.controller->feetPosition();
+        for (uint64_t id : physics_->partsInBox(feet + glm::vec3(0.0f, 0.1f, 0.0f), glm::vec3(1.0f, 0.5f, 1.0f))) {
+            Instance* p = scene_->find(id);
+            if (p && p->cls == ClassId::Seat && !p->disabled && !p->occupant.id) {
+                sitOn(c, *hum, *p);
+                break;
+            }
+        }
+    }
     hum->moveDirection = in.moveDirection;
     c.controller->setInput(in);
 }
@@ -713,7 +742,8 @@ void GameSession::placeCharacter(Client& c, float dt) {
 
     // The Humanoid's state: running on the ground, jumping, falling or swimming.
     HumanoidState state = HumanoidState::Running;
-    if (c.swimming) state = HumanoidState::Swimming;
+    if (c.seatId) state = HumanoidState::Seated;
+    else if (c.swimming) state = HumanoidState::Swimming;
     else if (c.controller->justJumped()) state = HumanoidState::Jumping;
     else if (!c.controller->onGround()) state = c.state == HumanoidState::Jumping && root->velocity.y > 0.0f ? HumanoidState::Jumping : HumanoidState::Freefall;
     if (state != c.state) {
@@ -905,6 +935,187 @@ GameSession::InventoryView GameSession::inventory(int client) const {
         v.cells.push_back(cell);
     }
     return v;
+}
+
+// ============================================================================
+//  Seats
+// ============================================================================
+void GameSession::sitOn(Client& c, Instance& humanoid, Instance& seat) {
+    if (c.seatId) standUp(c);
+    // How high the hips are above the root: the root sits that much above the seat.
+    c.seatHip = 0.25f;
+    Instance* model = c.characterId ? scene_->find(c.characterId) : nullptr;
+    Instance* root = c.rootPartId ? scene_->find(c.rootPartId) : nullptr;
+    if (model && root) {
+        Instance* leg = model->findFirstChild("Left Leg");
+        if (!leg) leg = model->findFirstChild("LeftUpperLeg");
+        if (leg && leg->isBasePart()) c.seatHip = std::clamp(root->worldPosition().y - (leg->worldPosition().y + leg->size.y * 0.5f), 0.0f, 3.0f);
+    }
+    c.seatId = seat.id;
+    c.walkTarget = false;
+    scene_->setProperty(seat, "Occupant", InstanceRef{ humanoid.id });
+    scene_->setProperty(humanoid, "Sit", true);
+    scene_->setProperty(humanoid, "SeatPart", InstanceRef{ seat.id });
+    const uint64_t seatId = seat.id;
+    forAll([&](LuaRuntime& l) { l.onSeated(humanoid, true, seatId); });
+}
+
+void GameSession::standUp(Client& c) {
+    Instance* seat = scene_->find(c.seatId);
+    Instance* hum = c.humanoidId ? scene_->find(c.humanoidId) : nullptr;
+    if (seat && hum && seat->occupant.id == hum->id) scene_->setProperty(*seat, "Occupant", InstanceRef{});
+    c.seatId = 0;
+    c.seatCooldownUntil = time_ + 1.0; // not straight back down onto it
+    if (seat && c.controller) {
+        // Up out of the seat, so the capsule is free to move.
+        const glm::mat4 f = seat->worldFrame();
+        const glm::vec3 top = glm::vec3(f * glm::vec4(0.0f, seat->size.y * 0.5f, 0.0f, 1.0f));
+        c.controller->teleport(top + glm::vec3(0.0f, 0.1f, 0.0f));
+    }
+    if (hum) {
+        scene_->setProperty(*hum, "Sit", false);
+        scene_->setProperty(*hum, "SeatPart", InstanceRef{});
+        forAll([&](LuaRuntime& l) { l.onSeated(*hum, false, 0); });
+    }
+}
+
+void GameSession::sit(uint64_t humanoidId, uint64_t seatId) {
+    Client* c = clientOfHumanoid(humanoidId);
+    Instance* hum = scene_->find(humanoidId);
+    Instance* seat = scene_->find(seatId);
+    if (!c || !hum || !seat || seat->cls != ClassId::Seat || seat->disabled || c->dead || !c->controller) return;
+    if (seat->occupant.id && seat->occupant.id != humanoidId) return;
+    sitOn(*c, *hum, *seat);
+}
+
+// ============================================================================
+//  ProximityPrompts
+// ============================================================================
+namespace {
+    // Where a prompt is: on its part, Attachment or the first part of its model.
+    bool promptPoint(const Instance& prompt, glm::vec3& out) {
+        const Instance* p = prompt.parent;
+        if (!p) return false;
+        if (p->isBasePart() || p->cls == ClassId::Attachment) { out = p->worldPosition(); return true; }
+        if (p->cls == ClassId::Model) {
+            const Instance* first = nullptr;
+            Scene::forEachDescendant(const_cast<Instance&>(*p), [&](Instance& i) { if (!first && i.isBasePart()) first = &i; });
+            if (first) { out = first->worldPosition(); return true; }
+        }
+        return false;
+    }
+    // The topmost model (or part) under the Workspace that `i` belongs to.
+    const Instance* worldOwner(const Instance& i, const Instance& workspace) {
+        const Instance* owner = &i;
+        while (owner->parent && owner->parent != &workspace && owner->parent->parent) owner = owner->parent;
+        return owner;
+    }
+}
+
+GameSession::PromptView GameSession::promptView(int client) const {
+    PromptView v;
+    if (client < 0 || client >= clientCount()) return v;
+    const Client& c = *clients_[static_cast<size_t>(client)];
+    const Instance* prompt = c.prompt ? scene_->find(c.prompt) : nullptr;
+    if (!prompt) return v;
+    const glm::vec3 s = worldToScreen(client, c.promptPosition);
+    if (s.z <= 0.0f) return v;
+    v.visible = true;
+    v.prompt = prompt->id;
+    v.key = prompt->keyboardKeyCode.empty() ? std::string("E") : prompt->keyboardKeyCode;
+    v.action = prompt->actionText;
+    v.object = prompt->objectText;
+    v.progress = c.promptHolding && prompt->holdDuration > 0.0f ? std::clamp(c.promptHold / prompt->holdDuration, 0.0f, 1.0f) : 0.0f;
+    const float h = std::floor(std::clamp(c.view.size.y * 0.062f, 44.0f, 76.0f));
+    const bool text = !v.action.empty() || !v.object.empty();
+    v.size = glm::vec2(text ? std::floor(h * 3.6f) : h, h);
+    v.pos = glm::vec2(s.x, s.y) - v.size * 0.5f;
+    return v;
+}
+
+void GameSession::updatePrompt(Client& c, bool typing, bool& overGui) {
+    // The nearest enabled prompt in reach (and in sight) of the character.
+    uint64_t best = 0;
+    glm::vec3 bestPoint(0.0f);
+    Instance* root = c.rootPartId && !c.dead ? scene_->find(c.rootPartId) : nullptr;
+    if (root) {
+        const glm::vec3 from = root->worldPosition();
+        float bestDistance = 1e30f;
+        Scene::forEachDescendant(scene_->workspace(), [&](Instance& i) {
+            if (i.cls != ClassId::ProximityPrompt || !i.enabled) return;
+            glm::vec3 point;
+            if (!promptPoint(i, point)) return;
+            const float d = glm::length(point - from);
+            if (d > i.maxActivationDistance || d >= bestDistance) return;
+            if (i.requiresLineOfSight && d > 0.01f) {
+                RaycastFilter filter;
+                filter.instances = { c.characterId, worldOwner(*i.parent, scene_->workspace())->id };
+                if (const auto hit = physics_->raycast(from, point - from, filter); hit && hit->distance < d - 0.3f) return;
+            }
+            best = i.id;
+            bestDistance = d;
+            bestPoint = point;
+        });
+    }
+    auto fire = [&](Instance& prompt, PromptEvent e, bool server) {
+        Instance* player = scene_->find(c.playerId);
+        if (server) lua_->onPromptEvent(prompt, e, player);
+        c.lua->onPromptEvent(prompt, e, player);
+    };
+    if (best != c.prompt) {
+        if (Instance* old = c.prompt ? scene_->find(c.prompt) : nullptr) {
+            if (c.promptHolding) fire(*old, PromptEvent::HoldEnded, true);
+            if (c.promptTriggered) fire(*old, PromptEvent::TriggerEnded, true);
+            fire(*old, PromptEvent::Hidden, false);
+        }
+        c.prompt = best;
+        c.promptHold = 0.0f;
+        c.promptPressed = c.promptHolding = c.promptTriggered = false;
+        if (Instance* now = best ? scene_->find(best) : nullptr) fire(*now, PromptEvent::Shown, false);
+    }
+    c.promptPosition = bestPoint;
+    Instance* prompt = c.prompt ? scene_->find(c.prompt) : nullptr;
+    if (!prompt) return;
+
+    // The key, or a click on the prompt.
+    int key = keyFromName(prompt->keyboardKeyCode);
+    if (key < 0) key = GLFW_KEY_E;
+    const bool keys = c.view.keyboard && !typing;
+    bool pressed = keys && input_.keyPressed(key);
+    bool down = keys && input_.keyDown(key);
+    const PromptView v = promptView(c.index);
+    const glm::vec2 m = c.view.mouse;
+    if (v.visible && prompt->clickablePrompt && c.view.hovered && m.x >= v.pos.x && m.y >= v.pos.y && m.x <= v.pos.x + v.size.x && m.y <= v.pos.y + v.size.y) {
+        overGui = true;
+        pressed = pressed || input_.mousePressed(GLFW_MOUSE_BUTTON_LEFT);
+        down = down || input_.mouseDown(GLFW_MOUSE_BUTTON_LEFT);
+    }
+    if (pressed && !c.promptPressed) {
+        c.promptPressed = true;
+        if (prompt->holdDuration <= 0.0f) {
+            c.promptTriggered = true;
+            fire(*prompt, PromptEvent::Triggered, true);
+        } else {
+            c.promptHolding = true;
+            c.promptHold = 0.0f;
+            fire(*prompt, PromptEvent::HoldBegan, true);
+        }
+    }
+    if (c.promptHolding) {
+        c.promptHold += frameDt_;
+        if (c.promptHold >= prompt->holdDuration) {
+            c.promptHolding = false;
+            c.promptTriggered = true;
+            fire(*prompt, PromptEvent::HoldEnded, true);
+            fire(*prompt, PromptEvent::Triggered, true);
+        }
+    }
+    if (c.promptPressed && !down && !pressed) {
+        if (c.promptHolding) fire(*prompt, PromptEvent::HoldEnded, true); // let go too soon
+        if (c.promptTriggered) fire(*prompt, PromptEvent::TriggerEnded, true);
+        c.promptPressed = c.promptHolding = c.promptTriggered = false;
+        c.promptHold = 0.0f;
+    }
 }
 
 // ============================================================================

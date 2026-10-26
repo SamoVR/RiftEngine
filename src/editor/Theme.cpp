@@ -209,6 +209,8 @@ const char* classIcon(ClassId cls) {
         case ClassId::SoundService: return ICON_FA_MUSIC;
         case ClassId::Part: return ICON_FA_CUBE;
         case ClassId::SpawnLocation: return ICON_FA_LOCATION_DOT;
+        case ClassId::Seat: return ICON_FA_CHAIR;
+        case ClassId::ProximityPrompt: return ICON_FA_KEYBOARD;
         case ClassId::MeshPart: return ICON_FA_SHAPES;
         case ClassId::Model: return ICON_FA_CUBES;
         case ClassId::Folder: return ICON_FA_FOLDER;
@@ -253,6 +255,8 @@ ImVec4 classColor(ClassId cls) {
         case ClassId::Lighting: return { 1.00f, 0.80f, 0.30f, 1.0f };
         case ClassId::Part: case ClassId::MeshPart: return { 0.62f, 0.68f, 0.80f, 1.0f };
         case ClassId::SpawnLocation: return { 0.35f, 0.85f, 0.50f, 1.0f };
+        case ClassId::Seat: return { 0.80f, 0.60f, 0.42f, 1.0f };
+        case ClassId::ProximityPrompt: return { 0.95f, 0.80f, 0.40f, 1.0f };
         case ClassId::Model: return { 0.55f, 0.75f, 1.00f, 1.0f };
         case ClassId::Folder: return { 0.95f, 0.75f, 0.35f, 1.0f };
         case ClassId::PointLight: case ClassId::SpotLight: return { 1.00f, 0.88f, 0.45f, 1.0f };

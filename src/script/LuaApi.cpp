@@ -36,7 +36,11 @@ bool hasEvent(const Instance& i, const std::string& name) {
     if (i.isBasePart()) return name == "Touched" || name == "TouchEnded";
     if (i.cls == ClassId::Humanoid) {
         return name == "Died" || name == "HealthChanged" || name == "Jumping" || name == "Running" || name == "StateChanged"
-            || name == "FreeFalling" || name == "Swimming" || name == "AnimationPlayed";
+            || name == "FreeFalling" || name == "Swimming" || name == "AnimationPlayed" || name == "Seated";
+    }
+    if (i.cls == ClassId::ProximityPrompt) {
+        return name == "Triggered" || name == "TriggerEnded" || name == "PromptButtonHoldBegan" || name == "PromptButtonHoldEnded"
+            || name == "PromptShown" || name == "PromptHidden";
     }
     if (i.cls == ClassId::Animator) return name == "AnimationPlayed";
     if (i.cls == ClassId::Sound) return name == "Ended";
@@ -104,6 +108,7 @@ bool methodApplies(const std::string& name, const Instance& i) {
         { "SetMaterialColor", [](const Instance& x) { return x.cls == ClassId::Terrain; } },
         { "Deactivate", [](const Instance& x) { return x.cls == ClassId::Tool; } },
         { "EquipTool", [](const Instance& x) { return x.cls == ClassId::Humanoid; } },
+        { "Sit", [](const Instance& x) { return x.cls == ClassId::Seat; } },
         { "SetCoreGuiEnabled", [](const Instance& x) { return x.cls == ClassId::StarterGui; } },
         { "GetCoreGuiEnabled", [](const Instance& x) { return x.cls == ClassId::StarterGui; } },
         { "UnequipTools", [](const Instance& x) { return x.cls == ClassId::Humanoid; } },
@@ -127,7 +132,7 @@ namespace {
 const std::vector<std::string>& methodNames() {
     static const std::vector<std::string> list = sorted({
         "Activate", "AddTag", "ApplyAngularImpulse", "ApplyImpulse", "Clear", "ClearAllChildren", "Clone", "Deactivate", "Destroy", "Emit",
-        "EquipTool", "FillBall", "FillBlock", "FillCylinder", "FindFirstAncestor", "FindFirstAncestorOfClass", "FindFirstAncestorWhichIsA",
+        "EquipTool", "Sit", "FillBall", "FillBlock", "FillCylinder", "FindFirstAncestor", "FindFirstAncestorOfClass", "FindFirstAncestorWhichIsA",
         "FindFirstChild", "FindFirstChildOfClass", "FindFirstChildWhichIsA", "FindFirstDescendant", "Fire", "FireAllClients", "FireClient",
         "FireServer", "GetAttribute", "GetAttributeChangedSignal", "GetAttributes", "GetBoundingBox", "GetChildren", "GetCoreGuiEnabled",
         "GetDescendants", "GetExtentsSize", "GetFullName", "GetMass", "GetMaterialColor", "GetMouse", "GetPartBoundsInBox", "GetPartsInPart",
@@ -145,7 +150,8 @@ const std::vector<std::string>& eventNames() {
         "Changed", "ChildAdded", "ChildRemoved", "DescendantAdded", "DescendantRemoving", "AncestryChanged", "Destroying", "AttributeChanged",
         "Touched", "TouchEnded", "Died", "HealthChanged", "Jumping", "Running", "StateChanged", "FreeFalling", "Swimming", "AnimationPlayed",
         "Ended", "Activated", "MouseButton1Click", "MouseButton1Down", "MouseButton1Up", "MouseEnter", "MouseLeave", "CharacterAdded",
-        "CharacterRemoving", "OnServerEvent", "OnClientEvent", "Event", "Equipped", "Unequipped", "Deactivated",
+        "CharacterRemoving", "OnServerEvent", "OnClientEvent", "Event", "Equipped", "Unequipped", "Deactivated", "Seated", "Triggered",
+        "TriggerEnded", "PromptButtonHoldBegan", "PromptButtonHoldEnded", "PromptShown", "PromptHidden", "Chatted",
     });
     return list;
 }

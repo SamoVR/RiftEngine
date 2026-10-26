@@ -407,6 +407,13 @@ void LuaRuntime::Impl::registerInstance() {
         if (i->cls != ClassId::Tool) fail(memberError("Deactivate", *i));
         session.activateTool(i->id, false);
     };
+    m["Sit"] = [this](const Inst& h, const Inst& humanoid) {
+        Instance* i = need(h);
+        if (i->cls != ClassId::Seat) fail(memberError("Sit", *i));
+        if (need(humanoid)->cls != ClassId::Humanoid) fail("Sit expects a Humanoid");
+        requireSide(NetworkSide::Server, "Seat:Sit");
+        session.sit(humanoid.id, i->id);
+    };
     m["EquipTool"] = [this](const Inst& h, const Inst& tool) {
         Instance* i = need(h);
         if (i->cls != ClassId::Humanoid) fail(memberError("EquipTool", *i));

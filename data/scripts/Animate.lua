@@ -17,6 +17,7 @@ local ids = {
 	jump = "engine:animations/jump.anim",
 	fall = "engine:animations/fall.anim",
 	swim = "engine:animations/swim.anim",
+	sit = "engine:animations/sit.anim",
 	tool = "engine:animations/toolnone.anim",
 }
 
@@ -59,6 +60,14 @@ end)
 
 humanoid.FreeFalling:Connect(function(falling)
 	if falling then play("fall", 0.3) end
+end)
+
+humanoid.Seated:Connect(function(active)
+	if active then
+		play("sit", 0.2)
+	else
+		play("idle", 0.2)
+	end
 end)
 
 humanoid.Swimming:Connect(function(speed)

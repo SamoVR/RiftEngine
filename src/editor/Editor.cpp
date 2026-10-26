@@ -781,6 +781,14 @@ Instance* Editor::insert(ClassId cls, PartShape shape) {
     } else if (cls == ClassId::ScreenGui) {
         i = s.create(cls);
         parent = s.service(ClassId::StarterGui);
+    } else if (cls == ClassId::ProximityPrompt) {
+        // Into the selected part (or Attachment / Model).
+        if (!selected || !(selected->isBasePart() || selected->cls == ClassId::Attachment || selected->cls == ClassId::Model)) {
+            notify("Select a part to put the ProximityPrompt in", NoticeLevel::Warning);
+            return nullptr;
+        }
+        i = s.create(cls);
+        parent = selected;
     } else if (cls == ClassId::BillboardGui || cls == ClassId::SurfaceGui) {
         // On the selected part, with a label to start from.
         if (!selected || !selected->isBasePart()) {
