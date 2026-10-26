@@ -1,0 +1,15 @@
+{
+  "name": "Crystal Isles",
+  "description": "Example: a gem race in the sky",
+  "startScene": "scenes/CrystalIsles/scene.json",
+  "version": "1.0.0",
+  "author": "RIFT",
+  "icon": "assets/images/icon.png",
+  "window": {
+    "fullscreen": false,
+    "height": 720,
+    "resizable": true,
+    "vsync": true,
+    "width": 1280
+  }
+}

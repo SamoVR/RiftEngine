@@ -1,0 +1,702 @@
+{
+  "format": "rift-animation",
+  "version": 1,
+  "name": "Cheer",
+  "loop": false,
+  "priority": "Action",
+  "keyframes": [
+    {
+      "time": 0.0,
+      "poses": {
+        "Right Arm": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Left Arm": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Right Leg": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Left Leg": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Torso": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Head": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        }
+      }
+    },
+    {
+      "time": 0.16,
+      "poses": {
+        "Right Arm": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            160
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Left Arm": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            -160
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Right Leg": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            6
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Left Leg": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            -6
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Torso": {
+          "cf": [
+            0,
+            0.28,
+            0,
+            0,
+            0,
+            0
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Head": {
+          "cf": [
+            0,
+            0,
+            0,
+            4,
+            0,
+            0
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        }
+      }
+    },
+    {
+      "time": 0.38,
+      "poses": {
+        "Right Arm": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            128
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Left Arm": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            -128
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Right Leg": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            2
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Left Leg": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            -2
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Torso": {
+          "cf": [
+            0,
+            0.0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Head": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        }
+      }
+    },
+    {
+      "time": 0.6,
+      "poses": {
+        "Right Arm": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            160
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Left Arm": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            -160
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Right Leg": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            6
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Left Leg": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            -6
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Torso": {
+          "cf": [
+            0,
+            0.28,
+            0,
+            0,
+            0,
+            0
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Head": {
+          "cf": [
+            0,
+            0,
+            0,
+            4,
+            0,
+            0
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        }
+      }
+    },
+    {
+      "time": 0.82,
+      "poses": {
+        "Right Arm": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            128
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Left Arm": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            -128
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Right Leg": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            2
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Left Leg": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            -2
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Torso": {
+          "cf": [
+            0,
+            0.0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Head": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        }
+      }
+    },
+    {
+      "time": 1.04,
+      "poses": {
+        "Right Arm": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            160
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Left Arm": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            -160
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Right Leg": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            6
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Left Leg": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            -6
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Torso": {
+          "cf": [
+            0,
+            0.28,
+            0,
+            0,
+            0,
+            0
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Head": {
+          "cf": [
+            0,
+            0,
+            0,
+            12,
+            0,
+            0
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        }
+      }
+    },
+    {
+      "time": 1.26,
+      "poses": {
+        "Right Arm": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            128
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Left Arm": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            -128
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Right Leg": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            2
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Left Leg": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            -2
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Torso": {
+          "cf": [
+            0,
+            0.0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Head": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        }
+      }
+    },
+    {
+      "time": 1.48,
+      "poses": {
+        "Right Arm": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            150
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Left Arm": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            -150
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Right Leg": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            6
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Left Leg": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            -6
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Torso": {
+          "cf": [
+            0,
+            0.12,
+            0,
+            0,
+            0,
+            0
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Head": {
+          "cf": [
+            0,
+            0,
+            0,
+            8,
+            0,
+            0
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        }
+      }
+    },
+    {
+      "time": 1.93,
+      "poses": {
+        "Right Arm": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Left Arm": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Right Leg": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Left Leg": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Torso": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        },
+        "Head": {
+          "cf": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "style": "Cubic",
+          "direction": "InOut"
+        }
+      }
+    }
+  ]
+}

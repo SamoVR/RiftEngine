@@ -54,6 +54,17 @@ Preferences); the template tiles and the examples start one directly. Opening an
 example asks where to put your copy. The **Learn** page links to the guides.
 Dropping a project folder onto the window opens it too.
 
+**Crystal Isles** is the example to learn from: a complete little game (a menu,
+a countdown, a two-minute gem race across floating islands, combos, launch and
+speed pads, a moving platform, results with a best score) built only with what
+the editor offers. Things worth opening in it:
+
+- `ScriptService > RoundManager`: the server runs the rounds; `WorldScript` drives the pads and the platform (found by their tags).
+- `StarterPlayer > StarterPlayerScripts > ClientMain`: the menu, HUD and results, all animated with TweenService; `ClientEffects` spins the gems and bursts them into sparkles.
+- `StarterGui`: the three screens (MenuGui, HudGui, ResultsGui). They start disabled so they don't cover the world while you edit; tick Enabled to work on one.
+- `ReplicatedStorage > Config`: round length, gem points, speeds. Change a number and play.
+- `ServerStorage > GemTemplates`: the gems are made of CornerWedges; `Workspace > Pip` is an animated guide (the Wave animation is in `assets/animations`).
+
 **Scenes**: File > New Scene (Ctrl+N), File > Open Scene, File > Save Scene As
 (Ctrl+Shift+S). The start scene (the one a built game begins with) is set in
 File > Project Settings, along with the game's name, version, icon and window size.
@@ -198,7 +209,10 @@ into its assets folder.
 ScreenGuis in StarterGui are drawn over the viewport while editing (View > GUI
 While Editing). Click an element to select it and drag a selected element to move
 it. Sizes and positions are UDim2 values: a fraction of the parent (Scale) plus
-pixels (Offset), edited per axis in Properties.
+pixels (Offset), edited per axis in Properties. Text has a **Font**, an outline
+(**TextStrokeTransparency**) and can fill its element (**TextScaled**); any
+element can be turned (**Rotation**). Insert > GUI > UIGradient (with an element
+selected) shades it with a gradient.
 
 ## Scripts
 

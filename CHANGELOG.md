@@ -7,6 +7,15 @@ RIFT is in **beta**: versions are 0.x until the engine is complete.
 
 ## 0.2.0
 
+### Crystal Isles, a demo game
+- A complete little game in `examples/` (the home screen opens a copy): a menu with a best score, a countdown, a two-minute gem race over floating voxel islands, combos, launch pads, speed pads, a moving platform, a waving guide, and a results screen. Made only with what the editor and the Lua API offer, so every part of it is something to open and learn from.
+
+### GUI
+- Text: `Font` (Roblox's Enum.Font names), `TextScaled`, `TextTransparency`, an outline with `TextStrokeColor3` / `TextStrokeTransparency`.
+- `Rotation` for every GUI element; its children turn with it.
+- **UIGradient** (Insert > GUI): shades an element's background, text and image.
+- Clicks on anything inside a button (a label, an icon) reach the button.
+
 ### Terrain
 - Smooth voxel terrain like Roblox's (`workspace.Terrain`): 2-stud voxels in 22 natural materials plus water, meshed smooth, with shadows and materials that blend into each other.
 - The **Terrain Editor**: generate land (hills, mountains, lakes, beaches, caves) and sculpt it with Add, Subtract, Grow, Erode, Smooth, Flatten and Paint brushes (sphere or cube, size, strength, Ctrl to reverse, Shift to smooth). Material and water colours. Every stroke is one undo step.
@@ -33,6 +42,8 @@ RIFT is in **beta**: versions are 0.x until the engine is complete.
 
 ### Fixes
 - `game:GetService("ServerStorage")` returned ReplicatedStorage.
+- Setting `HumanoidRootPart.CFrame` moved only the root part, leaving the body behind; it moves the whole character now.
+- A push faster than walking (launch pads, knock-back) now carries the character through the air instead of stopping at once; letting go of the keys in the air slows down smoothly.
 
 ### Effects
 - Attachments, ParticleEmitters, Beams and Trails, drawn in the editor and in the game, with Roblox's properties (colour and size over life, spread, acceleration, drag, light emission, curved beams, scrolling textures, fading trails).

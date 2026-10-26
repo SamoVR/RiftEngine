@@ -23,7 +23,7 @@ press **Play** to test it, and ship it as a standalone Windows game with one cli
 - Properties generated from the engine's reflection data; editing several objects at once changes one axis on all of them; attributes and tags
 - Undo / redo for everything, copy / paste / duplicate (scripts are copied with their objects), group into Models
 - Script editor with Lua highlighting, live syntax checking, runtime-error markers and find / replace; files are plain `.lua`, edits from VS Code are picked up live
-- Home screen with project cards (a picture of each scene), search, templates (Empty, Baseplate, Obby) and examples
+- Home screen with project cards (a picture of each scene), search, templates (Empty, Baseplate, Obby) and examples, including **Crystal Isles**, a complete demo game
 - **Source Control** panel: every project can be a git repository; commit, history, branches, push / pull to GitHub
 - Preferences for nearly everything (projects folder, accent colour, anti-aliasing, frame limit, script editor, play and output options), autosave, crash dumps, Discord Rich Presence
 - Updates itself from GitHub Releases; installed per user with `RIFT-Setup.exe`
