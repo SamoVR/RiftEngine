@@ -1,6 +1,6 @@
 {
   "name": "Crystal Isles",
-  "description": "Example: a gem race in the sky",
+  "description": "Example: a gem race",
   "startScene": "scenes/CrystalIsles/scene.json",
   "version": "1.0.0",
   "author": "RIFT",

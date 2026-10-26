@@ -10,6 +10,11 @@ RIFT is in **beta**: versions are 0.x until the engine is complete.
 ### Crystal Isles, a demo game
 - A complete little game in `examples/` (the home screen opens a copy): a menu with a best score, a countdown, a two-minute gem race over floating voxel islands, combos, launch pads, speed pads, a moving platform, a waving guide, and a results screen. Made only with what the editor and the Lua API offer, so every part of it is something to open and learn from.
 
+### Editor
+- A polish pass over the whole interface: aligned rows and headings in Preferences and Project Settings, one style of section header in Properties and Source Control, tidier home screen, About and New project dialogs, roomier menus, a proper dropdown arrow on the material picker, softer shadows.
+- New project suggests a name that is free and warns when the folder exists.
+- The version is 0.x while RIFT is in beta.
+
 ### GUI
 - Text: `Font` (Roblox's Enum.Font names), `TextScaled`, `TextTransparency`, an outline with `TextStrokeColor3` / `TextStrokeTransparency`.
 - `Rotation` for every GUI element; its children turn with it.
