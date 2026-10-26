@@ -23,6 +23,7 @@ const std::vector<std::string> kScaleTypes = { "Stretch", "Fit", "Crop" };
 const std::vector<std::string> kCameraTypes = { "Custom", "Scriptable", "Fixed" };
 const std::vector<std::string> kFonts = { "Gotham", "GothamMedium", "GothamBold", "GothamBlack", "SourceSans", "SourceSansSemibold", "SourceSansBold", "Arial", "ArialBold", "Code" };
 const std::vector<std::string> kNormalIds = { "Right", "Top", "Back", "Left", "Bottom", "Front" };
+const std::vector<std::string> kSurfaceGuiSizingModes = { "FixedSize", "PixelsPerStud" };
 const std::vector<std::string> kParticleOrientations = { "FacingCamera", "FacingCameraWorldUp", "VelocityParallel", "VelocityPerpendicular" };
 const std::vector<std::string> kTextureModes = { "Stretch", "Wrap", "Static" };
 const std::vector<std::string> kAnimationPriorities = { "Idle", "Movement", "Action", "Action2", "Action3", "Action4", "Core" };
@@ -504,6 +505,30 @@ std::vector<ClassInfo> buildClasses() {
         c.props.push_back(field<&Instance::gradientOffset>("Offset", "Appearance").range(-1.0f, 1.0f).speed(0.01f).tip("Moves the gradient, in fractions of the element's size."));
     }
     {
+        ClassInfo& c = def(ClassId::BillboardGui, "BillboardGui",
+                           "GUI that floats over a part and always faces the camera: name tags, health bars. Put it in a part (or set Adornee).", true);
+        c.props.push_back(field<&Instance::enabled>("Enabled", "Behavior"));
+        c.props.push_back(field<&Instance::adornee>("Adornee", "Data").tip("The part it floats over. Empty: the part it is inside."));
+        c.props.push_back(field<&Instance::guiSize>("Size", "Layout").tip("Scale: studs (grows and shrinks with distance). Offset: pixels (always the same size)."));
+        c.props.push_back(field<&Instance::studsOffset>("StudsOffset", "Layout").tip("Moves it from the part, in studs: X right, Y up, Z towards the camera."));
+        c.props.push_back(field<&Instance::studsOffsetWorldSpace>("StudsOffsetWorldSpace", "Layout").tip("Moves it from the part, in studs, along the world's axes."));
+        c.props.push_back(field<&Instance::alwaysOnTop>("AlwaysOnTop", "Behavior").tip("On: drawn over everything. Off: hidden when something is in front of it."));
+        c.props.push_back(field<&Instance::maxDistance>("MaxDistance", "Behavior").range(0.0f, 100000.0f).tip("Hidden when the camera is farther away than this. 0: always shown."));
+        c.props.push_back(field<&Instance::resetOnSpawn>("ResetOnSpawn", "Behavior").tip("In StarterGui: the player gets a fresh copy every time the character respawns."));
+    }
+    {
+        ClassInfo& c = def(ClassId::SurfaceGui, "SurfaceGui", "GUI drawn on a face of a part: signs, screens, buttons on walls. Put it in a part (or set Adornee).", true);
+        c.props.push_back(field<&Instance::enabled>("Enabled", "Behavior"));
+        c.props.push_back(field<&Instance::adornee>("Adornee", "Data").tip("The part it is drawn on. Empty: the part it is inside."));
+        c.props.push_back(field<&Instance::face>("Face", "Data").enums("NormalId").tip("Which face of the part (Front = -Z)."));
+        c.props.push_back(field<&Instance::sizingMode>("SizingMode", "Layout").enums("SurfaceGuiSizingMode")
+                              .tip("FixedSize: CanvasSize pixels stretched over the face. PixelsPerStud: the canvas grows with the part."));
+        c.props.push_back(field<&Instance::canvasSize>("CanvasSize", "Layout").tip("The face's size in GUI pixels (FixedSize)."));
+        c.props.push_back(field<&Instance::pixelsPerStud>("PixelsPerStud", "Layout").range(1.0f, 400.0f).tip("GUI pixels per stud of the face (PixelsPerStud)."));
+        c.props.push_back(field<&Instance::alwaysOnTop>("AlwaysOnTop", "Behavior").tip("On: drawn over everything in front of the part."));
+        c.props.push_back(field<&Instance::resetOnSpawn>("ResetOnSpawn", "Behavior").tip("In StarterGui: the player gets a fresh copy every time the character respawns."));
+    }
+    {
         // Made by the game for each player (Workspace.Camera); never saved.
         ClassInfo& c = def(ClassId::Camera, "Camera", "The player's view: workspace.CurrentCamera. Custom follows the character; Scriptable is placed by scripts.", false);
         const uint32_t live = PF_Editor | PF_ScriptRead | PF_ScriptWrite;
@@ -762,6 +787,7 @@ const std::vector<std::pair<std::string, std::vector<std::string>>>& allEnums() 
         { "Font", kFonts },
         { "CameraType", kCameraTypes },
         { "NormalId", kNormalIds },
+        { "SurfaceGuiSizingMode", kSurfaceGuiSizingModes },
         { "ParticleOrientation", kParticleOrientations },
         { "TextureMode", kTextureModes },
         { "AnimationPriority", kAnimationPriorities },

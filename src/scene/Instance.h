@@ -48,6 +48,8 @@ enum class ClassId : uint8_t {
     // 2D GUI
     ScreenGui, Frame, TextLabel, TextButton, ImageLabel, ImageButton,
     UIGradient, // modifies its parent GUI element; not drawn itself
+    // GUI in the 3D world: over a part (always facing the camera) and on a part's face
+    BillboardGui, SurfaceGui,
     // The player's camera (workspace.CurrentCamera; made by the game for each client)
     Camera,
     Count
@@ -77,6 +79,8 @@ enum class CameraKind : int { Custom, Scriptable, Fixed }; // Enum.CameraType
 // with JetBrains Mono.
 enum class GuiFont : int { Gotham, GothamMedium, GothamBold, GothamBlack, SourceSans, SourceSansSemibold, SourceSansBold, Arial, ArialBold, Code };
 enum class NormalId : int { Right, Top, Back, Left, Bottom, Front };   // +X, +Y, +Z, -X, -Y, -Z
+// SurfaceGui: CanvasSize pixels stretched over the face, or so many pixels per stud of it.
+enum class SurfaceGuiSizingMode : int { FixedSize, PixelsPerStud };
 enum class ParticleOrientation : int { FacingCamera, FacingCameraWorldUp, VelocityParallel, VelocityPerpendicular };
 enum class TextureMode : int { Stretch, Wrap, Static };
 // Enum.AnimationPriority (in the enum's order; Core blends lowest).
@@ -253,6 +257,16 @@ struct Instance {
     Color3 imageColor{ 1.0f, 1.0f, 1.0f };
     float imageTransparency = 0.0f;
     ScaleType scaleType = ScaleType::Stretch;
+    // BillboardGui / SurfaceGui
+    InstanceRef adornee;                  // the part it is shown on (none: its parent part)
+    glm::vec3 studsOffset{ 0.0f };        // BillboardGui: from the part, along the camera's right / up / back
+    glm::vec3 studsOffsetWorldSpace{ 0.0f };
+    bool alwaysOnTop = false;             // drawn in front of everything (not hidden behind walls)
+    float maxDistance = 0.0f;             // BillboardGui: hidden farther away than this (0: always shown)
+    NormalId face = NormalId::Front;      // SurfaceGui
+    SurfaceGuiSizingMode sizingMode = SurfaceGuiSizingMode::FixedSize;
+    glm::vec2 canvasSize{ 800.0f, 600.0f };
+    float pixelsPerStud = 50.0f;
 
     // ------------------------------------------------------------ queries
     bool isA(ClassId c) const { return cls == c; }
@@ -266,6 +280,7 @@ struct Instance {
     bool isFixedContainer() const;
     bool isGui() const;           // GUI element (ScreenGui or a GuiObject)
     bool isGuiObject() const;     // drawable GUI element (not ScreenGui)
+    bool isLayerCollector() const; // ScreenGui, BillboardGui or SurfaceGui: holds GUI elements
     bool isLight() const;
     bool isValueObject() const;   // IntValue, NumberValue, ...
 

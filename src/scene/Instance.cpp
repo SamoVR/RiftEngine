@@ -26,7 +26,8 @@ bool Instance::isFixedContainer() const {
         || cls == ClassId::PlayerScripts || cls == ClassId::Backpack || cls == ClassId::Terrain;
 }
 
-bool Instance::isGui() const { return cls >= ClassId::ScreenGui && cls <= ClassId::ImageButton; }
+bool Instance::isGui() const { return (cls >= ClassId::ScreenGui && cls <= ClassId::ImageButton) || cls == ClassId::BillboardGui || cls == ClassId::SurfaceGui; }
+bool Instance::isLayerCollector() const { return cls == ClassId::ScreenGui || cls == ClassId::BillboardGui || cls == ClassId::SurfaceGui; }
 bool Instance::isGuiObject() const { return cls > ClassId::ScreenGui && cls <= ClassId::ImageButton; }
 bool Instance::isLight() const { return cls == ClassId::PointLight || cls == ClassId::SpotLight; }
 bool Instance::isValueObject() const { return cls >= ClassId::IntValue && cls <= ClassId::Color3Value; }

@@ -781,6 +781,30 @@ Instance* Editor::insert(ClassId cls, PartShape shape) {
     } else if (cls == ClassId::ScreenGui) {
         i = s.create(cls);
         parent = s.service(ClassId::StarterGui);
+    } else if (cls == ClassId::BillboardGui || cls == ClassId::SurfaceGui) {
+        // On the selected part, with a label to start from.
+        if (!selected || !selected->isBasePart()) {
+            notify(std::string("Select a part to put the ") + classInfo(cls).name + " on", NoticeLevel::Warning);
+            return nullptr;
+        }
+        i = s.create(cls);
+        parent = selected;
+        Instance* label = s.create(ClassId::TextLabel, i);
+        label->name = "TextLabel";
+        label->guiSize = { 1.0f, 0.0f, 1.0f, 0.0f };
+        label->text = cls == ClassId::BillboardGui ? "Hello!" : "Sign";
+        label->textScaled = true;
+        label->font = GuiFont::GothamBold;
+        label->textColor = Color3(1.0f, 1.0f, 1.0f);
+        if (cls == ClassId::BillboardGui) {
+            i->guiSize = { 4.0f, 0.0f, 1.0f, 0.0f }; // 4 by 1 studs
+            i->studsOffset = { 0.0f, selected->size.y * 0.5f + 1.0f, 0.0f };
+            label->backgroundTransparency = 1.0f;
+            label->textStrokeTransparency = 0.4f;
+        } else {
+            label->color = Color3(0.12f, 0.12f, 0.16f);
+            label->textColor = Color3(1.0f, 1.0f, 1.0f);
+        }
     } else if (cls == ClassId::UIGradient) {
         // Shades the GUI element it is in.
         if (!selected || !selected->isGuiObject()) {
@@ -790,9 +814,9 @@ Instance* Editor::insert(ClassId cls, PartShape shape) {
         i = s.create(cls);
         parent = selected;
     } else if (cls > ClassId::ScreenGui && cls <= ClassId::ImageButton) {
-        // GUI elements go into the selected ScreenGui / Frame, or a new ScreenGui.
+        // GUI elements go into the selected ScreenGui / BillboardGui / SurfaceGui / Frame, or a new ScreenGui.
         Instance* container = nullptr;
-        for (Instance* c = selected; c && !container; c = c->parent) if (c->cls == ClassId::ScreenGui || c->cls == ClassId::Frame) container = c;
+        for (Instance* c = selected; c && !container; c = c->parent) if (c->isLayerCollector() || c->cls == ClassId::Frame) container = c;
         if (!container) {
             for (Instance* g : s.service(ClassId::StarterGui)->children) if (g->cls == ClassId::ScreenGui) { container = g; break; }
         }

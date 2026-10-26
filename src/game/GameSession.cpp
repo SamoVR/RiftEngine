@@ -106,6 +106,22 @@ GameSession::GameSession(const Scene& editScene, ScriptStore& scripts, Input& in
         client->gui = std::make_unique<GuiSystem>(*client->scene);
         client->gui->setRoot(client->playerGuiId);
         client->gui->onEvent = [client](Instance& element, GuiEvent e) { client->lua->onGuiEvent(element, e); };
+        // BillboardGuis follow this player's camera and hide behind walls (unless AlwaysOnTop).
+        client->gui->placeBillboard = [this, client](const Instance& gui, const Instance& part) {
+            const float aspect = client->view.size.x / std::max(client->view.size.y, 1.0f);
+            BillboardPlacement p = GuiSystem::placeWithCamera(gui, part, client->camera.view(), client->camera.projection(aspect), client->view.size);
+            if (p.visible && !gui.alwaysOnTop && physics_) {
+                const glm::vec3 eye = client->camera.position;
+                RaycastFilter filter;
+                // Its own part (and the model it is in, e.g. a character's head) does not hide it.
+                const Instance* owner = &part;
+                while (owner->parent && owner->parent != &scene_->workspace() && owner->parent->parent) owner = owner->parent;
+                filter.instances.push_back(owner->id);
+                if (const auto hit = physics_->raycast(eye, p.anchor - eye, filter); hit && hit->distance < glm::length(p.anchor - eye) - 0.3f)
+                    p.visible = false;
+            }
+            return p;
+        };
         // Where the camera starts is the host's business; by default look at
         // the world from a little above.
         client->camera.lookAt({ 0.0f, 12.0f, 24.0f }, { 0.0f, 0.0f, 0.0f });
@@ -158,11 +174,11 @@ void GameSession::fillPlayerGui(Client& c, bool respawn) {
     Instance* starter = scene_->service(ClassId::StarterGui);
     if (!gui || !starter) return;
     for (Instance* item : std::vector<Instance*>(gui->children)) {
-        const bool keep = respawn && item->cls == ClassId::ScreenGui && !item->resetOnSpawn;
+        const bool keep = respawn && item->isLayerCollector() && !item->resetOnSpawn;
         if (!keep) scene_->destroy(item);
     }
     for (Instance* item : std::vector<Instance*>(starter->children)) {
-        if (respawn && item->cls == ClassId::ScreenGui && !item->resetOnSpawn) continue;
+        if (respawn && item->isLayerCollector() && !item->resetOnSpawn) continue;
         if (Instance* copy = scene_->cloneSubtree(*item)) scene_->setParent(copy, gui);
     }
 }
@@ -274,7 +290,20 @@ void GameSession::update(float dt, const ViewportInput& view) {
     // Bubbles pop after a while.
     bubbles_.erase(std::remove_if(bubbles_.begin(), bubbles_.end(), [&](const ChatBubble& b) { return time_ - b.time > kBubbleSeconds; }), bubbles_.end());
 
-    for (auto& c : clients_) c->gui->handleMouse(c->view.mouse, c->view.hovered, c->view.hovered && input_.mouseDown(GLFW_MOUSE_BUTTON_LEFT));
+    for (auto& c : clients_) {
+        // The mouse may point at a SurfaceGui (the nearest one, not behind a wall).
+        GuiSystem::SurfacePoint surface;
+        bool onSurface = false;
+        glm::vec3 origin, dir;
+        if (c->view.hovered && !c->gui->surfaces().empty() && screenPointToRay(c->index, c->view.mouse, origin, dir)) {
+            float reach = 1000.0f;
+            RaycastFilter filter;
+            if (c->characterId) filter.instances.push_back(c->characterId);
+            if (const auto hit = physics_->raycast(origin, dir * reach, filter)) reach = hit->distance + 0.1f;
+            onSurface = c->gui->surfaceUnder(origin, dir, reach, surface);
+        }
+        c->gui->handleMouse(c->view.mouse, c->view.hovered, c->view.hovered && input_.mouseDown(GLFW_MOUSE_BUTTON_LEFT), onSurface ? &surface : nullptr);
+    }
     handleInput(focused());
     for (auto& c : clients_) c->lua->beforePhysics(dt);
     lua_->beforePhysics(dt);

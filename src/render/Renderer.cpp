@@ -86,6 +86,8 @@ Renderer::~Renderer() {
     if (gridVbo_) glDeleteBuffers(1, &gridVbo_);
     if (lineVao_) glDeleteVertexArrays(1, &lineVao_);
     if (lineVbo_) glDeleteBuffers(1, &lineVbo_);
+    if (surfaceVao_) glDeleteVertexArrays(1, &surfaceVao_);
+    if (surfaceVbo_) glDeleteBuffers(1, &surfaceVbo_);
 }
 
 bool Renderer::init(std::string* error) {
@@ -501,6 +503,11 @@ void Renderer::render(const Scene& scene, const RenderCamera& camera, const Rend
     glDrawArrays(GL_TRIANGLES, 0, 3);
     ++stats_.drawCalls;
 
+    // SurfaceGuis on the faces they cover, lit a little like the parts under them.
+    const glm::vec3 surfaceTint = glm::mix(glm::vec3(1.0f), glm::clamp(sun.ambient + sun.color * std::max(sun.direction.y, 0.0f) * 0.7f, glm::vec3(0.12f), glm::vec3(1.0f)), 0.6f);
+    glEnable(GL_BLEND);
+    drawSurfaces(false, viewProj, surfaceTint);
+
     // Editor grid (transparent, does not write depth).
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -551,6 +558,10 @@ void Renderer::render(const Scene& scene, const RenderCamera& camera, const Rend
         ++stats_.drawCalls;
     }
     glDepthMask(GL_TRUE);
+    glDisable(GL_DEPTH_TEST);
+    drawSurfaces(true, viewProj, surfaceTint);
+    glEnable(GL_DEPTH_TEST);
+    surfaces_.clear();
 
     // Overlays.
     if (settings.editor) addEditorOverlays(scene, settings, lights, lightFrames);
@@ -564,6 +575,58 @@ void Renderer::render(const Scene& scene, const RenderCamera& camera, const Rend
     glDisable(GL_BLEND);
     glBindVertexArray(0);
     target.resolve();
+}
+
+void Renderer::drawSurfaces(bool onTop, const glm::mat4& viewProj, const glm::vec3& tint) {
+    // The effect shader's premultiplied texture mode: one textured quad per SurfaceGui.
+    struct Vertex { glm::vec3 pos; glm::vec2 uv; glm::vec4 color; float emission, mode; };
+    std::vector<Vertex> vertices;
+    std::vector<GLuint> textures;
+    for (const SurfaceQuad& q : surfaces_) {
+        if (q.onTop != onTop || !q.texture) continue;
+        const glm::vec4 color(tint, 1.0f);
+        const Vertex tl{ q.corners[0], { 0.0f, 1.0f }, color, 0.0f, 3.0f }, tr{ q.corners[1], { 1.0f, 1.0f }, color, 0.0f, 3.0f };
+        const Vertex br{ q.corners[2], { 1.0f, 0.0f }, color, 0.0f, 3.0f }, bl{ q.corners[3], { 0.0f, 0.0f }, color, 0.0f, 3.0f };
+        vertices.insert(vertices.end(), { tl, tr, br, tl, br, bl });
+        textures.push_back(q.texture);
+    }
+    if (textures.empty()) return;
+    if (!surfaceVao_) {
+        glGenVertexArrays(1, &surfaceVao_);
+        glGenBuffers(1, &surfaceVbo_);
+        glBindVertexArray(surfaceVao_);
+        glBindBuffer(GL_ARRAY_BUFFER, surfaceVbo_);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<void*>(offsetof(Vertex, pos)));
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<void*>(offsetof(Vertex, uv)));
+        glEnableVertexAttribArray(2);
+        glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<void*>(offsetof(Vertex, color)));
+        glEnableVertexAttribArray(3);
+        glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<void*>(offsetof(Vertex, emission)));
+        glEnableVertexAttribArray(4);
+        glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<void*>(offsetof(Vertex, mode)));
+    }
+    glBindVertexArray(surfaceVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, surfaceVbo_);
+    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(vertices.size() * sizeof(Vertex)), vertices.data(), GL_STREAM_DRAW);
+    effectShader_->use();
+    effectShader_->setMat4("uViewProj", viewProj);
+    effectShader_->setInt("uTexture", 0);
+    effectShader_->setInt("uTextured", 1);
+    glDepthMask(GL_FALSE);
+    glDisable(GL_CULL_FACE);
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    glActiveTexture(GL_TEXTURE0);
+    for (size_t k = 0; k < textures.size(); ++k) {
+        glBindTexture(GL_TEXTURE_2D, textures[k]);
+        glDrawArrays(GL_TRIANGLES, static_cast<GLint>(k * 6), 6);
+        ++stats_.drawCalls;
+    }
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDepthMask(GL_TRUE);
+    glEnable(GL_CULL_FACE);
+    glBindVertexArray(0);
 }
 
 } // namespace rift

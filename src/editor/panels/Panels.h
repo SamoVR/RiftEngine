@@ -17,6 +17,7 @@
 #include "game/GameSession.h"
 #include "project/Git.h"
 #include "render/Framebuffer.h"
+#include "ui/GameOverlay.h"
 
 #include <imgui.h>
 #include <filesystem>
@@ -91,6 +92,7 @@ public:
 
 private:
     Framebuffer framebuffer_;
+    SurfaceGuiCanvases surfaceCanvases_;
     glm::vec2 origin_{ 0.0f }, size_{ 1.0f };
     bool hovered_ = false, focused_ = false, capture_ = false, focusRequest_ = false;
     uint64_t hoveredId_ = 0;

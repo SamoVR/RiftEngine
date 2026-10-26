@@ -4,13 +4,20 @@
 in vec2 vUV;
 in vec4 vColor;
 in float vEmission;
-flat in float vMode;   // 0 textured, 1 soft dot, 2 solid band
+flat in float vMode;   // 0 textured, 1 soft dot, 2 solid band, 3 premultiplied texture (SurfaceGui)
 out vec4 FragColor;
 
 uniform sampler2D uTexture;
 uniform int uTextured;  // 0: the texture failed to load (fall back to the soft dot)
 
 void main() {
+    if (vMode > 2.5) {
+        // Already premultiplied (GUI drawn into a texture); the colour tints it.
+        vec4 t = texture(uTexture, vUV);
+        if (t.a < 0.003) discard;
+        FragColor = vec4(t.rgb * vColor.rgb, t.a) * vColor.a;
+        return;
+    }
     float mode = vMode;
     if (mode < 0.5 && uTextured == 0) mode = 1.0;
     vec4 tex = vec4(1.0);

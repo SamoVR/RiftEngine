@@ -21,7 +21,8 @@ bool isA(const Instance& i, const std::string& cls) {
     if (cls == "GuiObject") return i.isGuiObject();
     if (cls == "GuiButton") return i.cls == ClassId::TextButton || i.cls == ClassId::ImageButton;
     if (cls == "GuiBase2d") return i.isGui();
-    if (cls == "LayerCollector") return i.cls == ClassId::ScreenGui;
+    if (cls == "LayerCollector") return i.isLayerCollector();
+    if (cls == "SurfaceGuiBase") return i.cls == ClassId::SurfaceGui;
     if (cls == "UIComponent" || cls == "UIBase") return i.cls == ClassId::UIGradient;
     if (cls == "Light") return i.isLight();
     if (cls == "ValueBase") return i.isValueObject();

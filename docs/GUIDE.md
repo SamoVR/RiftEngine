@@ -145,7 +145,7 @@ The toolbar has buttons for a part and a script; the arrow next to them and the
 - **Objects**: Model, Folder, Point Light, Spot Light, Sound, value objects.
 - **Code**: Script (server), LocalScript (client), ModuleScript, and under Communication: RemoteEvent, RemoteFunction, BindableEvent, BindableFunction. Scripts go inside the selected object, or into ScriptService / StarterPlayerScripts / ReplicatedStorage; remotes into ReplicatedStorage.
 - **Effects**: Attachment, ParticleEmitter, Beam and Trail, and ready-made Fire, Smoke, Sparkles, Magic Beam and Speed Trail. Select two parts before inserting a beam to stretch it between them (one part: across it); a trail goes on the selected part. Their attachments are made and linked for you. In the Properties panel, click a colour bar or a curve to edit it.
-- **GUI**: ScreenGui, Frame, TextLabel, TextButton, ImageLabel, ImageButton. They go into the selected ScreenGui or Frame, or a new ScreenGui in StarterGui.
+- **GUI**: ScreenGui, Frame, TextLabel, TextButton, ImageLabel, ImageButton. They go into the selected ScreenGui, BillboardGui, SurfaceGui or Frame, or a new ScreenGui in StarterGui. **BillboardGui** (floats over the selected part, facing the camera) and **SurfaceGui** (covers a face of it) start with a label.
 - **Gameplay**: ready-made pieces with their scripts: Kill Brick, Spinner, Coin, Jump Pad, Moving Platform, Checkpoint, Door, Finish Line, a Sword and other tools, and a Leaderboard script. Their scripts are ordinary Lua: open them to see how they work. Tools go into StarterPack, so every player spawns with them.
 
 Right-click in the Explorer for the same menu plus Rename (F2), Cut / Copy /
@@ -213,6 +213,12 @@ pixels (Offset), edited per axis in Properties. Text has a **Font**, an outline
 (**TextStrokeTransparency**) and can fill its element (**TextScaled**); any
 element can be turned (**Rotation**). Insert > GUI > UIGradient (with an element
 selected) shades it with a gradient.
+
+GUI in the world shows in the viewport too: a **BillboardGui** in a part floats
+over it (Size's Scale is in studs, so it shrinks with distance; Offset is in
+pixels), and a **SurfaceGui** is drawn on the face its `Face` property picks,
+like a sign. Its `CanvasSize` is the face in GUI pixels (or use `SizingMode`
+PixelsPerStud).
 
 ## Scripts
 

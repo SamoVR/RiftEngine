@@ -264,11 +264,12 @@ void PlayerApp::frame(float dt) {
     settings.dt = session_->paused() ? 0.0f : dt;
     settings.hiddenModel = session_->firstPersonCharacter();
     framebuffer_.resize(w, h, 4);
+    const OverlayFonts fonts{ font_, bold_, medium_, mono_ };
+    surfaceCanvases_.prepare(session_->clientScene(), session_->gui(), renderer_->textures(), fonts, *renderer_);
     renderer_->render(session_->clientScene(), camera, settings, framebuffer_); // what the player sees
 
     ImDrawList* background = ImGui::GetBackgroundDrawList();
     background->AddImage(static_cast<ImTextureID>(framebuffer_.texture()), ImVec2(0, 0), ImVec2(static_cast<float>(w), static_cast<float>(h)), ImVec2(0, 1), ImVec2(1, 0));
-    const OverlayFonts fonts{ font_, bold_, medium_, mono_ };
     drawGameGui(*session_, renderer_->textures(), background, glm::vec2(0.0f), fonts);
     drawGameHud(*session_, renderer_->textures(), background, glm::vec2(0.0f), view.size, fonts);
     if (session_->outcome() != GameSession::Outcome::None && !menuOpen_) {

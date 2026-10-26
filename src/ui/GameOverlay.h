@@ -10,6 +10,10 @@
 //
 #include <glm/glm.hpp>
 
+#include <cstdint>
+#include <memory>
+#include <unordered_map>
+
 struct ImDrawList;
 struct ImFont;
 
@@ -17,6 +21,7 @@ namespace rift {
 
 class GameSession;
 class GuiSystem;
+class Renderer;
 class Scene;
 class TextureCache;
 
@@ -34,5 +39,19 @@ void drawGameGui(GameSession& session, TextureCache& textures, ImDrawList* draw,
 void drawGui(const Scene& scene, const GuiSystem& gui, TextureCache& textures, ImDrawList* draw, const glm::vec2& origin, const OverlayFonts& fonts);
 // Leaderboard, Backpack bar, messages and the respawn notice of the player in focus.
 void drawGameHud(GameSession& session, TextureCache& textures, ImDrawList* draw, const glm::vec2& origin, const glm::vec2& size, const OverlayFonts& fonts);
+
+// SurfaceGuis: each one's elements drawn into its own texture (kept between
+// frames), handed to the renderer for its next frame. Call it inside an ImGui
+// frame, before Renderer::render.
+class SurfaceGuiCanvases {
+public:
+    SurfaceGuiCanvases();
+    ~SurfaceGuiCanvases();
+    void prepare(const Scene& scene, const GuiSystem& gui, TextureCache& textures, const OverlayFonts& fonts, Renderer& renderer);
+
+private:
+    struct Target;
+    std::unordered_map<uint64_t, std::unique_ptr<Target>> targets_;
+};
 
 } // namespace rift

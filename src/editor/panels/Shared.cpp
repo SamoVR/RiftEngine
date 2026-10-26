@@ -193,6 +193,11 @@ void drawInsertMenuItems(Editor& editor) {
         classItem(editor, ClassId::ImageLabel, "ImageLabel");
         classItem(editor, ClassId::ImageButton, "ImageButton");
         ImGui::Separator();
+        classItem(editor, ClassId::BillboardGui, "BillboardGui");
+        theme::tooltip("Floats over the selected part, always facing the camera: name tags, health bars.");
+        classItem(editor, ClassId::SurfaceGui, "SurfaceGui");
+        theme::tooltip("Covers a face of the selected part: signs, screens, buttons on walls.");
+        ImGui::Separator();
         classItem(editor, ClassId::UIGradient, "UIGradient");
         theme::tooltip("Goes inside the selected GUI element and shades it with a gradient.");
         ImGui::EndMenu();
@@ -216,7 +221,7 @@ void dropAsset(Editor& editor, const std::string& stored, Instance* target) {
             if (target && target->isBasePart()) editor.setProperty({ target->id }, "Texture", AssetPath{ stored });
             else if (target && (target->cls == ClassId::ImageLabel || target->cls == ClassId::ImageButton)) editor.setProperty({ target->id }, "Image", AssetPath{ stored });
             else if (target && target->isGui()) {
-                Instance* parent = target->isGuiObject() || target->cls == ClassId::ScreenGui ? target : nullptr;
+                Instance* parent = target->isGuiObject() || target->isLayerCollector() ? target : nullptr;
                 if (parent) editor.insertWith(ClassId::ImageLabel, parent, [&](Instance& i) {
                     i.name = name;
                     i.texture.path = stored;

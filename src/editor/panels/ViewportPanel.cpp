@@ -158,6 +158,21 @@ void ViewportPanel::draw(UiContext& ui) {
     rs.hovered = editView ? hoveredId_ : 0;
     if (GameSession* s = editView ? nullptr : editor.session()) rs.hiddenModel = s->firstPersonCharacter();
     framebuffer_.resize(static_cast<int>(size_.x), static_cast<int>(size_.y), settings.msaa);
+
+    // GUI in the world: the player's (laid out by the game), or the scene's while editing and on
+    // the server view. SurfaceGuis are drawn into textures the render puts on the parts.
+    const OverlayFonts fonts{ theme::fonts().ui, theme::fonts().heading, theme::fonts().medium, theme::fonts().mono };
+    GameSession* playing = editView ? nullptr : editor.session();
+    std::unique_ptr<GuiSystem> editGui;
+    if (!playing) {
+        editGui = std::make_unique<GuiSystem>(editor.scene());
+        editGui->screenGuis = !editor.session() && settings.showGui;
+        editGui->placeBillboard = [view, proj, this](const Instance& gui, const Instance& part) {
+            return GuiSystem::placeWithCamera(gui, part, view, proj, size_);
+        };
+        editGui->layout(size_);
+    }
+    surfaceCanvases_.prepare(playing ? playing->clientScene() : editor.scene(), playing ? playing->gui() : *editGui, ui.renderer.textures(), fonts, ui.renderer);
     ui.renderer.render(editor.scene(), camera, rs, framebuffer_);
     if (editor.thumbnailRequest) {
         editor.thumbnailRequest = false;
@@ -167,17 +182,11 @@ void ViewportPanel::draw(UiContext& ui) {
     handleDrop(ui);
 
     // ---- 2D GUI over the scene
-    const OverlayFonts fonts{ theme::fonts().ui, theme::fonts().heading, theme::fonts().medium, theme::fonts().mono };
-    std::unique_ptr<GuiSystem> editGui;
-    if (GameSession* s = editor.session()) {
-        // The GUI belongs to the player: the server view shows the world only.
-        if (!editView) {
-            drawGameGui(*s, ui.renderer.textures(), ImGui::GetWindowDrawList(), origin_, fonts);
-            drawGameHud(*s, ui.renderer.textures(), ImGui::GetWindowDrawList(), origin_, size_, fonts);
-        }
-    } else if (settings.showGui) {
-        editGui = std::make_unique<GuiSystem>(editor.scene());
-        editGui->layout(size_);
+    if (playing) {
+        drawGameGui(*playing, ui.renderer.textures(), ImGui::GetWindowDrawList(), origin_, fonts);
+        drawGameHud(*playing, ui.renderer.textures(), ImGui::GetWindowDrawList(), origin_, size_, fonts);
+    } else if (editGui) {
+        // Editing (and the server view): BillboardGuis, and the ScreenGuis while View > GUI is on.
         drawGui(editor.scene(), *editGui, ui.renderer.textures(), ImGui::GetWindowDrawList(), origin_, fonts);
         // Selected GUI elements get an outline.
         for (const GuiSystem::Item& item : editGui->drawList()) {

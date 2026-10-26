@@ -13,6 +13,7 @@
 #include "project/Project.h"
 #include "render/Framebuffer.h"
 #include "script/ScriptStore.h"
+#include "ui/GameOverlay.h"
 
 #include <filesystem>
 #include <memory>
@@ -42,6 +43,7 @@ private:
     std::unique_ptr<Renderer> renderer_;
     std::unique_ptr<AudioSystem> audio_;
     Framebuffer framebuffer_;
+    SurfaceGuiCanvases surfaceCanvases_;
     ImFont* font_ = nullptr;
     ImFont* bold_ = nullptr;
     ImFont* medium_ = nullptr;

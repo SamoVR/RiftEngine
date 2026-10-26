@@ -57,6 +57,13 @@ struct RenderStats {
     int particles = 0;
 };
 
+// A SurfaceGui's canvas (drawn into a texture by the host) on a face of a part.
+struct SurfaceQuad {
+    GLuint texture = 0;                    // premultiplied alpha, canvas top at v = 1
+    std::array<glm::vec3, 4> corners{};    // world: top-left, top-right, bottom-right, bottom-left
+    bool onTop = false;                    // AlwaysOnTop: not hidden by what is in front
+};
+
 // Where the sun is and how bright things are, from Lighting's properties.
 struct SunState {
     glm::vec3 direction{ 0.0f, 1.0f, 0.0f }; // towards the sun (or moon at night)
@@ -82,6 +89,8 @@ public:
     // Overlay lines for the next render() (gizmo previews, debug drawing).
     void line(const glm::vec3& a, const glm::vec3& b, const glm::vec4& color, bool onTop = false);
     void wireBox(const glm::mat4& world, const glm::vec4& color, bool onTop = false); // unit cube transformed
+    // SurfaceGuis for the next render().
+    void setSurfaceGuis(std::vector<SurfaceQuad> quads) { surfaces_ = std::move(quads); }
 
     TextureCache& textures() { return textures_; }
     const RenderStats& stats() const { return stats_; }
@@ -110,6 +119,9 @@ private:
     TextureCache textures_;
     GLuint emptyVao_ = 0, gridVao_ = 0, gridVbo_ = 0, lineVao_ = 0, lineVbo_ = 0;
     std::vector<LineVertex> lines_, linesOnTop_;
+    std::vector<SurfaceQuad> surfaces_;
+    GLuint surfaceVao_ = 0, surfaceVbo_ = 0;
+    void drawSurfaces(bool onTop, const glm::mat4& viewProj, const glm::vec3& tint);
     RenderStats stats_;
 
     void collect(const Scene& scene, const glm::vec3& cameraPos, uint64_t hidden, std::vector<DrawItem>& opaque, std::vector<DrawItem>& transparent,

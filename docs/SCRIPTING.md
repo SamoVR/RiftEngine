@@ -735,6 +735,8 @@ GUI from a LocalScript inside the ScreenGui (`script.Parent`) or through
 | `TextLabel`, `TextButton` | + `Text`, `TextColor3`, `TextSize`, `TextScaled`, `Font`, `TextTransparency`, `TextStrokeColor3`, `TextStrokeTransparency`, `TextXAlignment`, `TextYAlignment`, `TextWrapped` |
 | `ImageLabel`, `ImageButton` | + `Image`, `ImageColor3`, `ImageTransparency`, `ScaleType` (Stretch, Fit, Crop) |
 | `UIGradient` | Inside an element: shades its background, text and image. `Color` (ColorSequence), `Transparency` (NumberSequence), `Rotation` (0 left to right, 90 top to bottom), `Offset`, `Enabled` |
+| `BillboardGui` | GUI floating over a part, always facing the camera. `Adornee`, `Size` (Scale in studs, Offset in pixels), `StudsOffset`, `StudsOffsetWorldSpace`, `AlwaysOnTop`, `MaxDistance`, `Enabled` |
+| `SurfaceGui` | GUI on a face of a part. `Adornee`, `Face` (Enum.NormalId), `SizingMode` (FixedSize, PixelsPerStud), `CanvasSize`, `PixelsPerStud`, `AlwaysOnTop`, `Enabled` |
 
 Every element has `Position` and `Size` (UDim2), `AnchorPoint` (Vector2),
 `ZIndex`, `Visible`, `Rotation` (degrees, clockwise; children turn with it),
@@ -743,6 +745,26 @@ Every element has `Position` and `Size` (UDim2), `AnchorPoint` (Vector2),
 
 - **Font** (`Enum.Font`) takes Roblox's names so scripts carry over: `Gotham`, `GothamMedium`, `GothamBold`, `GothamBlack` (the heaviest), `SourceSans`, `SourceSansSemibold`, `SourceSansBold`, `Arial`, `ArialBold` and `Code` (monospaced).
 - **TextScaled** makes the text as large as fits the element (up to 100); **TextStrokeTransparency** 0 draws a solid outline in `TextStrokeColor3`.
+- **BillboardGui** and **SurfaceGui** put GUI in the world. Put one inside a part (or set its `Adornee` to a part, e.g. from PlayerGui) and give it elements like a ScreenGui. A BillboardGui hides behind walls unless `AlwaysOnTop`; a SurfaceGui is drawn on the face like paint, and its buttons can be clicked in the game.
+
+```lua
+-- A name tag over every character's head (a Script)
+game.Players.PlayerAdded:Connect(function(player)
+    player.CharacterAdded:Connect(function(character)
+        local tag = Instance.new("BillboardGui")
+        tag.Size = UDim2.new(4, 0, 1, 0)          -- 4 studs by 1 stud
+        tag.StudsOffset = Vector3.new(0, 2, 0)
+        local label = Instance.new("TextLabel")
+        label.Size = UDim2.new(1, 0, 1, 0)
+        label.BackgroundTransparency = 1
+        label.Text = player.Name
+        label.TextScaled = true
+        label.Parent = tag
+        tag.Parent = character:WaitForChild("Head")
+    end)
+end)
+```
+
 - Everything inside a button (a label, an icon, a gradient fill) is part of it: clicks on it go to the button. A UIGradient also shades the button's own text, so a gradient button usually carries its text in a TextLabel inside it.
 - All these properties can be tweened, which is how menus slide, fade and pop:
 

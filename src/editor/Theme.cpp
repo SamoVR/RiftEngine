@@ -235,6 +235,8 @@ const char* classIcon(ClassId cls) {
         case ClassId::ImageLabel: return ICON_FA_IMAGE;
         case ClassId::ImageButton: return ICON_FA_IMAGE;
         case ClassId::UIGradient: return ICON_FA_PALETTE;
+        case ClassId::BillboardGui: return ICON_FA_MESSAGE;
+        case ClassId::SurfaceGui: return ICON_FA_TV;
         case ClassId::Camera: return ICON_FA_VIDEO;
         case ClassId::IntValue: case ClassId::NumberValue: return ICON_FA_HASHTAG;
         case ClassId::StringValue: return ICON_FA_QUOTE_LEFT;
@@ -258,7 +260,8 @@ ImVec4 classColor(ClassId cls) {
         case ClassId::Script: case ClassId::ScriptService: return { 0.62f, 0.55f, 0.98f, 1.0f };
         case ClassId::ModuleScript: return { 0.85f, 0.50f, 0.95f, 1.0f };
         case ClassId::ScreenGui: case ClassId::StarterGui: case ClassId::Frame: case ClassId::TextLabel:
-        case ClassId::TextButton: case ClassId::ImageLabel: case ClassId::ImageButton: case ClassId::UIGradient: return { 0.40f, 0.82f, 0.75f, 1.0f };
+        case ClassId::TextButton: case ClassId::ImageLabel: case ClassId::ImageButton: case ClassId::UIGradient:
+        case ClassId::BillboardGui: case ClassId::SurfaceGui: return { 0.40f, 0.82f, 0.75f, 1.0f };
         case ClassId::Humanoid: case ClassId::Player: case ClassId::Players: case ClassId::StarterPlayer: return { 0.95f, 0.65f, 0.55f, 1.0f };
         case ClassId::ReplicatedStorage: case ClassId::ServerStorage: return { 0.75f, 0.65f, 0.55f, 1.0f };
         case ClassId::StarterPack: return { 0.95f, 0.65f, 0.55f, 1.0f };

@@ -1,9 +1,11 @@
 #include "ui/GameOverlay.h"
 #include "game/GameSession.h"
 #include "game/GuiSystem.h"
+#include "render/Renderer.h"
 #include "render/TextureCache.h"
 
 #include <imgui.h>
+#include <backends/imgui_impl_opengl3.h>
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -135,13 +137,16 @@ void drawGameGui(GameSession& session, TextureCache& textures, ImDrawList* draw,
     drawGui(session.clientScene(), session.gui(), textures, draw, origin, fonts);
 }
 
-void drawGui(const Scene& scene, const GuiSystem& gui, TextureCache& textures, ImDrawList* draw, const glm::vec2& origin, const OverlayFonts& fonts) {
+namespace {
+// GUI elements, back to front, `origin` + their rectangles.
+void drawItems(const Scene& scene, const std::vector<GuiSystem::Item>& list, uint64_t hovered, uint64_t pressed, TextureCache& textures, ImDrawList* draw,
+               const glm::vec2& origin, const OverlayFonts& fonts) {
     // Where each element is, for turning children with a rotated parent.
     std::unordered_map<uint64_t, GuiRect> rects;
-    for (const GuiSystem::Item& item : gui.drawList()) rects.emplace(item.id, item.rect);
+    for (const GuiSystem::Item& item : list) rects.emplace(item.id, item.rect);
     auto centerOf = [&](const GuiRect& r) { return ImVec2(origin.x + r.pos.x + r.size.x * 0.5f, origin.y + r.pos.y + r.size.y * 0.5f); };
 
-    for (const GuiSystem::Item& item : gui.drawList()) {
+    for (const GuiSystem::Item& item : list) {
         const Instance* e = scene.find(item.id);
         if (!e) continue;
         const ImVec2 clipMin(origin.x + item.clip.pos.x, origin.y + item.clip.pos.y);
@@ -154,7 +159,7 @@ void drawGui(const Scene& scene, const GuiSystem& gui, TextureCache& textures, I
         const float rounding = std::min(e->cornerRadius, std::min(item.rect.size.x, item.rect.size.y) * 0.5f);
         const bool isButton = GuiSystem::isButton(*e);
         Color3 background = e->color;
-        if (isButton) background = buttonTint(background, gui.hovered() == e->id, gui.pressed() == e->id);
+        if (isButton) background = buttonTint(background, hovered == e->id, pressed == e->id);
 
         if (e->backgroundTransparency < 1.0f) draw->AddRectFilled(a, b, rgba(background, 1.0f - e->backgroundTransparency), rounding);
 
@@ -225,6 +230,11 @@ void drawGui(const Scene& scene, const GuiSystem& gui, TextureCache& textures, I
         }
         draw->PopClipRect();
     }
+}
+} // namespace
+
+void drawGui(const Scene& scene, const GuiSystem& gui, TextureCache& textures, ImDrawList* draw, const glm::vec2& origin, const OverlayFonts& fonts) {
+    drawItems(scene, gui.drawList(), gui.hovered(), gui.pressed(), textures, draw, origin, fonts);
 }
 
 void drawGameHud(GameSession& session, TextureCache& textures, ImDrawList* draw, const glm::vec2& origin, const glm::vec2& size, const OverlayFonts& fonts) {
@@ -512,7 +522,7 @@ void drawGameHud(GameSession& session, TextureCache& textures, ImDrawList* draw,
                 draw->PopClipRect();
             }
             // The box: "press /" when closed, the draft and a caret when open.
-            const float boxAlpha = cv.open ? 1.0f : std::max(frame, hover ? 1.0f : 0.55f);
+            const float boxAlpha = cv.open ? 1.0f : std::max(frame, hover ? 1.0f : 0.35f);
             const ImVec2 ia(origin.x + cv.inputPos.x, origin.y + cv.inputPos.y), ib(ia.x + cv.inputSize.x, ia.y + cv.inputSize.y);
             draw->AddRectFilled(ia, ib, IM_COL32(12, 12, 18, static_cast<int>((cv.open ? 210 : 120) * boxAlpha)), r);
             if (cv.open) draw->AddRect(ia, ib, IM_COL32(255, 255, 255, 120), r, 0, 1.5f);
@@ -583,6 +593,81 @@ void drawGameHud(GameSession& session, TextureCache& textures, ImDrawList* draw,
         const ImVec2 t = bold->CalcTextSizeA(base * 1.4f, FLT_MAX, 0.0f, text);
         draw->AddText(bold, base * 1.4f, ImVec2(origin.x + (size.x - t.x) * 0.5f, origin.y + size.y * 0.7f), IM_COL32(255, 255, 255, 220), text);
     }
+}
+
+// ============================================================================
+//  SurfaceGuis
+// ============================================================================
+struct SurfaceGuiCanvases::Target {
+    Framebuffer framebuffer;
+    int usedFrame = 0;
+    bool mipmapped = false;
+};
+
+SurfaceGuiCanvases::SurfaceGuiCanvases() = default;
+SurfaceGuiCanvases::~SurfaceGuiCanvases() = default;
+
+void SurfaceGuiCanvases::prepare(const Scene& scene, const GuiSystem& gui, TextureCache& textures, const OverlayFonts& fonts, Renderer& renderer) {
+    std::vector<SurfaceQuad> quads;
+    const int frame = ImGui::GetFrameCount();
+    GLint previousFramebuffer = 0, previousViewport[4] = {};
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previousFramebuffer);
+    glGetIntegerv(GL_VIEWPORT, previousViewport);
+    for (const GuiSystem::Surface& surface : gui.surfaces()) {
+        auto& slot = targets_[surface.gui];
+        if (!slot) slot = std::make_unique<Target>();
+        Target& t = *slot;
+        t.usedFrame = frame;
+        // At most 2048 pixels a side; a bigger canvas is drawn smaller.
+        const float scale = std::min(1.0f, 2048.0f / std::max(surface.canvas.x, surface.canvas.y));
+        const int w = std::max(1, static_cast<int>(std::round(surface.canvas.x * scale)));
+        const int h = std::max(1, static_cast<int>(std::round(surface.canvas.y * scale)));
+        if (t.framebuffer.size() != glm::ivec2(w, h)) t.mipmapped = false;
+        t.framebuffer.resize(w, h, 4);
+        t.framebuffer.bind();
+        glViewport(0, 0, w, h);
+        glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        // The elements into a draw list of their own, rendered by ImGui's backend into the canvas.
+        ImDrawList list(ImGui::GetDrawListSharedData());
+        list._ResetForNewFrame();
+        list.PushTexture(ImGui::GetIO().Fonts->TexRef);
+        list.PushClipRect(ImVec2(0.0f, 0.0f), ImVec2(surface.canvas.x, surface.canvas.y));
+        drawItems(scene, surface.items, gui.hovered(), gui.pressed(), textures, &list, glm::vec2(0.0f), fonts);
+        if (list.VtxBuffer.Size > 0) {
+            ImDrawData data;
+            data.Valid = true;
+            data.CmdLists.push_back(&list);
+            data.CmdListsCount = 1;
+            data.TotalVtxCount = list.VtxBuffer.Size;
+            data.TotalIdxCount = list.IdxBuffer.Size;
+            data.DisplayPos = ImVec2(0.0f, 0.0f);
+            data.DisplaySize = ImVec2(surface.canvas.x, surface.canvas.y);
+            data.FramebufferScale = ImVec2(scale, scale);
+            data.OwnerViewport = ImGui::GetMainViewport();
+            data.Textures = &ImGui::GetPlatformIO().Textures; // glyphs first used this frame
+            ImGui_ImplOpenGL3_RenderDrawData(&data);
+        }
+        t.framebuffer.resolve();
+        // Mipmaps keep small, far-away text from sparkling.
+        glBindTexture(GL_TEXTURE_2D, t.framebuffer.texture());
+        glGenerateMipmap(GL_TEXTURE_2D);
+        if (!t.mipmapped) {
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+            t.mipmapped = true;
+        }
+        glBindTexture(GL_TEXTURE_2D, 0);
+        quads.push_back({ t.framebuffer.texture(), surface.corners, surface.alwaysOnTop });
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(previousFramebuffer));
+    glViewport(previousViewport[0], previousViewport[1], previousViewport[2], previousViewport[3]);
+    // Canvases of SurfaceGuis that are gone.
+    for (auto it = targets_.begin(); it != targets_.end();) {
+        if (frame - it->second->usedFrame > 120) it = targets_.erase(it);
+        else ++it;
+    }
+    renderer.setSurfaceGuis(std::move(quads));
 }
 
 } // namespace rift
