@@ -5,6 +5,22 @@ GitHub release page show the section of the version being installed.
 
 RIFT is in **beta**: versions are 0.x until the engine is complete.
 
+## 0.5.6
+
+### Online
+- **Whoever joins is animated**: their Animate script (and any other LocalScript in their character) did not start, so they stood stiff on every machine. Now it starts, after respawning too.
+- Scripts on the host hear `Running`, `Jumping`, `FreeFalling`, `Swimming` and `StateChanged` for players who joined.
+- A machine that goes silent is noticed: after 45 seconds it is dropped, or the player is told the host is gone.
+- The host ignores impossible numbers from a player, cleans up player names, and is not tied up by connections that never say who they are.
+
+### Shadows
+- Shadows no longer move along with the character. Walls far away towards a low sun now shadow the ground near you as well as far from you, and simplified far terrain no longer shadows the real ground up close.
+
+### Characters
+- No more sliding down slopes you can walk on.
+- Bumping into small cubes no longer lifts a character, and loose parts no longer launch it or speed it up, from under the feet or from the side.
+- Small bumps in the ground no longer count as falling, so the fall animation stops flickering on rough terrain.
+
 ## 0.5.5
 
 ### Photo-real graphics
