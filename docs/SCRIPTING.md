@@ -1,0 +1,1172 @@
+# RIFT scripting reference
+
+RIFT games are scripted in **Luau syntax** (on a Lua 5.4 VM) with an API modelled on Roblox. If you
+know Roblox Studio, most of it works the way you expect: `workspace`,
+`game:GetService`, `Instance.new`, `part.Touched:Connect`, `task.wait`,
+`TweenService`, `CFrame`, `UDim2`, `Enum`. The [differences](#differences-from-roblox)
+are listed at the end.
+
+- [Scripts and modules](#scripts-and-modules)
+- [Client and server](#client-and-server)
+- [Globals](#globals)
+- [Instances](#instances)
+- [Classes and properties](#classes-and-properties)
+- [Events](#events)
+- [Players and characters](#players-and-characters)
+- [Tools and the Backpack](#tools-and-the-backpack)
+- [Chat](#chat)
+- [Teams](#teams)
+- [Seats and ProximityPrompts](#seats-and-proximityprompts)
+- [Physics](#physics)
+- [Time and tasks](#time-and-tasks)
+- [Input](#input)
+- [Camera](#camera)
+- [GUI](#gui)
+- [Sound](#sound)
+- [Services](#services)
+- [Data types](#data-types)
+- [Enums](#enums)
+- [Lua libraries and limits](#lua-libraries-and-limits)
+- [Differences from Roblox](#differences-from-roblox)
+- [Examples](#examples)
+
+## Scripts and modules
+
+Code lives in `.lua` files in the scene's `scripts/` folder; the Explorer holds
+objects that point at them. There are three kinds, like in Roblox:
+
+| | Runs on | Typical place | Used for |
+|---|---|---|---|
+| **Script** | the server | ScriptService, inside parts | game rules, damage, coins, saving data |
+| **LocalScript** | the client (the player's computer) | StarterPlayerScripts, StarterGui, StarterCharacterScripts | input, camera, GUI, effects only this player sees |
+| **ModuleScript** | whoever `require`s it | ReplicatedStorage | shared code |
+
+Insert one with Insert > Script / LocalScript / ModuleScript: it goes inside the
+selected object, or (nothing selected) into ScriptService, StarterPlayerScripts
+or ReplicatedStorage. See [Client and server](#client-and-server) for how the
+two sides talk.
+
+```lua
+-- Inside a part: script.Parent is the part.
+local part = script.Parent
+
+part.Touched:Connect(function(hit)
+    local humanoid = hit.Parent:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        humanoid.Health = 0
+    end
+end)
+```
+
+When the game starts, every enabled **Script** in Workspace, ScriptService or
+under a player runs; ReplicatedStorage, ServerStorage, StarterGui and
+StarterPlayer hold templates and nothing in them runs. **LocalScripts** run in
+what belongs to the local player: its PlayerGui, PlayerScripts, Backpack and
+character, which get copies of StarterGui, StarterPlayerScripts and
+StarterCharacterScripts. A script starts when it enters such a place (a clone
+parented to Workspace, for example) and stops when it is destroyed or disabled
+(`script.Enabled = false`).
+
+Each Script has its own global variables. To share code, use a **ModuleScript**:
+
+```lua
+-- ModuleScript "Util" in ReplicatedStorage
+local Util = {}
+function Util.round(x, step) return math.floor(x / step + 0.5) * step end
+return Util
+```
+
+```lua
+local Util = require(game:GetService("ReplicatedStorage").Util)
+-- or by name:
+local Util = require("Util")
+```
+
+`require(name)` loads `scripts/Name.lua` of the scene, or else `scripts/Name.lua`
+of the project (modules shared by every scene). Dots are folders:
+`require("ai.Patrol")` loads `scripts/ai/Patrol.lua`. A module runs once; every
+`require` gets the same value. A module must return a value and cannot yield
+while loading.
+
+`print(...)` and `warn(...)` write to the Output panel. Errors show the script
+and line (`Workspace.Door.Script:12: attempt to index nil`); clicking the line in
+the Output opens the script there.
+
+## Client and server
+
+A RIFT game runs as two worlds, exactly like Roblox:
+
+- The **server** owns the game. It runs the Scripts, simulates physics and
+  decides what is true: health, coins, which doors are open.
+- The **client** is the player's computer. It gets a copy of everything in
+  Workspace, ReplicatedStorage, Lighting, StarterGui, StarterPlayer, Players and
+  SoundService, kept up to date as the server changes it (**replication**). It
+  runs the LocalScripts and handles input, the camera, the GUI and sounds.
+
+ServerStorage and ScriptService never reach the client, so code and secrets in
+them stay on the server. What a LocalScript creates or changes exists only on
+that client: the server never sees it. The one exception is the player's own
+character, which the client moves and the server follows (that is how walking
+works without lag).
+
+While playing in the editor, the **Client / Server** switch in the toolbar (and
+at the top of the Explorer) picks which world you look at. The Client view is the
+game as the player sees it. The Server view shows the server's world with the
+editor camera: select and move things to see the change replicate. The Output
+tags every line with **Client** or **Server**.
+
+`game.Players.LocalPlayer` is the player on the client and `nil` on the server;
+on the server use `Players.PlayerAdded` or `Players:GetPlayers()`.
+`RunService:IsClient()` / `:IsServer()` tell where code runs. Client-only:
+`UserInputService` input, `player:GetMouse()`, `RunService.RenderStepped` and
+`:BindToRenderStep`, `FireServer` / `InvokeServer`. Server-only:
+`DataStoreService`, `player:LoadCharacter()`, `FireClient` / `FireAllClients` /
+`InvokeClient`. Calling one from the wrong side is an error that says so.
+
+### RemoteEvent and RemoteFunction
+
+Put remotes in ReplicatedStorage, where both sides can see them.
+
+```lua
+-- Script (server), ScriptService
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local buy = ReplicatedStorage.BuyItem          -- a RemoteEvent
+local getPrice = ReplicatedStorage.GetPrice    -- a RemoteFunction
+
+buy.OnServerEvent:Connect(function(player, item)
+    -- Never trust the client: check everything it sends.
+    if item == "Sword" and player.leaderstats.Coins.Value >= 10 then
+        player.leaderstats.Coins.Value = player.leaderstats.Coins.Value - 10
+        buy:FireClient(player, "You bought a sword!")
+    end
+end)
+
+getPrice.OnServerInvoke = function(player, item)
+    return item == "Sword" and 10 or nil
+end
+```
+
+```lua
+-- LocalScript (client), StarterPlayerScripts
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local buy = ReplicatedStorage:WaitForChild("BuyItem")
+
+buy.OnClientEvent:Connect(function(message)
+    print(message)
+end)
+
+print("A sword costs", ReplicatedStorage.GetPrice:InvokeServer("Sword"))
+buy:FireServer("Sword")
+```
+
+| | Client | Server |
+|---|---|---|
+| **RemoteEvent** | `:FireServer(...)`, `OnClientEvent` | `:FireClient(player, ...)`, `:FireAllClients(...)`, `OnServerEvent(player, ...)` |
+| **RemoteFunction** | `:InvokeServer(...)` (waits for the result), `OnClientInvoke` | `:InvokeClient(player, ...)`, `OnServerInvoke = function(player, ...)` |
+
+The server's handlers get the sending `player` first. Arguments are copied:
+numbers, strings, booleans, tables (without functions or metatables),
+Instances (`nil` if the other side does not have them), Vector3, Vector2,
+CFrame, Color3, UDim, UDim2 and EnumItems. Messages arrive on the next frame.
+An error in an `OnServerInvoke` handler is raised in the caller.
+
+**BindableEvent** (`:Fire(...)`, `Event`) and **BindableFunction**
+(`:Invoke(...)`, `OnInvoke`) do the same between scripts on the **same** side;
+their arguments are passed as they are, not copied.
+
+## Globals
+
+| Name | |
+|---|---|
+| `game` | The DataModel: `game:GetService("Name")`, `game.Workspace`, `game.Players`, ... and the RIFT extras `game:Message`, `game:Win`, `game:Lose` |
+| `workspace` | The Workspace service |
+| `script` | The Script (or ModuleScript) that is running |
+| `Players`, `RunService`, `UserInputService`, `TweenService` | Shortcuts for the services (RIFT extra) |
+| `Instance.new(className [, parent])` | Creates an instance |
+| `Vector3`, `Vector2`, `CFrame`, `Color3`, `UDim`, `UDim2`, `Enum`, `RaycastParams`, `TweenInfo` | Data types |
+| `task` | `task.wait`, `task.spawn`, `task.defer`, `task.delay`, `task.cancel` |
+| `wait(s)`, `spawn(f)`, `delay(s, f)` | Old names of the task functions |
+| `time()`, `elapsedTime()` | Seconds since the game started (stops while paused) |
+| `tick()` | Seconds since 1970 (wall clock) |
+| `typeof(v)` | `"Instance"`, `"Vector3"`, `"CFrame"`, `"EnumItem"`, ... or the Lua type |
+| `require(module)` | Loads a ModuleScript |
+| `shared` | A table shared by all scripts |
+| `print`, `warn` | Output |
+
+`game:GetService` knows `Workspace`, `Players`, `Lighting`, `ReplicatedStorage`,
+`ServerStorage` (server only), `ScriptService` / `ServerScriptService`,
+`StarterGui`, `StarterPlayer`, `SoundService`, `RunService`, `UserInputService`,
+`TweenService`, `Debris`, `CollectionService`, `HttpService` and `DataStoreService`.
+
+`game:Message(text [, seconds])` shows a banner (3 s by default).
+`game:Win([text])` and `game:Lose([text])` end the run with a win or lose screen.
+
+## Instances
+
+Everything in the Explorer is an Instance. Members are accessed by name:
+properties (`part.Color`), methods (`part:Clone()`), events (`part.Touched`) and,
+when nothing else matches, children (`workspace.Map.Door`). Reading or writing a
+name that does not exist is an error (`'Colour' is not a valid member of Part
+"Workspace.Brick"`), so typos never silently give `nil`.
+
+### Members every instance has
+
+| | |
+|---|---|
+| `Name` | string |
+| `ClassName` | read-only |
+| `Parent` | Instance or nil |
+| `Archivable` | false: not saved, not cloned |
+| `:Clone()` | Copy with all descendants, not parented (nil when Archivable is false) |
+| `:Destroy()` | Removes it and its descendants for the rest of the run. `Parent` is locked afterwards |
+| `:ClearAllChildren()` | Destroys the children |
+| `:GetChildren()`, `:GetDescendants()` | Arrays |
+| `:FindFirstChild(name [, recursive])` | Instance or nil |
+| `:FindFirstChildOfClass(class)`, `:FindFirstChildWhichIsA(class [, recursive])` | |
+| `:FindFirstAncestor(name)`, `:FindFirstAncestorOfClass(class)`, `:FindFirstAncestorWhichIsA(class)` | |
+| `:FindFirstDescendant(name)` | |
+| `:WaitForChild(name [, timeout])` | Yields until the child exists (nil after the timeout) |
+| `:IsA(class)` | Includes the base classes `BasePart`, `GuiObject`, `GuiButton`, `Light`, `ValueBase`, `LuaSourceContainer`, `PVInstance` |
+| `:IsDescendantOf(x)`, `:IsAncestorOf(x)` | |
+| `:GetFullName()` | `"Workspace.Map.Door"` |
+| `:GetAttribute(name)`, `:SetAttribute(name, value)`, `:GetAttributes()` | Custom values (nil, boolean, number, string, Vector3, Vector2, Color3, UDim2) |
+| `:GetAttributeChangedSignal(name)`, `:GetPropertyChangedSignal(prop)` | Signals |
+| `:AddTag(tag)`, `:RemoveTag(tag)`, `:HasTag(tag)`, `:GetTags()` | Tags (see CollectionService) |
+
+Attributes and tags set in the editor's Properties panel are visible to scripts.
+
+### Creating and destroying
+
+```lua
+local crate = Instance.new("Part")
+crate.Name = "Crate"
+crate.Size = Vector3.new(2, 2, 2)
+crate.Position = Vector3.new(0, 20, 0)
+crate.Parent = workspace          -- nothing is in the world until it has a Parent
+
+local copy = crate:Clone()        -- deep copy; scripts inside start when it enters the world
+copy.Parent = workspace
+game:GetService("Debris"):AddItem(copy, 5)   -- destroyed after 5 seconds
+
+crate:Destroy()
+```
+
+Parts made with `Instance.new` are **unanchored** (they fall), like Roblox;
+parts placed in the editor are anchored. Scripts cannot be created with
+`Instance.new` (their code is a file): put a Script in ReplicatedStorage and
+`Clone()` it.
+
+A destroyed Instance is gone from the world for good. Scripts that still hold it
+can read its last properties (handy for messages: `part.Name`), but setting its
+`Parent` is an error.
+
+Everything a game changes, creates or destroys exists only while it runs: Stop
+returns the editor's scene exactly as it was.
+
+## Classes and properties
+
+Positions are in **studs**, rotations in **degrees** (`Rotation` / `Orientation`)
+or radians (`CFrame` functions, like Roblox). A part's `Position`, `Rotation` and
+`CFrame` are in the world, wherever it is in the tree, and it stays where it is
+when you change its `Parent`. A Model's `Position` and `Rotation` and an
+Attachment's are relative to its parent. A child's `Size` is never scaled by its
+parent.
+
+**Part, SpawnLocation, MeshPart** (`BasePart`)
+
+| Property | |
+|---|---|
+| `Position`, `Rotation` (= `Orientation`), `Size` | Vector3 |
+| `CFrame` | World position and rotation |
+| `WorldPosition` | read-only Vector3 |
+| `Shape` | `Enum.PartType` Block, Ball, Cylinder, Wedge, CornerWedge (Part only) |
+| `Color` | Color3 |
+| `Material` | `Enum.Material` Plastic, SmoothPlastic, Metal, Neon, Glass, Wood, Concrete |
+| `Transparency`, `Reflectance` | 0..1 |
+| `Texture`, `TextureScale` | Image file drawn on the faces, repeats per stud (0 = stretch) |
+| `CastShadow`, `Visible` | |
+| `Anchored`, `CanCollide`, `CanTouch` | |
+| `Density`, `Friction`, `Elasticity` | |
+| `Velocity` (= `AssemblyLinearVelocity`), `AngularVelocity` (degrees/s), `AssemblyAngularVelocity` (radians/s) | Runtime |
+| `Enabled` | SpawnLocation: can players spawn here |
+| `MeshId` | MeshPart: the model file (.obj, .gltf, .glb) |
+
+Methods: `:GetTouchingParts()`, `:ApplyImpulse(v)`, `:ApplyAngularImpulse(v)`,
+`:GetMass()`, `:GetPivot()`, `:PivotTo(cframe)`, `:GetBoundingBox()`. Events:
+`Touched(otherPart)`, `TouchEnded(otherPart)`.
+
+**Model**: `Position`, `Rotation`, `CFrame`, `PrimaryPart`; `:GetPivot()`,
+`:PivotTo(cf)`, `:SetPrimaryPartCFrame(cf)`, `:MoveTo(position)`,
+`:GetBoundingBox()` (CFrame, size), `:GetExtentsSize()`. Moving a model moves
+everything inside it.
+
+**Folder**: groups instances; has no position.
+
+**PointLight / SpotLight**: `Enabled`, `Color`, `Brightness`, `Range`, `Shadows`,
+`Position`; SpotLight also `Rotation` and `Angle` (degrees; it shines along its
+-Z axis). Inside a part, a light moves with it.
+
+**Sound**: see [Sound](#sound).
+
+**Humanoid**: see [Players and characters](#players-and-characters).
+
+**Value objects** (`IntValue`, `NumberValue`, `StringValue`, `BoolValue`,
+`Vector3Value`, `Color3Value`): `Value`. Their `Changed` event passes the new value.
+
+**Workspace**: `Gravity` (studs/s², default 196.2, like Roblox), `FallenPartsDestroyHeight`
+(parts below it are destroyed; default -60), `CurrentCamera`; methods
+`:Raycast`, `:GetPartBoundsInBox`, `:GetPartsInPart` (see [Physics](#physics)).
+
+**Lighting**: `ClockTime` (0-24, moves the sun), `Brightness`, `SunColor`,
+`GlobalShadows`, `SoftShadows` (three cascades out to 600 studs with soft edges), `Ambient`, `SkyColor`, `HorizonColor`, `ExposureCompensation`,
+`FogColor`, `FogStart`, `FogEnd`; and `HDR`, `AmbientOcclusion` (with `AmbientOcclusionStrength`, `AmbientOcclusionRadius`), `ScreenSpaceReflections`. All can be turned off, and the player can turn them off on their machine too.
+
+**Post effects** are objects in Lighting; scripts change them like anything else, and `Enabled` turns each off:
+
+| Class | Properties |
+|---|---|
+| `BloomEffect` | `Intensity`, `Size`, `Threshold`: what is brighter than that glows. White in full sun is about 1.5, Neon 3. Needs `Lighting.HDR`. |
+| `SunRaysEffect` | `Intensity`, `Spread`: god rays around the sun, past what stands in front of it |
+| `ColorCorrectionEffect` | `Brightness`, `Contrast`, `Saturation` (-1 to 1), `TintColor` |
+| `BlurEffect` | `Size` |
+| `DepthOfFieldEffect` | `FocusDistance`, `InFocusRadius`, `NearIntensity`, `FarIntensity` |
+
+```lua
+local blur = Instance.new("BlurEffect")
+blur.Size = 16
+blur.Parent = game:GetService("Lighting") -- on the client: only this player's view
+```
+
+**StarterPlayer**: `WalkSpeed` (16), `JumpPower` (50), `CharacterScale` (1: 5 studs tall; games from before 0.3.1 load with 0.4, the size they were built for), `CharacterColor`, `CameraMode`
+(`Enum.CameraMode` ThirdPerson / FirstPerson), `CameraMaxZoomDistance`.
+
+**SoundService**: `Volume` (master volume).
+
+**Script**, **LocalScript**: `Enabled`. **ModuleScript**: (none).
+
+**RemoteEvent**, **RemoteFunction**, **BindableEvent**, **BindableFunction**:
+see [Client and server](#client-and-server).
+
+GUI classes are under [GUI](#gui).
+
+## Events
+
+Events are signals:
+
+```lua
+local connection = part.Touched:Connect(function(hit) print(hit.Name) end)
+part.Touched:Once(function(hit) print("first touch") end) -- disconnects itself after one call
+local hit = part.Touched:Wait()              -- yields until the next time it fires
+connection:Disconnect()
+print(connection.Connected)
+```
+
+Handlers are **deferred**: they run right after the code that caused the event
+yields or finishes, never in the middle of it. Each handler runs in its own
+thread, so it may call `task.wait`.
+
+| Event | On | Arguments |
+|---|---|---|
+| `Changed` | every instance | property name (value objects: the new value) |
+| `ChildAdded`, `ChildRemoved` | every instance | child |
+| `DescendantAdded`, `DescendantRemoving` | every instance | descendant |
+| `AncestryChanged` | every instance | instance, new parent |
+| `AttributeChanged` | every instance | attribute name |
+| `Destroying` | every instance | |
+| `Touched`, `TouchEnded` | parts | the other part |
+| `Died`, `HealthChanged(health)`, `Jumping`, `Running(speed)` | Humanoid | |
+| `CharacterAdded`, `CharacterRemoving` | Player | character |
+| `PlayerAdded` | Players | player |
+| `Ended` | Sound | |
+| `Activated`, `MouseButton1Click`, `MouseButton1Down`, `MouseButton1Up` | TextButton, ImageButton | |
+| `MouseEnter`, `MouseLeave` | GUI elements | |
+
+`:GetPropertyChangedSignal("Position")` fires when that one property changes.
+
+## Players and characters
+
+A published game has one player. When testing in the editor you can start
+several (the players button next to Play): each gets a character, a client with
+its own LocalScripts and GUI, and a slot in `Players:GetPlayers()` on the server.
+`game.Players.LocalPlayer` is the client's own player. `Players.PlayerAdded`
+fires for every player after every script had the chance to connect, so the
+usual pattern works:
+
+```lua
+local Players = game:GetService("Players")
+Players.PlayerAdded:Connect(function(player)
+    player.CharacterAdded:Connect(function(character)
+        print(player.Name .. " spawned")
+    end)
+end)
+```
+
+**Player**: `Name`, `DisplayName`, `UserId` (1), `Character`, and the folders
+`PlayerGui` (copies of StarterGui), `Backpack` and `PlayerScripts` (copies of
+StarterPlayerScripts, client only); `:LoadCharacter()` (respawn now, server),
+`:GetMouse()` (client), `:Kick([message])` (ends the game).
+
+**Players**: `LocalPlayer`, `:GetPlayers()`, `:GetPlayerFromCharacter(model)`.
+
+`RemoteEvent:FireClient(player, ...)` reaches only that player's client,
+`:FireAllClients(...)` every client, and `OnServerEvent` tells the server which
+player fired.
+
+The **character** is a Model named after the player, in Workspace, with a
+`Humanoid`, a `HumanoidRootPart` (the collision capsule) and a body. It appears on
+an enabled SpawnLocation (a random one if there are several).
+`StarterPlayer.CharacterRigType` picks the body, and `Humanoid.RigType` tells which
+one a character has (`Enum.HumanoidRigType`):
+
+- **R15** (the default): `Head`, `UpperTorso`, `LowerTorso`, `LeftUpperArm`,
+  `LeftLowerArm`, `LeftHand`, `LeftUpperLeg`, `LeftLowerLeg`, `LeftFoot` and the same
+  on the right. Each Motor6D is in the part it moves: `Root`, `Waist`, `Neck`,
+  `LeftShoulder`, `LeftElbow`, `LeftWrist`, `LeftHip`, `LeftKnee`, `LeftAnkle` ...
+- **R6**: `Head`, `Torso`, `Left Arm`, `Right Arm`, `Left Leg`, `Right Leg`. The
+  Motor6Ds (`RootJoint`, `Neck`, `Left Shoulder`, `Left Hip` ...) are in the Torso.
+
+Scenes saved before RIFT 0.4 keep R6. Animations are by the name of the part they
+move, so a clip made for one body does not move the other: each has its own default
+set (`data/animations` and `data/animations/r15`). The face is a Decal named `face`
+in the Head. Put your own Model named **StarterCharacter** (with a Humanoid and a
+HumanoidRootPart) in StarterPlayer to replace the body. Scripts and LocalScripts in
+StarterPlayer.StarterCharacterScripts are copied into every new character.
+
+Touch handlers usually find the character from the part that touched:
+
+```lua
+part.Touched:Connect(function(hit)
+    local humanoid = hit.Parent:FindFirstChildOfClass("Humanoid")
+    local player = game.Players:GetPlayerFromCharacter(hit.Parent)
+end)
+```
+
+**Humanoid**: `Health`, `MaxHealth`, `WalkSpeed`, `JumpPower`, `MoveDirection`
+(read-only), `Jump` (set to true to jump), `RootPart`; `:TakeDamage(amount)`,
+`:MoveTo(position)` (walks there). When `Health` reaches 0 the character falls
+apart, `Died` fires and the player respawns 3 seconds later.
+
+Moving the character: set `character.HumanoidRootPart.CFrame` (teleports the
+whole character, turned the way the CFrame faces) or `AssemblyLinearVelocity`
+(a push or a launch pad). A push faster than walking carries the character
+through the air and fades; the player can still steer.
+
+```lua
+-- A launch pad: throws whoever steps on it towards another island.
+local pad = script.Parent
+pad.Touched:Connect(function(hit)
+    local root = hit.Parent:FindFirstChild("HumanoidRootPart")
+    if root then root.AssemblyLinearVelocity = Vector3.new(20, 24, -12) end
+end)
+```
+
+**Leaderboard**: a Folder named `leaderstats` inside the Player, with IntValue /
+NumberValue / StringValue / BoolValue children, is shown in the top right corner.
+
+## Tools and the Backpack
+
+A **Tool** is something a character can hold: a sword, a flashlight, a
+building tool. Tools in **StarterPack** are copied into every player's
+`Backpack` when the character spawns; the backpack bar at the bottom of the
+screen shows them, and the number keys (or a click) equip them. The bar has ten
+numbered slots; tools that don't fit wait in the **inventory**, which the
+<kbd>`</kbd> key (the key left of 1) or the backpack button opens, like Roblox's:
+every tool in a grid with a search box. Drag a tool onto a slot to put it on the
+bar, or from the bar into the inventory to take it off. A tool needs a
+part named **Handle** (unless `RequiresHandle` is false): the character's right
+hand holds it, placed by `GripPos` and `GripRotation`.
+
+```lua
+-- A Script inside the Tool (Insert > Gameplay > Sword has a full example)
+local tool = script.Parent
+tool.Activated:Connect(function()        -- clicked while equipped
+    local character = tool.Parent
+    print(character.Name .. " swings")
+end)
+tool.Equipped:Connect(function() print("out") end)
+tool.Unequipped:Connect(function() print("away") end)
+```
+
+**Tool**: `Enabled`, `RequiresHandle`, `CanBeDropped` (Backspace drops it),
+`ManualActivationOnly` (clicks do not activate; call `:Activate()`), `ToolTip`,
+`TextureId` (the icon in the backpack bar), `GripPos`, `GripRotation`;
+events `Equipped`, `Unequipped`, `Activated`, `Deactivated`. An equipped tool is
+a child of the character; an unequipped one lives in the player's Backpack.
+`Humanoid:EquipTool(tool)` and `Humanoid:UnequipTools()` do the same from code.
+A dropped tool lies in Workspace until a character touches it.
+
+**Built-in GUI**: `StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)`
+hides the backpack bar and inventory (`PlayerList` the leaderboard, `Chat` the
+chat window, `All` everything); `:GetCoreGuiEnabled(type)` reads it. Call it
+from a LocalScript.
+
+## Chat
+
+Players chat like in Roblox: <kbd>/</kbd> (or a click on the box, top left)
+opens the chat box, Enter says it, Esc closes the box. Every player sees the
+line in the chat window, and a speech bubble rises over the speaker's head.
+
+```lua
+-- Script: chat commands
+game.Players.PlayerAdded:Connect(function(player)
+    player.Chatted:Connect(function(message)
+        if message == "!reset" and player.Character then
+            player.Character.Humanoid.Health = 0
+        end
+    end)
+end)
+```
+
+```lua
+-- LocalScript: every chat line, and lines of your own
+local TextChatService = game:GetService("TextChatService")
+TextChatService.MessageReceived:Connect(function(message)
+    local who = message.TextSource and message.TextSource.Name or "(system)"
+    print(who, "said", message.Text)
+end)
+TextChatService.TextChannels.RBXGeneral:DisplaySystemMessage("Welcome to my game!")
+```
+
+- **Player.Chatted** (server) passes the message.
+- **TextChatService** (`game:GetService("TextChatService")`): `MessageReceived`
+  (each client, every line; a message has `Text`, `PrefixText` and `TextSource`
+  with `Name` and `UserId`, or no `TextSource` for system lines), `SendingMessage`
+  (the speaker's client), `TextChannels.RBXGeneral` with `:SendAsync(text)` (say
+  it as the local player) and `:DisplaySystemMessage(text)` (a line with no
+  speaker: on a client for that player, on the server for everyone, a RIFT
+  extra), `:DisplayBubble(partOrCharacter, text)`,
+  `ChatWindowConfiguration.Enabled` and `BubbleChatConfiguration.Enabled`
+  (LocalScript).
+- The older **Chat** service: `Chat:Chat(partOrCharacter, text)` shows a bubble.
+
+## Teams
+
+Put **Team** objects in the **Teams** service (Insert > Objects > Team). Players
+entering the game join the smallest team with `AutoAssignable` on; the leaderboard
+groups players by team and the chat shows names in team colours. A **SpawnLocation**
+with `Neutral` off is only for the team with its `TeamColor`; with
+`AllowTeamChangeOnTouch` stepping on it joins that team.
+
+```lua
+local Teams = game:GetService("Teams")
+Teams.Red.PlayerAdded:Connect(function(player) print(player.Name, "joined Red") end)
+player.Team = Teams.Blue           -- on the server, so everyone sees it
+print(#Teams.Blue:GetPlayers())
+```
+
+- **Team**: `TeamColor` (BrickColor), `AutoAssignable`, `:GetPlayers()`, events `PlayerAdded`, `PlayerRemoved`.
+- **Teams**: `:GetTeams()`.
+- **Player**: `Team`, `TeamColor`, `Neutral`.
+- **SpawnLocation**: `TeamColor`, `Neutral`, `AllowTeamChangeOnTouch`.
+
+## Seats and ProximityPrompts
+
+A **Seat** is a part characters sit on when they touch it; Space (a jump) gets
+them up. `Seat.Disabled` keeps everyone off, `Seat.Occupant` is the Humanoid on
+it, and `Seat:Sit(humanoid)` (server) sits one down. The Humanoid has `Sit`
+(set it false to stand up), `SeatPart` and the `Seated(active, seat)` event; its
+state is `Enum.HumanoidStateType.Seated` and the Animate script plays a sitting
+pose.
+
+A **ProximityPrompt** inside a part (or an Attachment or Model) shows "E Interact"
+when a character is within `MaxActivationDistance` (and can see it, with
+`RequiresLineOfSight`). Pressing the key, or clicking the prompt, fires
+`Triggered(player)` on the server and on that player's client.
+
+```lua
+-- Script inside a door part
+local prompt = Instance.new("ProximityPrompt")
+prompt.ActionText = "Open"
+prompt.ObjectText = "Door"
+prompt.HoldDuration = 0.5           -- hold E for half a second
+prompt.Parent = script.Parent
+prompt.Triggered:Connect(function(player)
+    script.Parent.Transparency = 0.8
+    script.Parent.CanCollide = false
+end)
+```
+
+**ProximityPrompt**: `ActionText`, `ObjectText`, `KeyboardKeyCode` (Enum.KeyCode,
+default E), `HoldDuration`, `MaxActivationDistance`, `RequiresLineOfSight`,
+`ClickablePrompt`, `Enabled`; events `Triggered`, `TriggerEnded`,
+`PromptButtonHoldBegan`, `PromptButtonHoldEnded` (with the player), and on the
+client `PromptShown`, `PromptHidden`.
+
+## Terrain
+
+`workspace.Terrain` is smooth voxel terrain, like Roblox's: a grid of 2-stud
+voxels, each with a material and how full it is. Make it with the **Terrain
+Editor** (View > Terrain Editor) or from scripts:
+
+```lua
+local terrain = workspace.Terrain
+terrain:FillBlock(CFrame.new(0, -4, 0), Vector3.new(200, 8, 200), Enum.Material.Grass)
+terrain:FillBall(Vector3.new(20, 6, 0), 10, Enum.Material.Rock)
+terrain:FillCylinder(CFrame.new(-30, 0, 0), 4, 12, Enum.Material.Water) -- height, radius
+terrain:FillBall(Vector3.new(0, 0, 0), 6, Enum.Material.Air)             -- Air carves
+terrain:SetMaterialColor(Enum.Material.Grass, Color3.fromRGB(110, 160, 70))
+terrain:Clear()
+```
+
+Terrain materials: Grass, LeafyGrass, Ground, Mud, Sand, Sandstone, Rock,
+Slate, Basalt, Limestone, CrackedLava, Salt, Snow, Glacier, Ice, Asphalt,
+Pavement, Concrete, Brick, Cobblestone, WoodPlanks and Water (others raise an
+error). Characters stand on terrain and swim in terrain water (Space swims
+up). `workspace:Raycast` hits terrain: `result.Instance` is the Terrain and
+`result.Material` the voxel's material. The Terrain's `WaterColor` and
+`WaterTransparency` properties colour the water. Changes made by the server
+reach every client.
+
+## Animations
+
+Animations work like Roblox's. A model is animated through its **Animator**
+(inside its Humanoid, or inside an AnimationController for models without
+one), which turns the model's **Motor6D** joints:
+
+```lua
+local animation = Instance.new("Animation")
+animation.AnimationId = "assets/animations/Wave.anim"   -- made with the Animation Editor
+local track = character.Humanoid.Animator:LoadAnimation(animation)
+track:Play()                -- fade in over 0.1 s; Play(fadeTime, weight, speed)
+track:GetMarkerReachedSignal("Hit"):Connect(function(value) print("hit", value) end)
+track.Stopped:Wait()
+```
+
+- **AnimationId**: a `.anim` file saved by the Animation Editor (`assets/animations/Name.anim`), one of the engine's (`engine:animations/walk.anim`, `run`, `idle`, `jump`, `fall`, `swim`, `toolnone`), or a KeyframeSequence in the game: `game:GetService("KeyframeSequenceProvider"):RegisterKeyframeSequence(kfs)` returns an id for it.
+- **AnimationTrack**: `:Play([fadeTime, weight, speed])`, `:Stop([fadeTime])`, `:AdjustSpeed(speed)`, `:AdjustWeight(weight [, fadeTime])`, `:GetTimeOfKeyframe(name)`, `:GetMarkerReachedSignal(name)`; `Animation`, `IsPlaying`, `Length`, `Looped`, `Priority`, `Speed`, `TimePosition`, `WeightCurrent`, `WeightTarget`; events `Stopped`, `Ended` (after the fade out), `DidLoop`, `KeyframeReached(name)`.
+- **Animator**: `:LoadAnimation(animation)`, `:GetPlayingAnimationTracks()`, event `AnimationPlayed(track)`. `Humanoid:LoadAnimation` works too.
+- **Priority** (`Enum.AnimationPriority`): `Core` < `Idle` < `Movement` < `Action` < `Action2..4`. On each joint the highest priority playing wins; tracks of the same priority mix by weight. The default walk and run are Core, so anything you play goes over them.
+- **Motor6D**: `Part0`, `Part1`, `C0`, `C1`, `Transform` (what animations set); `Part1 = Part0 * C0 * Transform * C1:Inverse()`. Animations name their poses after the Part1 (`"Right Arm"`).
+- **KeyframeSequence** > **Keyframe** (`Time`) > **Pose** (named after a part; `CFrame`, `Weight`, `EasingStyle`, `EasingDirection`) and **KeyframeMarker** (`Name`, `Value`): an animation as objects.
+
+Every character gets a LocalScript named **Animate** that plays idle, walk,
+run, jump, fall, swim and the tool-holding pose. Put your own LocalScript named
+Animate in StarterPlayer > StarterCharacterScripts to replace it (its source is
+in the RIFT folder, `data/scripts/Animate.lua`). **Humanoid** also has
+`:GetState()` and the events `StateChanged(old, new)` (`Enum.HumanoidStateType`:
+Running, Jumping, Freefall, Swimming, Dead), `FreeFalling(active)` and
+`Swimming(speed)`.
+
+## Effects
+
+An **Attachment** is a point on a part (`Position` and `Orientation` in the
+part's own space, `WorldPosition` in the world). Effects use them:
+
+- **ParticleEmitter**: in a part, particles come out of the face named by `EmissionDirection` (anywhere on it); in an Attachment, out of its point. `Rate` per second, `Lifetime` and `Speed` (NumberRange), `SpreadAngle`, `Acceleration`, `Drag`, `Rotation` / `RotSpeed`, and over each particle's life `Color` (ColorSequence), `Size` and `Transparency` (NumberSequence). `LightEmission` 1 makes them add light (fire, magic), `LockedToPart` moves them with the part, `Texture` is an image (without one: a soft round dot). `:Emit(n)` sends out n at once (also with `Enabled` off), `:Clear()` removes them all.
+- **Beam**: a band from `Attachment0` to `Attachment1`, bent along each attachment's X axis by `CurveSize0` / `CurveSize1`, `Width0` / `Width1`, `Segments`, `FaceCamera`, and along its length `Color` and `Transparency`. A `Texture` repeats with `TextureMode` / `TextureLength` and scrolls with `TextureSpeed`.
+- **Trail**: a ribbon left behind as its two attachments move (put them at the top and bottom of a sword's blade). `Lifetime`, `MinLength`, `MaxLength`, `WidthScale`, and `Color` / `Transparency` from the newest end (0) to the oldest (1).
+
+```lua
+local emitter = Instance.new("ParticleEmitter")
+emitter.Color = ColorSequence.new(Color3.fromRGB(255, 200, 80), Color3.fromRGB(255, 60, 20))
+emitter.Size = NumberSequence.new(1, 0)
+emitter.Lifetime = NumberRange.new(0.5, 1)
+emitter.Speed = NumberRange.new(8)
+emitter.SpreadAngle = Vector2.new(180, 180)
+emitter.LightEmission = 1
+emitter.Enabled = false
+emitter.Parent = part
+emitter:Emit(40)   -- a burst
+```
+
+Effects are only drawn, never simulated by physics: every client draws its own
+particles, and `:Emit` on the server reaches all of them.
+
+## Physics
+
+Anchored parts never move by themselves (scripts can still move them).
+Unanchored parts fall, collide and
+bounce; unanchored parts inside an unanchored part or model are welded to it and
+move as one body. `CanCollide = false` makes a part pass-through (Touched still
+fires unless `CanTouch` is false).
+
+```lua
+part:ApplyImpulse(Vector3.new(0, 500, 0))   -- mass x velocity change
+print(part:GetMass())
+part.AssemblyLinearVelocity = Vector3.new(0, 30, 0)
+```
+
+**Touched** fires when another part starts touching this one (resting contact
+counts; parts welded into the same body do not touch each other), **TouchEnded**
+when they separate. `part:GetTouchingParts()` lists what touches it now.
+
+**Raycasts**:
+
+```lua
+local params = RaycastParams.new()
+params.FilterType = Enum.RaycastFilterType.Exclude
+params.FilterDescendantsInstances = { character }
+local result = workspace:Raycast(origin, direction * 100, params)
+if result then
+    print(result.Instance, result.Position, result.Normal, result.Distance, result.Material)
+end
+```
+
+`RaycastParams`: `FilterDescendantsInstances`, `FilterType` (Exclude / Include),
+`RespectCanCollide`, `:AddToFilter(instances)`.
+
+`workspace:GetPartBoundsInBox(cframe, size)` and `workspace:GetPartsInPart(part)`
+return the parts in a box.
+
+## Time and tasks
+
+```lua
+task.wait(0.5)                 -- yields; returns the time actually waited
+task.spawn(fn, 1, 2)           -- runs fn(1, 2) now in a new thread
+task.defer(fn)                 -- runs fn at the end of this step
+task.delay(2, fn)              -- runs fn in 2 seconds
+local thread = task.delay(5, explode)
+task.cancel(thread)
+```
+
+`RunService` events (all receive `dt`, the frame time in seconds):
+
+| | |
+|---|---|
+| `RenderStepped(dt)` | Before physics, every frame |
+| `Stepped(time, dt)` | Before physics |
+| `Heartbeat(dt)` | After physics: the usual place for per-frame code |
+
+`RunService:BindToRenderStep(name, priority, fn)` / `:UnbindFromRenderStep(name)`,
+`:IsStudio()` (true in the editor), `:IsRunning()`, `:IsClient()`, `:IsServer()`.
+
+Game time stops while the game is paused.
+
+## Input
+
+Input is the client's: use it from a LocalScript. On the server nothing is ever
+pressed and the input events never fire.
+
+```lua
+local UserInputService = game:GetService("UserInputService")
+
+UserInputService.InputBegan:Connect(function(input, processedByGui)
+    if processedByGui then return end
+    if input.KeyCode == Enum.KeyCode.E then
+        print("E pressed")
+    elseif input.UserInputType == Enum.UserInputType.MouseButton1 then
+        print("click at", input.Position)
+    end
+end)
+
+if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
+    print("sprinting")
+end
+```
+
+**UserInputService**: `InputBegan`, `InputEnded`, `InputChanged` (mouse movement
+and wheel) with `(input, processedByGui)`; `:IsKeyDown(key)`,
+`:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)`, `:GetMouseLocation()`,
+`:GetMouseDelta()`, `:GetKeysPressed()`, `MouseBehavior`
+(`Enum.MouseBehavior.LockCenter` locks the mouse for first-person controls).
+
+**InputObject**: `KeyCode`, `UserInputType`, `UserInputState`, `Position`, `Delta`.
+
+**Mouse** (`player:GetMouse()`): `Hit` (CFrame of the point under the mouse),
+`Target` (the part under it), `X`, `Y`, `ViewSizeX`, `ViewSizeY`, `UnitRay`;
+events `Button1Down`, `Button1Up`, `Button2Down`, `Button2Up`, `Move`,
+`WheelForward`, `WheelBackward`.
+
+Key names: `A`-`Z`, `Zero`-`Nine`, `F1`-`F12`, `KeypadZero`-`KeypadNine`,
+`Space`, `Return`, `Tab`, `Escape`, `Backspace`, `Delete`, `Insert`, `Home`,
+`End`, `PageUp`, `PageDown`, `Up`, `Down`, `Left`, `Right`, `LeftShift`,
+`RightShift`, `LeftControl`, `RightControl`, `LeftAlt`, `RightAlt`, `CapsLock`,
+`Minus`, `Equals`, `LeftBracket`, `RightBracket`, `Semicolon`, `Quote`, `Comma`,
+`Period`, `Slash`, `BackSlash`, `Backquote`. `IsKeyDown` also accepts the name
+as a string (`IsKeyDown("E")`).
+
+Keys only reach the game while its view has the keyboard (in the editor: after
+clicking the viewport).
+
+## Camera
+
+`workspace.CurrentCamera` is the player's camera: the **Camera** object in the
+client's Workspace (while playing, the Explorer's Client view shows it, and its
+CFrame, FieldOfView and CameraType can be changed in Properties). Control it from
+a LocalScript. Zoomed all the way in (first person), the player's own character
+is not drawn, only the tool it holds.
+
+| | |
+|---|---|
+| `CFrame` | Where the camera is and looks |
+| `CameraType` | `Enum.CameraType.Custom` (follows the character), `Scriptable` (you set CFrame), `Fixed` |
+| `FieldOfView` | Vertical, degrees |
+| `Focus`, `CameraSubject`, `ViewportSize` | read-only |
+| `:ScreenPointToRay(x, y)`, `:ViewportPointToRay(x, y)` | `{ Origin, Direction }` |
+| `:WorldToScreenPoint(v)`, `:WorldToViewportPoint(v)` | Vector3 (x, y in pixels, z depth) and whether it is on screen |
+
+```lua
+local camera = workspace.CurrentCamera
+camera.CameraType = Enum.CameraType.Scriptable
+camera.CFrame = CFrame.lookAt(Vector3.new(0, 30, 40), Vector3.new(0, 0, 0))
+```
+
+In Custom mode the player turns the camera with the right mouse button and zooms
+with the wheel; walls pull the camera in. StarterPlayer.CameraMode =
+FirstPerson gives a first-person camera.
+
+## GUI
+
+ScreenGuis in StarterGui are templates: when the character spawns, they are
+copied into `player.PlayerGui`, and those copies are what the player sees (a
+ScreenGui with `ResetOnSpawn = false` keeps its copy across respawns). Change the
+GUI from a LocalScript inside the ScreenGui (`script.Parent`) or through
+`player.PlayerGui`; the server can change PlayerGui too and it replicates.
+
+| Class | |
+|---|---|
+| `ScreenGui` | `Enabled`, `DisplayOrder`, `ResetOnSpawn` |
+| `Frame` | Rectangle |
+| `TextLabel`, `TextButton` | + `Text`, `TextColor3`, `TextSize`, `TextScaled`, `Font`, `TextTransparency`, `TextStrokeColor3`, `TextStrokeTransparency`, `TextXAlignment`, `TextYAlignment`, `TextWrapped` |
+| `ImageLabel`, `ImageButton` | + `Image`, `ImageColor3`, `ImageTransparency`, `ScaleType` (Stretch, Fit, Crop) |
+| `UIGradient` | Inside an element: shades its background, text and image. `Color` (ColorSequence), `Transparency` (NumberSequence), `Rotation` (0 left to right, 90 top to bottom), `Offset`, `Enabled` |
+| `BillboardGui` | GUI floating over a part, always facing the camera. `Adornee`, `Size` (Scale in studs, Offset in pixels), `StudsOffset`, `StudsOffsetWorldSpace`, `AlwaysOnTop`, `MaxDistance`, `Enabled` |
+| `Portal` | Put it in a part: one face of the part looks out of its `Target` portal, and whatever goes in comes out there, facing and moving the way it went in. `Target`, `Face` (Enum.NormalId), `Enabled`, `RecursionDepth` (how many portals deep the view goes, 1-8) |
+| `Decal` | An image on a face of the part it is in. `Texture`, `Face` (Enum.NormalId), `Color3`, `Transparency` |
+| `SurfaceGui` | GUI on a face of a part. `Adornee`, `Face` (Enum.NormalId), `SizingMode` (FixedSize, PixelsPerStud), `CanvasSize`, `PixelsPerStud`, `AlwaysOnTop`, `Enabled` |
+
+Every element has `Position` and `Size` (UDim2), `AnchorPoint` (Vector2),
+`ZIndex`, `Visible`, `Rotation` (degrees, clockwise; children turn with it),
+`BackgroundColor3`, `BackgroundTransparency`, `CornerRadius`, `BorderSizePixel`,
+`BorderColor3`.
+
+- **Font** (`Enum.Font`) takes Roblox's names so scripts carry over: `Gotham`, `GothamMedium`, `GothamBold`, `GothamBlack` (the heaviest), `SourceSans`, `SourceSansSemibold`, `SourceSansBold`, `Arial`, `ArialBold` and `Code` (monospaced).
+- **TextScaled** makes the text as large as fits the element (up to 100); **TextStrokeTransparency** 0 draws a solid outline in `TextStrokeColor3`.
+- **BillboardGui** and **SurfaceGui** put GUI in the world. Put one inside a part (or set its `Adornee` to a part, e.g. from PlayerGui) and give it elements like a ScreenGui. A BillboardGui hides behind walls unless `AlwaysOnTop`; a SurfaceGui is drawn on the face like paint, and its buttons can be clicked in the game.
+
+```lua
+-- A name tag over every character's head (a Script)
+game.Players.PlayerAdded:Connect(function(player)
+    player.CharacterAdded:Connect(function(character)
+        local tag = Instance.new("BillboardGui")
+        tag.Size = UDim2.new(4, 0, 1, 0)          -- 4 studs by 1 stud
+        tag.StudsOffset = Vector3.new(0, 2, 0)
+        local label = Instance.new("TextLabel")
+        label.Size = UDim2.new(1, 0, 1, 0)
+        label.BackgroundTransparency = 1
+        label.Text = player.Name
+        label.TextScaled = true
+        label.Parent = tag
+        tag.Parent = character:WaitForChild("Head")
+    end)
+end)
+```
+
+- Everything inside a button (a label, an icon, a gradient fill) is part of it: clicks on it go to the button. A UIGradient also shades the button's own text, so a gradient button usually carries its text in a TextLabel inside it.
+- All these properties can be tweened, which is how menus slide, fade and pop:
+
+```lua
+local TweenService = game:GetService("TweenService")
+local title = script.Parent.Title
+title.TextTransparency = 1
+title.Rotation = -6
+TweenService:Create(title, TweenInfo.new(0.6, Enum.EasingStyle.Back), { TextTransparency = 0, Rotation = 0 }):Play()
+
+local gradient = Instance.new("UIGradient")
+gradient.Color = ColorSequence.new(Color3.fromRGB(139, 92, 246), Color3.fromRGB(236, 72, 153))
+gradient.Parent = script.Parent.PlayButton
+```
+
+```lua
+-- LocalScript in StarterPlayerScripts
+local player = game.Players.LocalPlayer
+local gui = Instance.new("ScreenGui")
+gui.Parent = player.PlayerGui
+
+local button = Instance.new("TextButton")
+button.Size = UDim2.fromOffset(200, 50)
+button.Position = UDim2.fromScale(0.5, 0.9)
+button.AnchorPoint = Vector2.new(0.5, 0.5)
+button.Text = "Jump!"
+button.Parent = gui
+
+button.Activated:Connect(function()
+    local humanoid = player.Character.Humanoid
+    humanoid.Jump = true
+end)
+```
+
+Clicks on GUI elements are reported to `InputBegan` with `processedByGui = true`.
+
+## Sound
+
+**Sound**: `SoundId` (an audio file: .wav, .mp3, .ogg, .flac), `Volume`,
+`PlaybackSpeed`, `Looped`, `Playing` (set in the editor: plays when the game
+starts), `RollOffMaxDistance`; read-only `IsPlaying`, `TimePosition`,
+`TimeLength`. Methods `:Play()`, `:Stop()`, `:Pause()`, `:Resume()`; event `Ended`.
+
+A Sound inside a part is positional: it gets quieter with distance and comes from
+the part's direction. Anywhere else (SoundService, a GUI) it plays flat.
+
+## Services
+
+### TweenService
+
+```lua
+local TweenService = game:GetService("TweenService")
+local info = TweenInfo.new(2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out, -1, true)
+local tween = TweenService:Create(part, info, { Position = part.Position + Vector3.new(0, 10, 0), Color = Color3.new(1, 0, 0) })
+tween:Play()
+tween.Completed:Connect(function(state) print(state) end)
+```
+
+`TweenInfo.new(time, easingStyle, easingDirection, repeatCount, reverses, delayTime)`;
+repeatCount -1 repeats forever. Any number, Vector3, Vector2, Color3, UDim2 or
+CFrame property can be tweened. `Tween`: `:Play()`, `:Pause()`, `:Cancel()`,
+`PlaybackState`, `Completed`. A new tween of the same property replaces the old
+one. `TweenService:GetValue(alpha, style, direction)` gives the eased value.
+
+### Debris
+
+`Debris:AddItem(instance, seconds)` destroys the instance later (10 s by default).
+
+### CollectionService
+
+`GetTagged(tag)`, `HasTag`, `AddTag`, `RemoveTag`, `GetTags`,
+`GetInstanceAddedSignal(tag)`, `GetInstanceRemovedSignal(tag)`. Tags added in the
+editor work too:
+
+```lua
+local CollectionService = game:GetService("CollectionService")
+for _, lava in ipairs(CollectionService:GetTagged("Lava")) do
+    lava.Touched:Connect(function(hit)
+        local h = hit.Parent:FindFirstChildOfClass("Humanoid")
+        if h then h:TakeDamage(10) end
+    end)
+end
+```
+
+### DataStoreService
+
+Saves data between runs, on the player's computer:
+
+```lua
+local store = game:GetService("DataStoreService"):GetDataStore("Progress")
+local best = store:GetAsync("BestTime") or math.huge
+store:SetAsync("BestTime", math.min(best, time()))
+store:IncrementAsync("Runs", 1)
+store:UpdateAsync("Coins", function(old) return (old or 0) + 5 end)
+store:RemoveAsync("OldKey")
+```
+
+Values can be nil, booleans, numbers, strings and tables of them. Each data store
+is a JSON file: `%APPDATA%\RIFT\datastores\<game>\` when playing in the editor,
+`%APPDATA%\RIFT Games\<game>\datastores\` in a built game.
+
+### HttpService
+
+`JSONEncode(value)`, `JSONDecode(text)`, `GenerateGUID([wrapInBraces])`. There
+is no network access.
+
+## Data types
+
+All data types are immutable values: `v.X = 1` is an error, make a new one.
+
+**Vector3**: `Vector3.new(x, y, z)`, `Vector3.zero`, `.one`, `.xAxis`, `.yAxis`,
+`.zAxis`; `X`, `Y`, `Z`, `Magnitude`, `Unit`; `:Dot(v)`, `:Cross(v)`,
+`:Lerp(v, t)`, `:Angle(v)`, `:Abs()`, `:Floor()`, `:Ceil()`, `:Sign()`,
+`:Min(v)`, `:Max(v)`, `:FuzzyEq(v [, eps])`; `+ - * /` with vectors and numbers,
+unary `-`, `==`.
+
+**Vector2**: `Vector2.new(x, y)`, `.zero`, `.one`; `X`, `Y`, `Magnitude`, `Unit`;
+`:Dot`, `:Lerp`; arithmetic.
+
+**CFrame** (position + rotation):
+
+| | |
+|---|---|
+| `CFrame.new()`, `CFrame.new(pos)`, `CFrame.new(x, y, z)`, `CFrame.new(pos, lookAt)`, `CFrame.new(x, y, z, r00 ... r22)` | |
+| `CFrame.lookAt(pos, target [, up])` | |
+| `CFrame.Angles(rx, ry, rz)` = `fromEulerAnglesXYZ`, `fromEulerAnglesYXZ`, `fromOrientation`, `fromAxisAngle(axis, angle)` | radians |
+| `CFrame.identity` | |
+| `Position` (`p`), `X`, `Y`, `Z`, `LookVector`, `RightVector`, `UpVector`, `XVector`, `YVector`, `ZVector`, `Rotation` | |
+| `:Inverse()`, `:Lerp(cf, t)`, `:ToWorldSpace(cf)`, `:ToObjectSpace(cf)`, `:PointToWorldSpace(v)`, `:PointToObjectSpace(v)`, `:VectorToWorldSpace(v)`, `:VectorToObjectSpace(v)`, `:ToEulerAnglesXYZ()`, `:ToOrientation()`, `:GetComponents()` | |
+| `cf * cf`, `cf * v`, `cf + v`, `cf - v` | |
+
+```lua
+part.CFrame = part.CFrame * CFrame.Angles(0, math.rad(90), 0)   -- turn 90 degrees
+```
+
+**Color3**: `Color3.new(r, g, b)` (0..1), `Color3.fromRGB(255, 128, 0)`,
+`Color3.fromHSV(h, s, v)`, `Color3.fromHex("#FF8000")`; `R`, `G`, `B`;
+`:Lerp(c, t)`, `:ToHSV()`, `:ToHex()`.
+
+**BrickColor**: Roblox's named colours. `BrickColor.new("Bright red")`,
+`BrickColor.new(21)` (by number), `BrickColor.new(r, g, b)` or
+`BrickColor.new(color3)` (the nearest), `BrickColor.Random()`, `BrickColor.White()`,
+`.Gray()`, `.DarkGray()`, `.Black()`, `.Red()`, `.Yellow()`, `.Green()`, `.Blue()`;
+`Name`, `Number`, `Color`, `r`, `g`, `b`. Parts have `BrickColor` too (the
+nearest named colour; setting it sets `Color`).
+
+**UDim**: `UDim.new(scale, offset)`; `Scale`, `Offset`.
+**UDim2**: `UDim2.new(xScale, xOffset, yScale, yOffset)`, `UDim2.new(udimX, udimY)`,
+`UDim2.fromScale(x, y)`, `UDim2.fromOffset(x, y)`; `X`, `Y`, `Width`, `Height`;
+`:Lerp(u, t)`; `+`, `-`.
+
+**NumberRange**: `NumberRange.new(min [, max])`; `Min`, `Max` (particle
+lifetimes and speeds are picked at random between them).
+
+**NumberSequence**: a number that changes over 0..1 (a particle's life, along a
+beam). `NumberSequence.new(n)`, `NumberSequence.new(from, to)`,
+`NumberSequence.new({ NumberSequenceKeypoint.new(time, value [, envelope]), ... })`
+(2 to 20 points, the first at time 0 and the last at 1); `Keypoints`. A keypoint
+has `Time`, `Value`, `Envelope` (random spread around the value).
+
+**ColorSequence**: the same with colours. `ColorSequence.new(color)`,
+`ColorSequence.new(from, to)`, `ColorSequence.new({ ColorSequenceKeypoint.new(time, color), ... })`;
+`Keypoints` (each has `Time` and `Value`). Properties of these types also accept
+a plain number or Color3 (`emitter.Transparency = 0.5`).
+
+**EnumItem**: `Name`, `Value`, `EnumType`, `:IsA(typeName)`. Properties also
+accept the item's name as a string (`part.Material = "Neon"`).
+
+## Enums
+
+`Enum.<Type>.<Item>`, and `Enum.<Type>:GetEnumItems()`:
+
+| Type | Items |
+|---|---|
+| `PartType` | Block, Ball, Cylinder, Wedge, CornerWedge |
+| `Material` | Plastic, SmoothPlastic, Metal, Neon, Glass, Wood, Concrete |
+| `KeyCode` | see [Input](#input) |
+| `UserInputType` | None, Keyboard, MouseButton1, MouseButton2, MouseButton3, MouseMovement, MouseWheel |
+| `UserInputState` | Begin, Change, End, Cancel, None |
+| `EasingStyle` | Linear, Sine, Quad, Cubic, Quart, Quint, Exponential, Circular, Back, Bounce, Elastic |
+| `EasingDirection` | In, Out, InOut |
+| `PlaybackState` | Begin, Playing, Paused, Completed, Cancelled, Delayed |
+| `RaycastFilterType` | Exclude, Include (also Blacklist, Whitelist) |
+| `MouseBehavior` | Default, LockCenter, LockCurrentPosition |
+| `CameraType` | Custom, Scriptable, Fixed |
+| `CameraMode` | ThirdPerson, FirstPerson |
+| `TextXAlignment` / `TextYAlignment` | Left, Center, Right / Top, Center, Bottom |
+| `ScaleType` | Stretch, Fit, Crop |
+
+## Lua libraries and limits
+
+Available: `math`, `string`, `table`, `utf8`, `coroutine`, and from `os` only the
+time functions (`os.time`, `os.clock`, `os.date`, `os.difftime`). Not available:
+`io`, `package`, `debug`, `load`, `loadstring`, `dofile`, `loadfile`,
+`collectgarbage`, `string.dump` and the `raw*` functions. Scripts cannot reach
+files, the network or the engine's internals.
+
+RIFT adds the Luau helpers people use most: `math.clamp`, `math.sign`,
+`math.round`, `math.lerp`, `math.map`, `table.find`, `table.clear`,
+`table.clone`, `table.create`, `table.freeze`, `table.isfrozen`, `string.split`,
+`math.noise`, `bit32`.
+
+### Luau syntax
+
+```lua
+type Point = { x: number, y: number }             -- types are read and skipped: nothing checks them
+local function add(a: number, b: number): number return a + b end
+local n = 1
+n += 2                                            -- also -= *= /= //= %= ^= ..=
+for i = 1, 10 do
+    if i % 2 == 0 then continue end
+end
+for key, value in { a = 1 } do print(key, value) end -- no pairs needed; __iter works too
+local size = if n > 2 then "big" else "small"
+print(`n is {n}, {size}`)                         -- \{ for a literal brace
+local big = 1_000_000 + 0b1010
+local anything = n :: any
+```
+
+`goto` and labels from Lua 5.4 still work. `table.freeze` only marks a table: writes are not stopped.
+
+- A script that runs too long without yielding (`while true do end`) is paused and continues a little each frame, so the game never freezes; the Output says so. Objects made per frame are limited the same way. Unlike Roblox, code longer than a frame's budget can therefore be interrupted by other scripts; put `task.wait()` in long loops.
+- All scripts together may use 512 MB of memory.
+- An error stops only the thread it happened in; the rest of the game keeps running.
+
+## Differences from Roblox
+
+- **Luau's syntax, Lua 5.4's VM.** Types are not checked, and `getfenv` / `setfenv` do not exist.
+- **One player.** The client/server split works like Roblox (Scripts, LocalScripts, remotes, replication), but there is always exactly one player and both sides run in the same program, so remotes are never lost and arrive one frame later.
+- `Instance.new("Script")` is not supported (code lives in files): clone a Script instead.
+- Reading or writing a member that does not exist is an error.
+- Only the classes listed above exist (no constraints, ...). MeshParts collide as their bounding box.
+- DataStores save to local files and never fail or throttle; `HttpService` has no network functions.
+- `game:Message`, `game:Win`, `game:Lose` and the global service shortcuts are RIFT additions.
+
+## Examples
+
+**Kill brick**
+
+```lua
+script.Parent.Touched:Connect(function(hit)
+    local humanoid = hit.Parent:FindFirstChildOfClass("Humanoid")
+    if humanoid then humanoid.Health = 0 end
+end)
+```
+
+**Spinning part**
+
+```lua
+local part = script.Parent
+game:GetService("RunService").Heartbeat:Connect(function(dt)
+    part.CFrame = part.CFrame * CFrame.Angles(0, math.rad(90 * dt), 0)
+end)
+```
+
+**Moving platform**
+
+```lua
+local TweenService = game:GetService("TweenService")
+local platform = script.Parent
+local info = TweenInfo.new(3, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true)
+TweenService:Create(platform, info, { Position = platform.Position + Vector3.new(16, 0, 0) }):Play()
+```
+
+**Coins and a leaderboard**
+
+```lua
+local Players = game:GetService("Players")
+
+Players.PlayerAdded:Connect(function(player)
+    local stats = Instance.new("Folder")
+    stats.Name = "leaderstats"
+    stats.Parent = player
+    local coins = Instance.new("IntValue")
+    coins.Name = "Coins"
+    coins.Parent = stats
+end)
+
+for _, coin in ipairs(workspace.Coins:GetChildren()) do
+    coin.Touched:Connect(function(hit)
+        local player = Players:GetPlayerFromCharacter(hit.Parent)
+        if not player or not coin.Parent then return end
+        player.leaderstats.Coins.Value = player.leaderstats.Coins.Value + 1
+        coin:Destroy()
+    end)
+end
+```
+
+**Spawner**
+
+```lua
+local template = game.ReplicatedStorage.Crate
+while true do
+    local crate = template:Clone()
+    crate.Position = Vector3.new(math.random(-10, 10), 30, math.random(-10, 10))
+    crate.Parent = workspace
+    game:GetService("Debris"):AddItem(crate, 8)
+    task.wait(1.5)
+end
+```
+
+**Best time with a DataStore**
+
+```lua
+local store = game:GetService("DataStoreService"):GetDataStore("Records")
+
+script.Parent.Touched:Connect(function(hit)
+    if not hit.Parent:FindFirstChildOfClass("Humanoid") then return end
+    local t = math.floor(time() * 10) / 10
+    local best = store:GetAsync("Best")
+    if not best or t < best then
+        store:SetAsync("Best", t)
+        game:Win("New record: " .. t .. " s!")
+    else
+        game:Win("Finished in " .. t .. " s (record " .. best .. " s)")
+    end
+end)
+```
