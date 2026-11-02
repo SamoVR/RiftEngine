@@ -123,6 +123,19 @@ on the server use `Players.PlayerAdded` or `Players:GetPlayers()`.
 `DataStoreService`, `player:LoadCharacter()`, `FireClient` / `FireAllClients` /
 `InvokeClient`. Calling one from the wrong side is an error that says so.
 
+### Online
+
+A game played online works like a game with several Test players, with the server
+on the host's computer and each client on its player's own. There is nothing to
+change in a game for this. What to keep in mind:
+
+- Scripts run on the host only. LocalScripts run on each player's computer.
+- Each player's computer simulates that player's character and tells the host where it is, as in Roblox. So a script on the server should check what matters (is that player close enough to do this?) rather than trust a client's RemoteEvent.
+- `Players.PlayerAdded` also fires when someone joins later, on the server and on every client. `Players.PlayerRemoving` fires when they leave, while the player and its character still exist.
+- DataStores are saved on the host's computer.
+
+Hosting and joining are not script functions: see the [user guide](GUIDE.md#playing-online).
+
 ### RemoteEvent and RemoteFunction
 
 Put remotes in ReplicatedStorage, where both sides can see them.
@@ -338,7 +351,7 @@ blur.Parent = game:GetService("Lighting") -- on the client: only this player's v
 ```
 
 **StarterPlayer**: `WalkSpeed` (16), `JumpPower` (50), `CharacterScale` (1: 5 studs tall; games from before 0.3.1 load with 0.4, the size they were built for), `CharacterColor`, `CameraMode`
-(`Enum.CameraMode` ThirdPerson / FirstPerson), `CameraMaxZoomDistance`.
+(`Enum.CameraMode` ThirdPerson / FirstPerson), `CameraMaxZoomDistance`, `CameraMinZoomDistance` (both at 0.5: first person only). Setting `workspace.CurrentCamera.CFrame` also turns a Custom camera, for recoil and the like.
 
 **SoundService**: `Volume` (master volume).
 
@@ -708,6 +721,43 @@ end
 `workspace:GetPartBoundsInBox(cframe, size)` and `workspace:GetPartsInPart(part)`
 return the parts in a box.
 
+### Constraints
+
+Constraints join two parts by an Attachment in each (welds and NoCollision name the parts themselves). A hinge turns around, and a slider moves along, the attachments' X axis. Joined parts do not collide with each other, except with rods, ropes and springs.
+
+| Class | Properties |
+|---|---|
+| `HingeConstraint` | `ActuatorType` (None, Motor, Servo), `AngularVelocity` (radians/s), `MotorMaxTorque`, `TargetAngle` (degrees), `AngularSpeed`, `ServoMaxTorque`, `LimitsEnabled`, `LowerAngle`, `UpperAngle` |
+| `PrismaticConstraint` | `ActuatorType`, `Velocity`, `MotorMaxForce`, `TargetPosition`, `Speed`, `ServoMaxForce`, `LimitsEnabled`, `LowerLimit`, `UpperLimit` |
+| `BallSocketConstraint` | free to turn any way |
+| `RodConstraint` / `RopeConstraint` | `Length`: exactly / at most this far apart (0: as far as they start) |
+| `SpringConstraint` | `FreeLength`, `Stiffness`, `Damping` |
+| `WeldConstraint` | `Part0`, `Part1` |
+| `NoCollisionConstraint` | `Part0`, `Part1`: these two pass through each other |
+
+All have `Enabled`, and all but the last two `Attachment0`, `Attachment1`.
+
+**VehicleSeat** is a Seat that drives: `MaxSpeed`, `Torque`, `SteerAngle`, and read-only `ThrottleFloat`, `SteerFloat`. Whoever sits on it drives the HingeConstraints in its Model: W and S turn the Motor ones so the wheels roll towards the seat's front, A and D turn the Servo ones. See **Go Kart** in the Toolbox.
+
+## Pathfinding and non-player characters
+
+A Model with a Humanoid and an unanchored `HumanoidRootPart` walks by itself: `humanoid:MoveTo(position)`, `humanoid.Jump = true`, and `humanoid.MoveToFinished` (true when it got there, false after 8 seconds). It gets the default animations, and falls apart at 0 Health. **Insert > Animation > Character Rig** makes one; turn off Anchored on its parts.
+
+```lua
+local PathfindingService = game:GetService("PathfindingService")
+local path = PathfindingService:CreatePath({ AgentRadius = 2, AgentHeight = 5, AgentCanJump = true, WaypointSpacing = 4 })
+path:ComputeAsync(root.Position, target)
+if path.Status == Enum.PathStatus.Success then
+    for _, waypoint in path:GetWaypoints() do
+        if waypoint.Action == Enum.PathWaypointAction.Jump then humanoid.Jump = true end
+        humanoid:MoveTo(waypoint.Position)
+        humanoid.MoveToFinished:Wait()
+    end
+end
+```
+
+Nothing has to be baked: paths are searched from the world as it is. `path:CheckOcclusionAsync(start)` gives the first waypoint now blocked, or -1. `Status` is `Success`, `NoPath`, `FailStartNotEmpty` or `FailFinishNotEmpty`. `Blocked` and `Unblocked` exist but do not fire: check again yourself.
+
 ## Time and tasks
 
 ```lua
@@ -821,6 +871,7 @@ GUI from a LocalScript inside the ScreenGui (`script.Parent`) or through
 | `ImageLabel`, `ImageButton` | + `Image`, `ImageColor3`, `ImageTransparency`, `ScaleType` (Stretch, Fit, Crop) |
 | `UIGradient` | Inside an element: shades its background, text and image. `Color` (ColorSequence), `Transparency` (NumberSequence), `Rotation` (0 left to right, 90 top to bottom), `Offset`, `Enabled` |
 | `BillboardGui` | GUI floating over a part, always facing the camera. `Adornee`, `Size` (Scale in studs, Offset in pixels), `StudsOffset`, `StudsOffsetWorldSpace`, `AlwaysOnTop`, `MaxDistance`, `Enabled` |
+| `ViewportFrame` | GUI that shows the parts inside it through its own Camera, in front of the game. `CurrentCamera` (or the first Camera inside), `Ambient`, `LightColor`, `LightDirection`, `ImageColor3`, `ImageTransparency`. Nothing in it has physics. See the FPS Range example for a first-person weapon built on it. |
 | `Portal` | Put it in a part: one face of the part looks out of its `Target` portal, and whatever goes in comes out there, facing and moving the way it went in. `Target`, `Face` (Enum.NormalId), `Enabled`, `RecursionDepth` (how many portals deep the view goes, 1-8) |
 | `Decal` | An image on a face of the part it is in. `Texture`, `Face` (Enum.NormalId), `Color3`, `Transparency` |
 | `SurfaceGui` | GUI on a face of a part. `Adornee`, `Face` (Enum.NormalId), `SizingMode` (FixedSize, PixelsPerStud), `CanvasSize`, `PixelsPerStud`, `AlwaysOnTop`, `Enabled` |
@@ -1078,6 +1129,8 @@ local anything = n :: any
 - An error stops only the thread it happened in; the rest of the game keeps running.
 
 ## Differences from Roblox
+
+- Online, everyone needs the game's files. Places are not downloaded on joining, and there are no servers to find: you join an address.
 
 - **Luau's syntax, Lua 5.4's VM.** Types are not checked, and `getfenv` / `setfenv` do not exist.
 - **One player.** The client/server split works like Roblox (Scripts, LocalScripts, remotes, replication), but there is always exactly one player and both sides run in the same program, so remotes are never lost and arrive one frame later.

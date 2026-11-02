@@ -65,6 +65,11 @@ the editor offers. Things worth opening in it:
 - `ReplicatedStorage > Config`: round length, gem points, speeds. Change a number and play.
 - `ServerStorage > GemTemplates`: the gems are made of CornerWedges; `Workspace > Pip` is an animated guide (the Wave animation is in `assets/animations`).
 
+**FPS Range** shows the newer graphics and first-person features: rifle, pistol
+and shotgun with recoil and reloading, a viewmodel in a ViewportFrame, moving
+targets and a timed round, through a portal. The **Go Kart** in the Toolbox shows
+constraints and a VehicleSeat.
+
 **Scenes**: File > New Scene (Ctrl+N), File > Open Scene, File > Save Scene As
 (Ctrl+Shift+S). The start scene (the one a built game begins with) is set in
 File > Project Settings, along with the game's name, version, icon and window size.
@@ -167,8 +172,8 @@ started.
 The ribbon's Home tab has buttons for a part and a script; **More** and the
 **Insert** menu have everything else:
 
-- **Parts**: Block, Sphere, Cylinder, Wedge, Corner Wedge, Spawn Location, Seat (characters sit on it). New parts land on the surface in the middle of the view.
-- **Objects**: Model, Folder, Proximity Prompt (into the selected part: "E Interact" for players nearby), Point Light, Spot Light, Sound, value objects.
+- **Parts**: Block, Sphere, Cylinder, Wedge, Corner Wedge, Spawn Location, Seat (characters sit on it), Vehicle Seat (sit down and drive the hinges in its model). New parts land on the surface in the middle of the view.
+- **Objects**: Model, Folder, Proximity Prompt (into the selected part: "E Interact" for players nearby), Constraints (Hinge, Ball Socket, Prismatic, Rod, Rope, Spring, Weld, No Collision; see the [scripting reference](SCRIPTING.md#constraints)), Point Light, Spot Light, Sound, value objects.
 - **Code**: Script (server), LocalScript (client), ModuleScript, and under Communication: RemoteEvent, RemoteFunction, BindableEvent, BindableFunction. Scripts go inside the selected object, or into ScriptService / StarterPlayerScripts / ReplicatedStorage; remotes into ReplicatedStorage.
 - **Effects**: Attachment, ParticleEmitter, Beam and Trail, and ready-made Fire, Smoke, Sparkles, Magic Beam and Speed Trail. Select two parts before inserting a beam to stretch it between them (one part: across it); a trail goes on the selected part. Their attachments are made and linked for you. In the Properties panel, click a colour bar or a curve to edit it.
 - **GUI**: ScreenGui, Frame, TextLabel, TextButton, ImageLabel, ImageButton. They go into the selected ScreenGui, BillboardGui, SurfaceGui or Frame, or a new ScreenGui in StarterGui. **BillboardGui** (floats over the selected part, facing the camera) and **SurfaceGui** (covers a face of it) start with a label.
@@ -292,6 +297,41 @@ thrown away on **Stop** (Shift+F5). **Pause** (F6) freezes the game.
 - **Game > Run in Player** (Ctrl+F5) saves and starts the standalone player on the project, exactly as a finished game will run.
 
 ![Playing in the editor](images/play.jpg)
+
+### Playing online
+
+One computer hosts, and others join it by its address. Everyone needs the same
+game: the same project, or the same built game. Scripts and assets are not sent,
+only the world and what happens in it. Up to 32 players can join.
+
+**In the editor**, on the ribbon's Test tab, in the **Online** group:
+
+- **Host**: choose a port (53640 unless you change it) and press **Start hosting**. The game starts, and others can join until you press Stop.
+- **Join**: type the address, and a name if you like, and press **Join**. Open the same project first.
+
+**In a built game**: press Esc and open **Online**. Host restarts the game for
+everyone to join; Join takes an address like `192.168.1.20`, or `192.168.1.20:53641`
+with another port. Other people playing means the menu does not pause anything,
+and the game keeps running when its window is minimized.
+
+**From the command line**, for a built game or the player:
+
+```
+MyGame.exe --host [port]
+MyGame.exe --join <address[:port]>
+MyGame.exe --server [port]
+MyGame.exe --name <your name>
+```
+
+`--server` is a dedicated server: no window of its own beyond a console showing
+what scripts print, and no player of its own, only the ones who join. Close it to
+stop it.
+
+**Getting through**: on the same network, use the host's local address. Across the
+internet, the host's router must forward the port (TCP) to the host's computer, and
+others use its public address. Windows asks the first time whether to let the
+program through its firewall: allow it. Only join people you trust, and only host
+for people you trust: a player's own computer says where its character is.
 
 ## Source control
 

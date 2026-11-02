@@ -5,6 +5,45 @@ GitHub release page show the section of the version being installed.
 
 RIFT is in **beta**: versions are 0.x until the engine is complete.
 
+## 0.5.0
+
+### Online multiplayer
+- **Host and join by address**, over the internet or a local network. Test tab > **Online** in the editor; **Online** in a built game's Esc menu; or `--host`, `--join 1.2.3.4` and `--server` on the command line.
+- **Dedicated servers**: `--server` runs a game with no window and no player of its own.
+- Each player's machine runs its LocalScripts, GUI and character, and the host runs the Scripts and the world, so games made for the Test players button work online as they are. RemoteEvents, RemoteFunctions, tools, prompts, chat, teams, respawning and terrain all go over the connection.
+- `Players.PlayerRemoving` is new, `Players.PlayerAdded` also fires for those who join later, and `player.Character` works for every player, not just yours.
+
+### Faster
+Measured on the same machine, with no script doing anything unusual:
+- A world of **30,000 parts** costs **5 times less** to keep running when nothing moves (16.7 ms a frame to 3.3); 100,000 parts 4 times less.
+- The renderer takes **half the time** to go through a big world.
+- **Scripts run twice as fast**: stopping endless loops no longer slows every instruction.
+- `Vector3.new` is 3 times faster, reading `.Parent` 6 times, and setting a part's properties about twice. Values like Vector3 no longer make work for the garbage collector.
+- Finding prompts, billboards, portals and effects no longer means searching the whole world every frame.
+
+### Physics
+- **Constraints**: Hinge (with motors and servos), Ball Socket, Prismatic, Rod, Rope, Spring, Weld, No Collision.
+- **VehicleSeat**: sit down and drive the hinges in its model. Try **Go Kart** in the Toolbox.
+
+### Characters
+- **Non-player characters**: a Model with a Humanoid and an unanchored HumanoidRootPart walks, jumps, animates and dies. `Humanoid.MoveToFinished` is new.
+- **PathfindingService**: `CreatePath`, `ComputeAsync`, `GetWaypoints`, around walls, up ledges and over gaps, with nothing to bake.
+
+### First person
+- `StarterPlayer.CameraMinZoomDistance` and `CameraMaxZoomDistance`: both at 0.5 is first person only.
+- **ViewportFrame**: GUI that shows parts of its own through its own Camera, for first-person weapons that never poke through walls and for item previews.
+- Setting `workspace.CurrentCamera.CFrame` now also turns a following camera, for recoil.
+- **FPS Range**, a new example: rifle, pistol and shotgun with recoil, reloading and a real viewmodel, moving targets, a timed round and a best score, through a portal, with the new graphics on.
+
+### Scripts
+- `` `interpolated strings` `` are coloured as strings in the script editor.
+
+### Tools
+- **Scale** and **Transform** now work on Models and on several things at once. A Model's Scale keeps its shape; Transform can stretch it.
+
+### Releases
+- Source code moved to a private repository. Downloads, the website and the docs stay public at the same addresses.
+
 ## 0.4.0
 
 ### Top bar
