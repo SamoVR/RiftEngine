@@ -5,6 +5,25 @@ GitHub release page show the section of the version being installed.
 
 RIFT is in **beta**: versions are 0.x until the engine is complete.
 
+## 0.5.8
+
+### Animations
+- **Every default animation is new**, for R6 and R15: idle, walk, run, jump, fall, sit, holding a tool, swimming. Limbs move smoothly instead of stopping at each keyframe, knees and elbows bend as they should, arms swing against the legs, and the body rises and falls with each step.
+- `tools/make_animations.py` writes them, if you want to change how they move. Your own animations and Animate scripts keep working.
+
+### More properties
+All of these are in the Properties panel and in scripts, are saved with the game, and reach everyone online.
+- **TextChatService**: the chat window's font, text size and colour, background, size and place on screen; the input bar's placeholder text and colours; speech bubbles on or off, their font, colours, text size, how long they stay and how far they show. Scripts also reach the same things by Roblox's names, through `ChatWindowConfiguration` and `BubbleChatConfiguration`.
+- **Players**: `MaxPlayers`, `RespawnTime`, `CharacterAutoLoads`.
+- **Humanoid**: `DisplayName`, `AutoRotate`, `MaxSlopeAngle`, `BreakJointsOnDeath`, `CameraOffset`, `NameDisplayDistance`, `HealthDisplayDistance`. **StarterPlayer** gives every new character the last ones.
+- **Lighting**: `TimeOfDay` ("14:30:00"), `GeographicLatitude`, `ShadowSoftness`, `OutdoorAmbient`.
+- **Parts**: `CanQuery` (raycasts pass through), `Locked` (clicking in the 3D view passes over it). **Model**: `PrimaryPart`.
+- **Sound**: `RollOffMinDistance`. **SoundService**: `RolloffScale`.
+- **GUI**: `ClipsDescendants`, and `AutoButtonColor` on buttons.
+
+### Names over heads
+- Other characters show their name above their head, and a health bar when hurt, as far away as `NameDisplayDistance` and `HealthDisplayDistance` say. Set them to 0 to hide them.
+
 ## 0.5.7
 
 ### Swimming
