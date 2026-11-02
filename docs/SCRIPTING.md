@@ -721,6 +721,12 @@ end
 `workspace:GetPartBoundsInBox(cframe, size)` and `workspace:GetPartsInPart(part)`
 return the parts in a box.
 
+### Models
+
+`MeshPart.MeshId` is a model file, or one mesh in it (`assets/rocks.gltf#2`).
+`MeshPart.CollisionFidelity` is what it collides as: 0 its box, 1 a convex hull around it,
+2 its exact shape (anchored parts only).
+
 ### Constraints
 
 Constraints join two parts by an Attachment in each (welds and NoCollision name the parts themselves). A hinge turns around, and a slider moves along, the attachments' X axis. Joined parts do not collide with each other, except with rods, ropes and springs.
@@ -854,6 +860,8 @@ camera.CFrame = CFrame.lookAt(Vector3.new(0, 30, 40), Vector3.new(0, 0, 0))
 In Custom mode the player turns the camera with the right mouse button and zooms
 with the wheel; walls pull the camera in. StarterPlayer.CameraMode =
 FirstPerson gives a first-person camera.
+
+`Camera.ViewOffset` (a CFrame, RIFT only) moves the view alone: it does not change where the camera is aiming or what `CFrame` says, and setting it again replaces it, so it never adds up. It is meant for a hand that shakes: see Canyon's HandheldCamera script.
 
 ## GUI
 

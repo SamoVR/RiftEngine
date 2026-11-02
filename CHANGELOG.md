@@ -5,6 +5,46 @@ GitHub release page show the section of the version being installed.
 
 RIFT is in **beta**: versions are 0.x until the engine is complete.
 
+## 0.5.5
+
+### Photo-real graphics
+All of it optional: a game turns it on in Lighting, and each computer can turn each part off (Preferences, a built game's Esc menu). Older games look as they did.
+- **Canyon**, a new example: walk along a river through a desert canyon, made from free photo-scanned rock, sand and plants.
+- **SurfaceAppearance**: texture sets (colour, normal, roughness, ambient occlusion, height) on parts, MeshParts and terrain. glTF models bring their own.
+- **Lighting.RealisticLighting**: physically based shading, lit by the sky itself.
+- **Atmosphere**: a real sky worked out from the sun, air and dust in the distance, and light shafts through the air.
+- **Terrain** takes four texture sets, projected so cliffs do not stretch, blended by their height maps, with real relief up close, and knows how much sky each place can see.
+- **Scatter**: thousands of copies of a model growing on the terrain, with wind.
+- **Real water**: you see into it, it mirrors its surroundings, the sun glitters on it, it foams at the banks, and `Terrain.WaterFlow` says which way it runs.
+- **Lighting.AutoExposure**, and frames blended over time, for sharp edges and no shimmer.
+- **Render scale** (Preferences, a built game's Esc menu): draw the 3D view smaller and stretch it, for slower computers.
+- Terrain far away is drawn in simpler versions, nearest first, on every game.
+
+### Faster at high resolutions
+- **Automatic resolution**, on by default in realistic scenes: draws as many pixels as your graphics card keeps up with, and puts the picture back together at full size from several frames. Your window or screen stays at its full size, and the interface stays sharp. It can be turned off, with a Render scale slider to set it yourself.
+
+### Explorer
+- **ReplicatedFirst**: LocalScripts in it run before all others. **TextChatService** is now in the Explorer, and its **ChatEnabled** turns the chat off.
+- Services are in Roblox Studio's order, objects inside them too (Camera and Terrain first, then by name), with its icon colours.
+- Every object has a read-only **ClassName** property.
+
+### Camera
+- `Camera.ViewOffset`: moves the view alone, not where the camera aims. Canyon's **HandheldCamera** script uses it for a camera held in the hand.
+
+### Fixes
+- Shadows no longer move when you turn the camera.
+
+### Models
+- `MeshId` can name one mesh in a file: `rocks.gltf#2`.
+- Models get simpler versions for far away, made when they load.
+- `MeshPart.CollisionFidelity`: its box, a hull around it, or its exact shape.
+
+### Small things
+- A turned SpawnLocation says which way the player starts out facing.
+
+### Examples
+- The **Obby** and **Playground** examples and the Obby template are gone.
+
 ## 0.5.0
 
 ### Online multiplayer

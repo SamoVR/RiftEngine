@@ -48,7 +48,7 @@ folder** points the project at any folder inside it (`Levels`, `Content/Scenes`,
 The **home screen** opens when no project is open. Recent projects are shown as
 cards with a picture of the scene as it was last saved (right-click a card to
 show it in Explorer or remove it from the list); search and sort them at the top.
-**New project** creates one from a template (Empty, Baseplate, Obby) in your
+**New project** creates one from a template (Empty, Baseplate) in your
 projects folder (`Documents\RIFT Projects` unless you choose another in
 Preferences); the template tiles and the examples start one directly. Opening an
 example asks where to put your copy. The **Learn** page links to the guides.
@@ -69,6 +69,11 @@ the editor offers. Things worth opening in it:
 and shotgun with recoil and reloading, a viewmodel in a ViewportFrame, moving
 targets and a timed round, through a portal. The **Go Kart** in the Toolbox shows
 constraints and a VehicleSeat.
+
+**Canyon** is a walk along a river through a desert canyon, to show how real RIFT can
+look. Its rock, sand and plants are free photo scans from Poly Haven (see
+`assets/CREDITS.txt`). It needs a good graphics card: if it runs slowly, turn things
+off in the Esc menu's Graphics, the most helpful being Terrain relief and Light in the air.
 
 **Scenes**: File > New Scene (Ctrl+N), File > Open Scene, File > Save Scene As
 (Ctrl+Shift+S). The start scene (the one a built game begins with) is set in
@@ -155,6 +160,18 @@ Each can also be turned off for this computer alone, without changing the game: 
 **Graphics** group on the ribbon's **View** tab (and **Preferences**), and **Graphics**
 in the Esc menu of a built game.
 
+### Photo-real looks
+
+Good scans do most of the work: free ones are at polyhaven.com and ambientcg.com.
+
+1. In **Lighting**, tick **RealisticLighting** and **AutoExposure**, and insert an **Atmosphere** (Insert > Objects). Keep HDR on.
+2. Import a glTF model as a MeshPart: it brings its own textures. Or insert a **Surface Appearance** into a part and fill in its maps, with **TextureScale** set to the studs one repeat should cover.
+3. For terrain, put a Surface Appearance under **Terrain** for each group of materials you use. There are four: soil (Grass, Ground, Mud), sand (Sand, Snow, Salt), rock (Rock, Slate, Basalt and the rest) and sandstone (Sandstone, Limestone). **Displacement** gives it real relief up close.
+4. Insert a **Scatter** under Terrain for plants and stones: a model, a material to grow on, and how many.
+5. Set **Terrain.WaterFlow** to make rivers run.
+
+Lighting then comes from the sky, so **Ambient** only stands for light bounced off the world: warm and low in a canyon, for example.
+
 ### Portals
 
 **Insert > Portal Pair** makes two doors that lead into each other. Stand them
@@ -184,9 +201,10 @@ Paste / Paste Into / Duplicate (Ctrl+D), Delete, Group (Ctrl+G), Ungroup
 (Ctrl+U), Select Children and **Copy Lua Path** (puts `workspace.Map.Door` on the
 clipboard).
 
-Drag objects in the Explorer to move them: drop on a row to put them inside it,
-or on the top / bottom edge of a row to place them before / after it. Their
-position in the world does not change.
+Drag objects in the Explorer to move them: drop on a row to put them inside it.
+Their position in the world does not change. The Explorer lists things as Roblox
+Studio does: the services in its order, and inside them Camera and Terrain first,
+then everything by name.
 
 ### Terrain
 
