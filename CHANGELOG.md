@@ -5,6 +5,16 @@ GitHub release page show the section of the version being installed.
 
 RIFT is in **beta**: versions are 0.x until the engine is complete.
 
+## 0.5.7
+
+### Swimming
+- **Characters really swim** in terrain water: they float at the surface with their head out, swim where the camera looks (look down and press W to dive), rise again when left alone, and Space leaves the water, onto a bank for example. Speed changes softly, as in water.
+- New **swimming and treading water animations**, for R6 and R15. `swimidle` joins the ids a custom Animate script can use.
+- Non-player characters float and swim as well.
+
+### Under water
+- **With the camera in water you see you are in it**: everything fades into the water's colour with distance, the water's surface is seen from below, with the sky in a bright circle overhead, sunlight moves over the bottom, and the picture sways a little. It follows `Terrain.WaterColor` and `WaterTransparency`, in the editor and in games.
+
 ## 0.5.6
 
 ### Online

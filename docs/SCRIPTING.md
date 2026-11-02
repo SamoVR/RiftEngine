@@ -624,8 +624,8 @@ terrain:Clear()
 Terrain materials: Grass, LeafyGrass, Ground, Mud, Sand, Sandstone, Rock,
 Slate, Basalt, Limestone, CrackedLava, Salt, Snow, Glacier, Ice, Asphalt,
 Pavement, Concrete, Brick, Cobblestone, WoodPlanks and Water (others raise an
-error). Characters stand on terrain and swim in terrain water (Space swims
-up). `workspace:Raycast` hits terrain: `result.Instance` is the Terrain and
+error). Characters stand on terrain and swim in terrain water: they float at
+the surface, swim where the camera looks, and Space leaves the water. `workspace:Raycast` hits terrain: `result.Instance` is the Terrain and
 `result.Material` the voxel's material. The Terrain's `WaterColor` and
 `WaterTransparency` properties colour the water. Changes made by the server
 reach every client.
