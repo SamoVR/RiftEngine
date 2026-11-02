@@ -5,6 +5,22 @@ GitHub release page show the section of the version being installed.
 
 RIFT is in **beta**: versions are 0.x until the engine is complete.
 
+## 0.5.9
+
+### Faster
+- **The insides of meshes are no longer drawn**, like Roblox. Set the new `MeshPart.DoubleSided` for thin things seen from both sides; glTF models that ask for it get it by themselves. A model made inside out will now look hollow: turn DoubleSided on, or fix it in your modelling program.
+- **A world's terrain loads on every core, before the first frame**: the whole Canyon in under 4 seconds. Shadows of far walls no longer appear as you walk around, which is what made them seem to follow the character.
+
+### Collisions
+- `MeshPart.CollisionFidelity` is a choice now, as in Roblox: **Box**, **Hull**, **PreciseConvexDecomposition**. Games saved with the old numbers keep what they had.
+
+### A new Esc menu
+- **Redesigned**: a panel at the side of the screen with the game's name, buttons that respond smoothly, and Settings and Play online on a page beside it, over the game blurred and darkened. Restart and Quit ask to be pressed twice.
+- **Settings**: graphics presets (Low to Ultra) as well as every switch, a volume slider, showing frames per second, and the controls.
+- **Your game decides how it looks**: the new **MainMenu** object in the Explorer sets the title, subtitle, logo, fonts, colours, which side it is on, its backdrop and blur, what each button says, and which buttons there are. Selecting it shows the menu in the 3D view while you change it.
+- **Turn it off** with `MainMenu.Enabled`, or **replace it** with `MainMenu.CustomMenu`: Esc then shows a ScreenGui of your own, and the game keeps running.
+- **Scripts**: in a LocalScript, `MainMenu:OpenMenu()`, `:CloseMenu()`, `:QuitGame()`, `:RestartGame()`, and `MainMenu.IsOpen`.
+
 ## 0.5.8
 
 ### Animations
