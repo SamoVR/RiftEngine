@@ -1231,3 +1231,17 @@ script.Parent.Touched:Connect(function(hit)
     end
 end)
 ```
+
+## TextBox, ScrollingFrame, UIListLayout
+
+```lua
+local box = Instance.new("TextBox")
+box.PlaceholderText = "Your name"
+box.FocusLost:Connect(function(enterPressed) print(box.Text, enterPressed) end)
+```
+
+`TextBox`: `Text`, `PlaceholderText`, `PlaceholderColor3`, `ClearTextOnFocus`, `Focused`, `FocusLost`, `CaptureFocus()`, `ReleaseFocus()`, `IsFocused()`.
+
+`ScrollingFrame`: `CanvasSize`, `CanvasPosition`, `ScrollBarThickness`.
+
+`UIListLayout`: `FillDirection`, `HorizontalAlignment`, `VerticalAlignment`, `SortOrder`, `Padding`. GUI objects have `LayoutOrder`.

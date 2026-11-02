@@ -5,6 +5,40 @@ GitHub release page show the section of the version being installed.
 
 RIFT is in **beta**: versions are 0.x until the engine is complete.
 
+## 0.6.1
+
+### Fixed: what 0.6.0 broke
+- **Built games have their terrain again.**
+- **Discord Rich Presence works again.**
+- **Toolbox and home screen pictures load again**, with no more errors in the Output.
+- Links ending in `.com` open again.
+- A changed copy of a built game now stops with a message as soon as a changed file is read, instead of carrying on without it.
+
+### Fixed: in play
+- **Falling stops getting faster**: `Workspace.TerminalVelocity`, 250 studs per second.
+- **The underwater view and swimming hold all the way down** to a river's bed.
+- **Walking and running no longer bounce** up and down.
+
+### Sizes
+- A new Part is 4 by 1 by 2, as on Roblox, and so is `Instance.new("Part")` (4 by 1.2 by 2).
+- In a game with a smaller character (old projects have `CharacterScale` 0.4), new parts, seats, templates and Toolbox models are sized to match it, and the Output says so.
+
+### Loading screens
+- The window is never blank or frozen: starting RIFT, opening a project or scene, saving, building, importing, copying an example, pressing Play, joining and starting a built game all show what is going on, once they take more than a moment.
+
+### New
+- **TextBox**, **ScrollingFrame** and **UIListLayout** (with `LayoutOrder` on every GUI object).
+- Discord shows when you are hosting, shaping terrain or animating.
+
+### Safer
+- The updater takes downloads only from RIFT's own releases, and checks the size and SHA-256 before starting one.
+- Only the player who was asked can answer an `InvokeClient`, and players' calls can no longer get each other's answers.
+- The host ignores a character moving impossibly far, and drops a player's remote calls above 500 a second.
+- A Lua pattern that would backtrack for ever now stops with an error.
+
+### Faster
+- The ground's collision is built on every core.
+
 ## 0.6.0
 
 ### Built games are protected
