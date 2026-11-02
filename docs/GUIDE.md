@@ -384,7 +384,7 @@ the project) with:
 ```
 My Game.exe      the RIFT player, renamed, with the game's icon (Project Settings > Icon)
 data/            the engine files the game needs
-game/            project.json, scenes, scripts, assets
+<Game>.riftgame  everything of the game, encrypted
 ```
 
 Zip the folder and share it; nothing else has to be installed. Building again
@@ -445,3 +445,18 @@ Help > Keyboard Shortcuts lists them in the editor.
 - If the editor crashes, `logs\editor-crash.dmp` is written next to the log.
 - A model that cannot be loaded is drawn as a block and the reason is in the Output.
 - The editor needs OpenGL 3.3; if it does not start, update the graphics driver.
+
+## Plugins
+
+Put a `.lua` file in the folder **Plugins > Open Plugins Folder** opens, then **Reload Plugins**:
+
+```lua
+rift.button("Make a tower", function()
+    for level = 1, 10 do
+        local part = rift.create("Part")
+        rift.set(part, "Position", { x = 0, y = level * 2, z = 0 })
+    end
+end)
+```
+
+`rift.selected()`, `rift.create(class, parent)`, `rift.get(id, property)`, `rift.set(id, property, value)` and `rift.print(...)` are there. Plugins have no files or programs, and everything they do can be undone. Only install ones you trust.

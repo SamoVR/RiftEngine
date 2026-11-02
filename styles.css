@@ -224,3 +224,27 @@ details p { color: #a9abb8; margin-top: 10px; max-width: 68ch; }
   .shot-bar em { display: none; }
   .code-card pre { font-size: 12.5px; padding: 18px; }
 }
+
+/* ---- Plain and exact: hairlines instead of glows, one colour, type doing the work. */
+:root { --bg: #0c0c10; --bg-2: #0c0c10; --panel: #0c0c10; --panel-2: #14141a; --line: #24242c; --dim: #8d8d99; --radius: 4px; --wrap: 1080px; }
+body { background: var(--bg); }
+.glow, .pill, .eyebrow, .card-icon, .shot-bar { display: none !important; }
+h1 { font-size: clamp(2.2rem, 4.6vw, 3.6rem) !important; font-weight: 600 !important; letter-spacing: -.035em; max-width: 17em; text-align: left; }
+h2 { font-size: clamp(1.4rem, 2.2vw, 1.75rem); font-weight: 600; letter-spacing: -.02em; }
+.grad { background: none !important; -webkit-text-fill-color: currentColor !important; color: inherit !important; }
+.hero { padding-top: 88px !important; text-align: left !important; }
+.hero-inner { text-align: left !important; align-items: flex-start !important; }
+.lead { margin-inline: 0 !important; max-width: 38em; color: var(--dim); }
+.cta { justify-content: flex-start !important; }
+.fine { text-align: left !important; }
+.btn, .btn-primary, .btn-large { background: var(--violet) !important; box-shadow: none !important; border-radius: 4px !important; font-weight: 550 !important; transform: none !important; }
+.btn:hover { background: #7a4be8 !important; }
+.section, .section.alt { background: none !important; border-top: 1px solid var(--line); padding-block: 64px !important; }
+.section-lead { max-width: 40em; color: var(--dim); }
+.strip { background: none !important; border-block: 1px solid var(--line); }
+.card { background: none !important; border: 0 !important; border-top: 1px solid var(--line) !important; border-radius: 0 !important; box-shadow: none !important; padding: 18px 0 0 !important; transform: none !important; }
+.card:hover { transform: none !important; box-shadow: none !important; border-color: var(--violet) !important; }
+.features { gap: 28px 40px !important; }
+.shot, .hero-shot { border: 1px solid var(--line) !important; border-radius: 4px !important; box-shadow: none !important; transform: none !important; }
+.final { text-align: left !important; }
+.final .cta, .final > .wrap { align-items: flex-start !important; text-align: left !important; }

@@ -5,7 +5,31 @@ GitHub release page show the section of the version being installed.
 
 RIFT is in **beta**: versions are 0.x until the engine is complete.
 
-## 0.5.9
+## 0.6.0
+
+### Built games are protected
+- **Build Game now makes one `.riftgame` file** instead of a folder of your files: encrypted, with a key made for that build, and with every file checked, so a changed copy refuses to run. Scripts are in it as stripped bytecode: no source, comments or local names. A script with an error stops the build and says where.
+- This stops casual copying and tampering. The key has to be on the player's computer for the game to run, so a skilled and determined person could still dig things out: true of every game engine.
+
+### Safer
+- Bad data from another machine can no longer crash a host or a joiner, and joiners can only equip tools they carry or that lie in the world.
+- Scenes, scripts and other machines can no longer point at network paths or climb out of the game's folder.
+- Opening a project someone sent you no longer lets its `.git/config` or hooks run programs, and double-clicking a file in a project no longer runs programs.
+
+### The world
+- **Clouds** and **Weather** (rain, snow) objects in Lighting. `Lighting.DayLengthMinutes` makes the day go by.
+
+### Characters
+- **TrussPart** and `Climbable` parts to climb. **Shift** sprints and **C** crouches (`StarterPlayer.SprintEnabled`, `SprintSpeed`, `CrouchEnabled`, `CrouchSpeed`; `Humanoid.Crouching`).
+
+### Models
+- **.fbx** models can be imported.
+
+### Plugins
+- **Plugins menu**: small Lua programs in your own plugins folder add buttons that change the scene, and can be undone. See the guide. Projects cannot bring their own, so opening one runs nothing.
+
+### Sound and controls
+- `SoundService.AmbientReverb`. **Gamepads** work in built games. Players can **change the keys** in Settings. **ContextActionService** in scripts.
 
 ### Faster
 - **The insides of meshes are no longer drawn**, like Roblox. Set the new `MeshPart.DoubleSided` for thin things seen from both sides; glTF models that ask for it get it by themselves. A model made inside out will now look hollow: turn DoubleSided on, or fix it in your modelling program.
@@ -20,8 +44,6 @@ RIFT is in **beta**: versions are 0.x until the engine is complete.
 - **Your game decides how it looks**: the new **MainMenu** object in the Explorer sets the title, subtitle, logo, fonts, colours, which side it is on, its backdrop and blur, what each button says, and which buttons there are. Selecting it shows the menu in the 3D view while you change it.
 - **Turn it off** with `MainMenu.Enabled`, or **replace it** with `MainMenu.CustomMenu`: Esc then shows a ScreenGui of your own, and the game keeps running.
 - **Scripts**: in a LocalScript, `MainMenu:OpenMenu()`, `:CloseMenu()`, `:QuitGame()`, `:RestartGame()`, and `MainMenu.IsOpen`.
-
-## 0.5.8
 
 ### Animations
 - **Every default animation is new**, for R6 and R15: idle, walk, run, jump, fall, sit, holding a tool, swimming. Limbs move smoothly instead of stopping at each keyframe, knees and elbows bend as they should, arms swing against the legs, and the body rises and falls with each step.
@@ -40,8 +62,6 @@ All of these are in the Properties panel and in scripts, are saved with the game
 ### Names over heads
 - Other characters show their name above their head, and a health bar when hurt, as far away as `NameDisplayDistance` and `HealthDisplayDistance` say. Set them to 0 to hide them.
 
-## 0.5.7
-
 ### Swimming
 - **Characters really swim** in terrain water: they float at the surface with their head out, swim where the camera looks (look down and press W to dive), rise again when left alone, and Space leaves the water, onto a bank for example. Speed changes softly, as in water.
 - New **swimming and treading water animations**, for R6 and R15. `swimidle` joins the ids a custom Animate script can use.
@@ -49,8 +69,6 @@ All of these are in the Properties panel and in scripts, are saved with the game
 
 ### Under water
 - **With the camera in water you see you are in it**: everything fades into the water's colour with distance, the water's surface is seen from below, with the sky in a bright circle overhead, sunlight moves over the bottom, and the picture sways a little. It follows `Terrain.WaterColor` and `WaterTransparency`, in the editor and in games.
-
-## 0.5.6
 
 ### Online
 - **Whoever joins is animated**: their Animate script (and any other LocalScript in their character) did not start, so they stood stiff on every machine. Now it starts, after respawning too.
