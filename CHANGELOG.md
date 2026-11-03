@@ -27,7 +27,9 @@ RIFT is in **beta**: versions are 0.x until the engine is complete.
 - **Health bar** at the top of the screen.
 - **Plugins tab** in the ribbon, with an example plugin that says hello. What plugins print now shows in Output.
 - **Script editor**: right-click menu. Autocomplete: click to select, click again to confirm.
-- **WindowService** for LocalScripts: `Title`, `Size`, `Fullscreen`, `LoadScene`, `OpenSceneInNewWindow`, with limits.
+- **WindowService** for LocalScripts: `Title`, `Size`, `Fullscreen`, `CursorVisible`, `FrameRateLimit`, `GetResolutions`, `LoadScene`, `OpenSceneInNewWindow`, with limits.
+- **PlayerSettings** for LocalScripts: `Get` and `Set`, kept on the player's computer between sessions.
+- **Terms of Use**: accepted once in the editor, and under Help.
 
 ## 0.6.2
 
