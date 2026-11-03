@@ -17,11 +17,15 @@ RIFT is in **beta**: versions are 0.x until the engine is complete.
 - `UserInputService.GamepadEnabled` says when a gamepad is connected.
 - Brighter bushes in the Canyon. Key names in Settings are capitals.
 
+- Esc closes an open menu, Preferences and Project Settings. A project always opens on the Explorer, not Git Changes.
+- The whole floor no longer changes colour when the mouse passes over it; it keeps just its outline.
+- The title bar says a name once when the project and scene share it, and Ctrl+P shows where each result is, so two scripts with one name can be told apart.
+
 ### New
 - **Character sounds**: footsteps that change with the ground, jumping, landing, splashing, swimming, climbing, wind while falling and dying, for every character. All RIFT's own. `StarterPlayer.CharacterSoundsEnabled` turns them off.
 - **Loading is a small box** over the editor or the game, like Roblox Studio. Only starting the program fills the window.
 - **Ctrl+P**: one box to find objects and scripts, insert anything and run commands.
-- **Edit > Align and Distribute** for selected parts.
+- **Edit > Align and Distribute** for selected parts and whole models.
 - **Script editor**: F12 goes to where a name is declared, Ctrl+Shift+R renames a variable in the script (not in strings or comments), and a button lists the script's functions.
 - **Game > Scale Old Scene to Full Size**: an old project with a small character becomes Roblox-sized in one undoable step.
 
