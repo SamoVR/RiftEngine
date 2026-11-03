@@ -5,6 +5,30 @@ GitHub release page show the section of the version being installed.
 
 RIFT is in **beta**: versions are 0.x until the engine is complete.
 
+## 0.6.3
+
+### Fixed
+- **Go-kart**: sitting no longer pushes it into the ground.
+- **Alt+click** picks a part inside a model; the camera only turns once Alt+left is really dragged.
+- **Insert** goes into the object you chose.
+- **Reflections** last much longer as the camera looks down.
+- **Scripts save when you press Play.**
+- Jump and landing sounds no longer fire on small bumps, and footsteps keep a walking pace.
+
+### New
+- **Drag parts with the mouse** over surfaces with any tool, like Roblox Studio. Huge floors are left alone, so a selection box can start on them.
+- **Insert Object menu**: a search box, Frequently Used for what you are inserting into, then everything.
+- **Rain and snow are real** drops and flakes in the world, and stop under a roof.
+- **New sounds** for steps, jump, landing, water, climbing, dying and wind.
+- **Spot lights** show a circle where their range ends.
+- **New classes**: Highlight, UICorner, UIStroke, UIPadding, UIScale, UIAspectRatioConstraint, UIGridLayout, ClickDetector, ObjectValue, Configuration.
+- **Gamepad**: works in the editor's test too. X uses prompts (`GamepadKeyCode`, with button icons), RT uses tools, LB/RB change tools, D-pad up opens the backpack, triggers drive vehicles, Select gives a pointer for on-screen buttons, and menus work with the stick and A. Scripts see the buttons as `Enum.KeyCode.ButtonA` and so on.
+- **ProximityPrompts** show when they are pressed, and fill while held.
+- **Health bar** at the top of the screen.
+- **Plugins tab** in the ribbon, with an example plugin that says hello. What plugins print now shows in Output.
+- **Script editor**: right-click menu. Autocomplete: click to select, click again to confirm.
+- **WindowService** for LocalScripts: `Title`, `Size`, `Fullscreen`, `LoadScene`, `OpenSceneInNewWindow`, with limits.
+
 ## 0.6.2
 
 ### Much faster
