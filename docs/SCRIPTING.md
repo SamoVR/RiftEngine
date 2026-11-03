@@ -1265,3 +1265,25 @@ for _, s in saves:List() do print(s.Name, s.SavedAt) end
 `UserInputService.MouseIcon` or `Mouse.Icon` choose the mouse icon: `Hand`, `Grab`, `Grabbing`, `Move`, `Rotate`, `Crosshair`, `IBeam`, `ResizeNS`, `ResizeEW`, `ResizeNWSE`, `ResizeNESW`, `Wait`, `NotAllowed`, or a PNG in the project up to 128 x 128. An empty string goes back to the normal behaviour. `UserInputService.MouseIconEnabled` hides it, and `ClickDetector.CursorIcon` sets the icon over that detector.
 
 `WindowService` (LocalScripts, in built games) has `Title`, `Size`, `Fullscreen`, `CursorVisible`, `FrameRateLimit`, `:GetResolutions()`, `:LoadScene(name)` and `:OpenSceneInNewWindow(name)`.
+
+## Screen effects, graphics, sound groups and the clipboard
+
+`ScreenEffects` (LocalScripts, except the clock):
+
+```lua
+local fx = game:GetService("ScreenEffects")
+fx:Shake(1, 0.4)                      -- how hard, how long
+fx:FadeOut(0.5, Color3.new(0, 0, 0))  -- then fx:FadeIn(0.5)
+fx:SlowMotion(0.3, 2)                 -- a third of the speed for 2 real seconds
+fx:Rumble(0.8, 0.8, 0.3)              -- gamepad motors, how long
+```
+
+`GraphicsService` (LocalScripts, in built games) has `QualityLevel` (0 to 3), `Shadows`, `Reflections`, `Bloom`, `Foliage`, `RenderScale` (0.5 to 1) and `AutoScale`. They are saved like the built-in menu's settings.
+
+A `SoundGroup` in SoundService shares its `Volume` with every `Sound` whose `SoundGroup` points at it.
+
+`ClipboardService` (LocalScripts): `:SetText(text)` copies. `:GetText()` only answers while the player is pressing Ctrl+V, so a game cannot read the clipboard behind their back.
+
+## Debugging
+
+In the script editor press F9 on a line, or right-click it, to set a breakpoint. When the game reaches that line in the editor's Play, it stops and shows the code, the call stack and the local variables. Built games have no debugger.

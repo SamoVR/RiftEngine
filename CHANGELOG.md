@@ -5,6 +5,27 @@ GitHub release page show the section of the version being installed.
 
 RIFT is in **beta**: versions are 0.x until the engine is complete.
 
+## 0.6.5
+
+### Tools for making games
+- **Script debugger**: F9 or right-click sets a breakpoint. The game stops there and shows the code, the call stack and the local variables. Continue (F5), Step Over (F10), Step Into (F11), Step Out (Shift+F11), or stop the game.
+- **Performance panel** (View): frame times, graphics card, physics, the slowest scripts, and what the scene is made of.
+- **Union, Negate, Separate** (Model): join parts into one, cut shapes out with Negative parts, and get the parts back. Undo works.
+- **Paint terrain in layers**: only on slopes between two angles, between two heights, or over one material.
+- **Foliage brush**: paint or erase where a Scatter grows, in the Terrain Editor.
+- **Animation curves**: see how a joint turns over time with its easing.
+- **Import animations from FBX**: bones are matched by name, the rig's own or Mixamo's.
+- **Walkable Areas** (View): green where characters can walk, red where it is too steep or too low.
+
+### New for scripts
+- **ScreenEffects**: `Shake`, `FadeOut`, `FadeIn`, `SetFade`, `SlowMotion`, `TimeScale`, and `Rumble` for gamepads.
+- **GraphicsService**: `QualityLevel`, `Shadows`, `Reflections`, `Bloom`, `Foliage`, `RenderScale`, `AutoScale`, for a game's own options menu.
+- **SoundGroup**: sounds that share a volume. `Sound.SoundGroup` points at it.
+- **ClipboardService**: `SetText`, and `GetText` only while the player is pressing Ctrl+V. TextBoxes and the chat take Ctrl+V too.
+
+### Fixed
+- `ObjectValue.Value` takes any object, and `Highlight.Adornee` takes a model, from scripts.
+
 ## 0.6.4
 
 ### Fixed
