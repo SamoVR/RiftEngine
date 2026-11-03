@@ -5,6 +5,30 @@ GitHub release page show the section of the version being installed.
 
 RIFT is in **beta**: versions are 0.x until the engine is complete.
 
+## 0.6.6
+
+### A new Start screen
+- **Rebuilt from scratch**: Home, Templates, Learn and What's New along the top, with New Project and Open always in reach.
+- **Templates and examples show real pictures** of what you get.
+- **Your projects** show what they look like, newest first. Ones that were moved or deleted go last, and a long list no longer pushes everything else away.
+- **Read the guide and the scripting reference inside RIFT**, offline, with a list of sections to jump to.
+- **What's New** shows this list inside RIFT.
+- **Links checked**: the dead Engine documentation link is gone, and "Source code", which only led to the downloads, is now called Downloads.
+
+### Interactive tutorial
+- **Learn, or Help > Start the Tutorial**: about five minutes, in a project of its own. Look around, place a part, move it, colour it, give it a script, play, stop and save. Each step notices when you have done it, and points at the button or panel it means. Any step can be skipped.
+
+### Demos and templates
+- **Crystal Isles** no longer opens as if it had unsaved changes, and its title screen is free of the chat box and the health bar.
+- **FPS Range** opens looking at the lobby, not from far away over the whole map.
+- New projects open with the camera further back from the spawn point.
+- Better descriptions for the examples.
+
+### Fixed
+- **Mouse icons were upside down**, all of them, including pictures set from scripts.
+- **The grabbing hand** only shows while something is really being moved, not when pointing at a part or pressing to select it.
+- `StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Health, false)` now hides the health bar. It did nothing before.
+
 ## 0.6.5
 
 ### Tools for making games

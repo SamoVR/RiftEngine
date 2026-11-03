@@ -4,6 +4,12 @@ This guide covers the editor: installing, projects and scenes, building worlds,
 scripting workflow, testing, version control and shipping a game. The Lua API is
 in [SCRIPTING.md](SCRIPTING.md).
 
+## New here?
+
+Start RIFT and press **Learn > Start the Tutorial** (or **Help > Start the Tutorial**
+with a project open). It takes about five minutes and makes a small game in a project
+of its own.
+
 ## Installing and updating
 
 Download `RIFT-Setup-<version>.exe` from the
