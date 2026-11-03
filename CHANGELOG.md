@@ -5,6 +5,26 @@ GitHub release page show the section of the version being installed.
 
 RIFT is in **beta**: versions are 0.x until the engine is complete.
 
+## 0.6.2
+
+### Much faster
+- **RIFT now asks for the real graphics card.** On laptops with two it was running on the weak built-in one: the Canyon went from 26 to about 200 frames per second in the editor on an RTX 4060 laptop, with nothing turned down.
+
+### Fixed
+- **Clouds and Weather work**: Insert now puts them in Lighting, where they do something, and ones already left in the Workspace work too. So do Atmosphere and the post effects when inserted.
+- **Water's edge**: no more hard rectangular steps along shores.
+- A changed copy of a built game is now refused when it starts, whichever file was changed.
+- `UserInputService.GamepadEnabled` says when a gamepad is connected.
+- Brighter bushes in the Canyon. Key names in Settings are capitals.
+
+### New
+- **Character sounds**: footsteps that change with the ground, jumping, landing, splashing, swimming, climbing, wind while falling and dying, for every character. All RIFT's own. `StarterPlayer.CharacterSoundsEnabled` turns them off.
+- **Loading is a small box** over the editor or the game, like Roblox Studio. Only starting the program fills the window.
+- **Ctrl+P**: one box to find objects and scripts, insert anything and run commands.
+- **Edit > Align and Distribute** for selected parts.
+- **Script editor**: F12 goes to where a name is declared, Ctrl+Shift+R renames a variable in the script (not in strings or comments), and a button lists the script's functions.
+- **Game > Scale Old Scene to Full Size**: an old project with a small character becomes Roblox-sized in one undoable step.
+
 ## 0.6.1
 
 ### Fixed: what 0.6.0 broke
