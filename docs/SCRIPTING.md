@@ -1245,3 +1245,23 @@ box.FocusLost:Connect(function(enterPressed) print(box.Text, enterPressed) end)
 `ScrollingFrame`: `CanvasSize`, `CanvasPosition`, `ScrollBarThickness`.
 
 `UIListLayout`: `FillDirection`, `HorizontalAlignment`, `VerticalAlignment`, `SortOrder`, `Padding`. GUI objects have `LayoutOrder`.
+
+
+## Save files, settings and the mouse
+
+`SaveFileService` keeps whole tables in named slots on the player's computer. It works from Scripts and LocalScripts, and tables may hold Vector3, Vector2 and Color3 values.
+
+```lua
+local saves = game:GetService("SaveFileService")
+saves:Save("slot1", { level = 3, at = Vector3.new(1, 2, 3) })
+local data = saves:Load("slot1")     -- nil if there is none
+saves:Exists("slot1")
+saves:Delete("slot1")
+for _, s in saves:List() do print(s.Name, s.SavedAt) end
+```
+
+`PlayerSettings` (LocalScripts) keeps small settings: `:Set("volume", 0.5)` and `:Get("volume", 1)`.
+
+`UserInputService.MouseIcon` or `Mouse.Icon` choose the mouse icon: `Hand`, `Grab`, `Grabbing`, `Move`, `Rotate`, `Crosshair`, `IBeam`, `ResizeNS`, `ResizeEW`, `ResizeNWSE`, `ResizeNESW`, `Wait`, `NotAllowed`, or a PNG in the project up to 128 x 128. An empty string goes back to the normal behaviour. `UserInputService.MouseIconEnabled` hides it, and `ClickDetector.CursorIcon` sets the icon over that detector.
+
+`WindowService` (LocalScripts, in built games) has `Title`, `Size`, `Fullscreen`, `CursorVisible`, `FrameRateLimit`, `:GetResolutions()`, `:LoadScene(name)` and `:OpenSceneInNewWindow(name)`.

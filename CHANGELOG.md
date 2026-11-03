@@ -5,6 +5,24 @@ GitHub release page show the section of the version being installed.
 
 RIFT is in **beta**: versions are 0.x until the engine is complete.
 
+## 0.6.4
+
+### Fixed
+- **Reflections stay** when the camera turns or looks down. The most mirror-like flat surface in view (a floor, a wall, water) now really reflects the scene, not just what is on screen. Other shiny surfaces still use the old way.
+- **Walking up**: characters step onto a default part, and a bit higher, without jumping.
+- **Spot lights** are drawn as their light really is: rays to the range, the circle where they end, and the rounded end.
+- **ClockTime** goes round: past 24 it carries on from 0 and back, in the editor and in scripts. Rotations in the Properties panel go round at 180 too.
+
+### Changed
+- **Health bar** in the far top right corner, with Roblox's colours and no numbers. What was just lost fades out, and it pulses when nearly empty.
+- **Highlight** starts with FillTransparency 0.
+- **Terms of Use** rewritten in full, with headings, and they can only be accepted after scrolling to the end. Everyone is asked to accept them again.
+
+### New
+- **Mouse icons**: hands for dragging and things that can be clicked, move, rotate and resize on the tools, crosshair for box selection and terrain brushes, typing over TextBoxes.
+- **Choose the mouse icon in scripts**: `UserInputService.MouseIcon` or `Mouse.Icon`, with a name (`Hand`, `Grab`, `Grabbing`, `Move`, `Rotate`, `Crosshair`, `IBeam`, `ResizeNS`, `ResizeEW`, `ResizeNWSE`, `ResizeNESW`, `Wait`, `NotAllowed`) or a PNG in the project. `ClickDetector.CursorIcon` too.
+- **SaveFileService**: `Save`, `Load`, `Exists`, `Delete`, `List`. Whole tables in named slots on the player's computer, including Vector3, Vector2 and Color3. DataStores keep those three types now as well.
+
 ## 0.6.3
 
 ### Fixed
