@@ -77,6 +77,7 @@ p { margin: 0; }
 .lead { margin-top: 22px; max-width: 62ch; font-size: clamp(1.02rem, 1.6vw, 1.2rem); color: #b4b6c2; }
 .cta { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; margin-top: 34px; }
 .fine { margin-top: 14px; font-size: .86rem; color: var(--dim); }
+.fine a { color: var(--violet-2); font-weight: 600; }
 .warn { color: #f5a524; }
 .hero-shot { margin-top: 56px; }
 

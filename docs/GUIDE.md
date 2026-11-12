@@ -12,19 +12,40 @@ of its own.
 
 ## Installing and updating
 
-Download `RIFT-Setup-<version>.exe` from the
-[releases page](https://github.com/SamoVR/RiftEngine/releases/latest) and run it.
-RIFT installs for you only (into `%LOCALAPPDATA%\Programs\RIFT` by default), so
-no administrator rights are needed. It adds Start menu and desktop shortcuts and
-an entry in Windows Settings > Apps, which is also where you uninstall it.
-Uninstalling never touches your projects.
+RIFT comes with [Samo Launcher](https://samovr.github.io/Launcher/). Install the launcher, make
+your free account, then open its **RIFT** page and press **Install**. No
+administrator rights are needed. The launcher also keeps RIFT up to date, and
+its RIFT page is where you uninstall it. Uninstalling never touches your
+projects.
 
-When a new version is out, RIFT says so when it starts (and in the status bar).
-**Help > Check for Updates** shows what is new; **Download and install** updates
-RIFT in place and restarts it in a few seconds. Preferences > Updates can turn
-the check off or include preview versions.
+RIFT needs you to be signed in to Samo Launcher. You can open RIFT from the
+launcher or by itself: opened by itself, it finds the launcher and starts it if
+it is closed. If nobody is signed in, RIFT shows a sign-in screen with a button
+that opens the launcher.
 
-There is also a portable zip: unzip it anywhere and run `RiftEditor.exe`.
+## Your account
+
+Your name and avatar are in the top right corner of the editor. Click it to see
+your level, your roles and your license, to open **Edit Avatar**, **View
+Profile** or **Account Settings** in Samo Launcher, and to sign out. The same
+avatar is your character when you press Play and when you play online.
+
+**Show friends what I'm editing** lets your friends see "Editing <your place>
+in RIFT" next to your name in the launcher. Untick it to keep that to yourself.
+
+## Safe mode
+
+A place that was not made on your computer (one you downloaded, or a template
+someone published) opens in **safe mode**: you can look at everything and read
+every script, but Play, hosting, Run in Player and Build are off, so none of
+its scripts run. RIFT shows how many scripts the place has and points at lines
+worth reading first, such as a module loaded by number or text spelled out in
+numbers. Click **Trust this place** to switch safe mode off for it; the orange
+**Safe mode** note in the status bar opens the question again.
+
+Scripts in RIFT can never reach your files, other programs or the internet,
+trusted or not. Safe mode is there so that a script you have not read does not
+get to spoil a game you are about to work on.
 
 ## Projects and scenes
 
@@ -80,6 +101,14 @@ constraints and a VehicleSeat.
 look. Its rock, sand and plants are free photo scans from Poly Haven (see
 `assets/CREDITS.txt`). It needs a good graphics card: if it runs slowly, turn things
 off in the Esc menu's Graphics, the most helpful being Terrain relief and Light in the air.
+
+**Brookfield** is a small town with things to do, made to show what RIFT 0.7.0 can do:
+drive the car through the tunnel to the lake, let the smoke out of a burning warehouse and
+put the fire out, knock down targets at the police range, sit in the café, talk to the
+townspeople, and stay out until the street lights come on. The blue kiosk by the town hall
+(or G) opens the town guide. Its scripts are in `ScriptService` and
+`StarterPlayer > StarterPlayerScripts`; `tools/make_town.py` in RIFT's source builds the
+whole town. The houses, shops and cars are Kenney's free models (`assets/CREDITS.txt`).
 
 **Scenes**: File > New Scene (Ctrl+N), File > Open Scene, File > Save Scene As
 (Ctrl+Shift+S). The start scene (the one a built game begins with) is set in
@@ -153,6 +182,13 @@ The button next to it changes their **material**: a grid of every material
 with a preview, grouped and searchable. In Properties, the palette button next
 to any colour and the Material field open the same pickers.
 
+**View > Materials** opens the Materials panel: 22 ready-made looks (wood,
+metal, glass, stone and more) and your own, each shown on a ball and a block.
+Pick one, change its base material, colour, transparency, reflectance and
+textures (colour, normal, roughness and so on, with their tiling), then **Apply
+to selected**. **From selected** starts from a part's look, and **Save in
+project** keeps it with the project for every scene in it.
+
 ### Graphics
 
 **Lighting** in the Explorer holds what the game looks like: `HDR`, `SoftShadows`,
@@ -202,6 +238,9 @@ The ribbon's Home tab has buttons for a part and a script; **More** and the
 - **GUI**: ScreenGui, Frame, TextLabel, TextButton, ImageLabel, ImageButton. They go into the selected ScreenGui, BillboardGui, SurfaceGui or Frame, or a new ScreenGui in StarterGui. **BillboardGui** (floats over the selected part, facing the camera) and **SurfaceGui** (covers a face of it) start with a label.
 - **Gameplay**: ready-made pieces with their scripts: Kill Brick, Spinner, Coin, Jump Pad, Moving Platform, Checkpoint, Door, Finish Line, a Sword and other tools, and a Leaderboard script. Their scripts are ordinary Lua: open them to see how they work. Tools go into StarterPack, so every player spawns with them.
 
+The **+** at the end of the Explorer row under the mouse opens the same list
+and inserts into that object, as in Roblox Studio.
+
 Right-click in the Explorer for the same menu plus Rename (F2), Cut / Copy /
 Paste / Paste Into / Duplicate (Ctrl+D), Delete, Group (Ctrl+G), Ungroup
 (Ctrl+U), Select Children and **Copy Lua Path** (puts `workspace.Map.Door` on the
@@ -234,6 +273,11 @@ Character Rig** adds a body shaped like the players' characters to practise on.
 2. Move the red line on the timeline to a time and pose the rig with the **Rotate** and **Move** tools: limbs turn around their joints, and every change is keyed at that time (diamonds appear on the joint's row).
 3. Drag diamonds to move keys (Shift: no snapping), right-click one for its easing, Delete removes the selected key. **Key All** keys every joint as it is now. Name a keyframe to get `KeyframeReached` events.
 4. Set the **Priority** and **Loop**, press Play to preview, and **Save**: the animation goes to `assets/animations/<Name>.anim`, which is its AnimationId. The **+** button also adds an Animation object with that id to ReplicatedStorage.
+
+**Hold** puts a tool in the rig's right hand while you animate: pick one from
+the game, and its Handle hangs from a `RightGrip` joint in the hand. That joint
+has its own row on the timeline, named "Handle": key it like a limb to swing a
+sword or aim a gun, and the game moves the tool the same way.
 
 The open button lists the game's animations and the built-in ones (opening a
 built-in one makes a copy to change).
@@ -282,6 +326,14 @@ pixels (Offset), edited per axis in Properties. Text has a **Font**, an outline
 (**TextStrokeTransparency**) and can fill its element (**TextScaled**); any
 element can be turned (**Rotation**). Insert > GUI > UIGradient (with an element
 selected) shades it with a gradient.
+
+A selected element has handles: drag a corner or an edge to resize it (the
+opposite side stays put). The bar over the viewport lines elements up (left,
+centre, right, top, middle, bottom) and switches Size and Position between Scale
+and pixels at a click. **Preview** shows the GUI as it looks on a phone, a
+tablet, a laptop or a big screen, to check it fits everywhere. A
+**UISizeConstraint** keeps an element between a smallest and a largest size, and
+a **UIPageLayout** turns its children into pages that slide from one to the next.
 
 GUI in the world shows in the viewport too: a **BillboardGui** in a part floats
 over it (Size's Scale is in studs, so it shrinks with distance; Offset is in
@@ -421,6 +473,24 @@ Edit > Preferences (Ctrl+,), by category:
 
 **Reset to defaults** keeps your recent projects and layout. Preferences are
 stored in `%APPDATA%\RIFT\settings.json`.
+
+## Effects
+
+**View > Effects** has ready-made effects to put in the scene: fire, smoke, explosions, sparks, lightning, shimmering air and more. Select an effect and the panel shows it running, in a little world of its own, by day or night, with a wall to stop it and a moving ball to push through it. **Put in Scene** adds it to the selected part, and you keep editing it there. Its settings are in Properties: change one and the picture changes with it. The curves and gradients are edited there too. See [Fire, smoke and better particles](SCRIPTING.md) for what each does.
+
+## Command line
+
+`RiftPlayer.exe` can check a project without anyone at the screen, for a batch file or a build server:
+
+```
+RiftPlayer --check "C:\\My Game"                 syntax errors and missing scripts, nothing runs (exit code 1 if any)
+RiftPlayer --check script.lua                    one file
+RiftPlayer "C:\\My Game" --run-for 30              plays for 30 seconds and quits (exit code 2 if a script had an error)
+RiftPlayer "C:\\My Game" --run-for 30 --screenshot shot.png
+```
+
+What scripts print goes to the console. From PowerShell, end the line with `| Out-Host` so that it waits for the end.
+A game's `print` and `warn` lines also go to its log file, in `%APPDATA%\\RIFT Games\\<name>\\logs`.
 
 ## Keyboard shortcuts
 

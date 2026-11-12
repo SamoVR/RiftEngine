@@ -34,7 +34,7 @@
           <svg viewBox="0 0 16 16" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
           <span class="stars" data-stars hidden></span>
         </a>
-        <a class="btn btn-small" href="#download" data-download-link>Download</a>
+        <a class="btn btn-small" href="#download">Get RIFT</a>
       </div>
     </div>
   </header>
@@ -49,13 +49,14 @@
         <h1>Make Roblox-style games. Ship them as your own.</h1>
         <p class="lead">RIFT is a free engine for Windows, built around the workflow Roblox Studio made familiar: Explorer, Properties, parts, and Lua. Games build into one protected file you own and can sell anywhere.</p>
         <div class="cta" id="download">
-          <a class="btn btn-primary btn-large" href="https://github.com/SamoVR/RiftEngine/releases/latest" data-download-link>
+          <a class="btn btn-primary btn-large" href="https://samovr.github.io/Launcher/">
             <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M3 5.5 10.5 4.4v7.2H3V5.5Zm0 13 7.5 1.1v-7.1H3v6Zm8.4 1.2L21 21v-8.5h-9.6v7.2Zm0-15.4v7.3H21V3l-9.6 1.3Z"/></svg>
-            <span data-download-label>Download for Windows</span>
+            <span data-download-label>Get RIFT with Samo Launcher</span>
           </a>
         </div>
         <p class="fine" data-download-meta>Windows 10 and 11 · 64-bit · free</p>
-        <p class="fine warn" data-os-note hidden>RIFT runs on Windows. You can download it here and install it on a Windows PC.</p>
+        <p class="fine">RIFT needs <a href="https://samovr.github.io/Launcher/">Samo Launcher</a> and a free account. The launcher installs RIFT, signs you in and keeps it up to date.</p>
+        <p class="fine warn" data-os-note hidden>RIFT runs on Windows. You can get Samo Launcher here and install it on a Windows PC.</p>
 
         <figure class="shot hero-shot">
           <div class="shot-bar"><span></span><span></span><span></span><em>RIFT</em></div>
@@ -119,12 +120,12 @@
           <article class="card">
             <div class="card-icon i-blue"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66 M20 4v4h-4"/></svg></div>
             <h3>Always up to date</h3>
-            <p>RIFT checks for new versions and updates itself in a few seconds. Your projects and settings stay as they are.</p>
+            <p>Samo Launcher installs each new version of RIFT for you. Your projects and settings stay as they are.</p>
           </article>
           <article class="card">
             <div class="card-icon i-orange"><svg viewBox="0 0 24 24"><path d="M12 3 4 7v6c0 4 3.5 7 8 8 4.5-1 8-4 8-8V7z M9 12l2 2 4-4"/></svg></div>
             <h3>Safe by design</h3>
-            <p>Scripts run sandboxed: no file system, no network, a time limit on runaway loops. Installs without administrator rights.</p>
+            <p>Scripts run sandboxed: no file system, no network, a time limit on runaway loops. A place from someone else opens in safe mode until you trust it.</p>
           </article>
         </div>
       </div>
@@ -193,8 +194,8 @@ coin.Touched:<span class="f">Connect</span>(<span class="k">function</span>(hit)
         <p class="eyebrow">Get started</p>
         <h2>Getting started</h2>
         <ol class="steps">
-          <li><span class="step-n">1</span><h3>Install RIFT</h3><p>Run the setup. It takes a few seconds and needs no administrator rights.</p></li>
-          <li><span class="step-n">2</span><h3>Start a project</h3><p>Pick a template or open an example. Everything is ready to play.</p></li>
+          <li><span class="step-n">1</span><h3>Get Samo Launcher</h3><p>Install it and make your free account. It needs no administrator rights.</p></li>
+          <li><span class="step-n">2</span><h3>Install RIFT</h3><p>Open the launcher's RIFT page and press Install. Then pick a template or open an example.</p></li>
           <li><span class="step-n">3</span><h3>Press Play</h3><p>F5 runs the game right in the editor. Change it, play again, then Build Game.</p></li>
         </ol>
       </div>
@@ -205,7 +206,7 @@ coin.Touched:<span class="f">Connect</span>(<span class="k">function</span>(hit)
       <div class="wrap">
         <p class="eyebrow">Releases</p>
         <h2>What's new</h2>
-        <p class="section-lead">Straight from GitHub. RIFT offers each new version by itself, so you only download it once.</p>
+        <p class="section-lead">Straight from GitHub. Samo Launcher installs each new version for you.</p>
         <div class="releases" data-releases>
           <div class="release skeleton"><div></div><div></div><div></div></div>
         </div>
@@ -219,12 +220,14 @@ coin.Touched:<span class="f">Connect</span>(<span class="k">function</span>(hit)
         <p class="eyebrow">Questions</p>
         <h2>FAQ</h2>
         <details><summary>Is RIFT free?</summary><p>Yes. RIFT is free to download and use, and so are the games you make with it.</p></details>
+        <details><summary>Why do I need Samo Launcher?</summary><p>Your RIFT account lives there: your name, your avatar, your friends and what you publish to the Toolbox. The launcher installs RIFT, keeps it up to date and signs you in. RIFT needs it installed and you signed in, and you can then open RIFT from the launcher or by itself.</p></details>
+        <details><summary>Do people who play my games need the launcher?</summary><p>No. A game you build is its own .exe. Players unzip it and play, with no launcher and no account.</p></details>
         <details><summary>Is RIFT made by Roblox?</summary><p>No. RIFT is an independent engine whose editor and scripting API are modelled on Roblox Studio, so the skills carry over. It is not affiliated with or endorsed by Roblox Corporation, and it does not connect to Roblox.</p></details>
         <details><summary>Can my games be played without RIFT?</summary><p>Yes. Build Game makes a folder with your game's own .exe. Players just unzip it and play; nothing has to be installed.</p></details>
         <details><summary>Does it run on Mac or Linux?</summary><p>Not yet: RIFT is made for Windows 10 and 11 (64-bit) with an OpenGL 3.3 graphics card, which almost every PC from the last decade has.</p></details>
-        <details><summary>Is it multiplayer?</summary><p>Games are single-player for now, but they already run as a client and a server with RemoteEvents and replication, exactly like Roblox, so your code is ready for it.</p></details>
-        <details><summary>How do updates work?</summary><p>RIFT checks GitHub for a new release when it starts. One click downloads it, updates RIFT in place and restarts it. You can turn the check off in Preferences.</p></details>
-        <details><summary>How do I uninstall it?</summary><p>Windows Settings &gt; Apps &gt; Installed apps &gt; RIFT Engine &gt; Uninstall. Your projects are never deleted.</p></details>
+        <details><summary>Is it multiplayer?</summary><p>Yes. One player hosts and others join by address, over the internet or a local network. Games run as a client and a server with RemoteEvents and replication, like Roblox. There are no servers to find or rent: someone has to host.</p></details>
+        <details><summary>How do updates work?</summary><p>Samo Launcher shows when a new version of RIFT is out, on its RIFT page. One click installs it. Your projects and settings stay as they are.</p></details>
+        <details><summary>How do I uninstall it?</summary><p>In Samo Launcher, open the RIFT page and press Uninstall. Your projects are never deleted.</p></details>
       </div>
     </section>
 
@@ -232,9 +235,9 @@ coin.Touched:<span class="f">Connect</span>(<span class="k">function</span>(hit)
     <section class="section final">
       <div class="wrap final-inner">
         <img src="assets/logo.png" alt="" width="72" height="72">
-        <h2>Download RIFT</h2>
-        <p class="section-lead">Download RIFT and press Play on the demo obby in under a minute.</p>
-        <a class="btn btn-primary btn-large" href="https://github.com/SamoVR/RiftEngine/releases/latest" data-download-link><span data-download-label>Download for Windows</span></a>
+        <h2>Get RIFT</h2>
+        <p class="section-lead">Install Samo Launcher, sign in, and press Play on an example in a few minutes.</p>
+        <a class="btn btn-primary btn-large" href="https://samovr.github.io/Launcher/"><span data-download-label>Get RIFT with Samo Launcher</span></a>
         <p class="fine" data-download-meta>Windows 10 and 11 · 64-bit · free</p>
       </div>
     </section>

@@ -85,8 +85,8 @@ local Util = require("Util")
 `require(name)` loads `scripts/Name.lua` of the scene, or else `scripts/Name.lua`
 of the project (modules shared by every scene). Dots are folders:
 `require("ai.Patrol")` loads `scripts/ai/Patrol.lua`. A module runs once; every
-`require` gets the same value. A module must return a value and cannot yield
-while loading.
+`require` gets the same value. A module must return a value, and it may wait while it loads
+(`WaitForChild`, `task.wait`): whoever else requires it meanwhile waits for it too.
 
 `print(...)` and `warn(...)` write to the Output panel. Errors show the script
 and line (`Workspace.Door.Script:12: attempt to index nil`); clicking the line in
@@ -292,7 +292,7 @@ parent.
 | `Position`, `Rotation` (= `Orientation`), `Size` | Vector3 |
 | `CFrame` | World position and rotation |
 | `WorldPosition` | read-only Vector3 |
-| `Shape` | `Enum.PartType` Block, Ball, Cylinder, Wedge, CornerWedge (Part only) |
+| `Shape` | `Enum.PartType` Block, Ball, Cylinder, Wedge, CornerWedge (Part only). A cylinder's length runs along its X axis, as in Roblox |
 | `Color` | Color3 |
 | `Material` | `Enum.Material` Plastic, SmoothPlastic, Metal, Neon, Glass, Wood, Concrete |
 | `Transparency`, `Reflectance` | 0..1 |
@@ -330,7 +330,7 @@ everything inside it.
 (parts below it are destroyed; default -60), `CurrentCamera`; methods
 `:Raycast`, `:GetPartBoundsInBox`, `:GetPartsInPart` (see [Physics](#physics)).
 
-**Lighting**: `ClockTime` (0-24, moves the sun), `Brightness`, `SunColor`,
+**Lighting**: `ClockTime` (0-24, moves the sun; `:GetSunDirection()` and `:GetMoonDirection()` say where it is), `Brightness`, `SunColor`,
 `GlobalShadows`, `SoftShadows` (three cascades out to 600 studs with soft edges), `Ambient`, `SkyColor`, `HorizonColor`, `ExposureCompensation`,
 `FogColor`, `FogStart`, `FogEnd`; and `HDR`, `AmbientOcclusion` (with `AmbientOcclusionStrength`, `AmbientOcclusionRadius`), `ScreenSpaceReflections`. All can be turned off, and the player can turn them off on their machine too.
 
@@ -390,9 +390,12 @@ thread, so it may call `task.wait`.
 | `Died`, `HealthChanged(health)`, `Jumping`, `Running(speed)` | Humanoid | |
 | `CharacterAdded`, `CharacterRemoving` | Player | character |
 | `PlayerAdded` | Players | player |
-| `Ended` | Sound | |
-| `Activated`, `MouseButton1Click`, `MouseButton1Down`, `MouseButton1Up` | TextButton, ImageButton | |
+| `Ended`, `Played`, `Stopped`, `Paused`, `Resumed` | Sound | SoundId |
+| `Activated`, `MouseButton1Click`, `MouseButton1Down`, `MouseButton1Up`, `MouseButton2Click`, `MouseButton2Down`, `MouseButton2Up` | TextButton, ImageButton | |
+| `MouseClick`, `RightMouseClick`, `MouseHoverEnter`, `MouseHoverLeave` | ClickDetector | player |
 | `MouseEnter`, `MouseLeave` | GUI elements | |
+
+GUI elements and ScreenGuis also have read-only `AbsolutePosition` and `AbsoluteSize`: where the last layout put them, in pixels. Text elements have `TextBounds` (how big the text came out when last drawn, in pixels) and `TextFits`.
 
 `:GetPropertyChangedSignal("Position")` fires when that one property changes.
 
@@ -426,7 +429,7 @@ StarterPlayerScripts, client only); `:LoadCharacter()` (respawn now, server),
 player fired.
 
 The **character** is a Model named after the player, in Workspace, with a
-`Humanoid`, a `HumanoidRootPart` (the collision capsule) and a body. It appears on
+`Humanoid`, a `HumanoidRootPart` (a 2 by 2 by 1 block at the torso, as in Roblox, whose centre is 3 studs above the feet) and a body. It appears on
 an enabled SpawnLocation (a random one if there are several).
 `StarterPlayer.CharacterRigType` picks the body, and `Humanoid.RigType` tells which
 one a character has (`Enum.HumanoidRigType`):
@@ -630,6 +633,18 @@ the surface, swim where the camera looks, and Space leaves the water. `workspace
 `WaterTransparency` properties colour the water. Changes made by the server
 reach every client.
 
+Voxel by voxel, as in Roblox (a cell of `resolution` studs covers whole 2-stud voxels):
+
+```lua
+local region = Region3.new(Vector3.new(0, 0, 0), Vector3.new(16, 8, 16))
+terrain:FillRegion(region, 4, Enum.Material.Sand)
+local materials, occupancies = terrain:ReadVoxels(region, 4) -- [x][y][z], and .Size the counts
+materials[1][1][1] = Enum.Material.Rock
+terrain:WriteVoxels(region, 4, materials, occupancies)
+terrain:ReplaceMaterial(region, 4, Enum.Material.Sand, Enum.Material.Snow)
+print(terrain:WorldToCell(Vector3.new(5, 1, -1)), terrain:CellCenterToWorld(2, 0, -1))
+```
+
 ## Animations
 
 Animations work like Roblox's. A model is animated through its **Animator**
@@ -650,6 +665,7 @@ track.Stopped:Wait()
 - **Animator**: `:LoadAnimation(animation)`, `:GetPlayingAnimationTracks()`, event `AnimationPlayed(track)`. `Humanoid:LoadAnimation` works too.
 - **Priority** (`Enum.AnimationPriority`): `Core` < `Idle` < `Movement` < `Action` < `Action2..4`. On each joint the highest priority playing wins; tracks of the same priority mix by weight. The default walk and run are Core, so anything you play goes over them.
 - **Motor6D**: `Part0`, `Part1`, `C0`, `C1`, `Transform` (what animations set); `Part1 = Part0 * C0 * Transform * C1:Inverse()`. Animations name their poses after the Part1 (`"Right Arm"`).
+- **IKControl** (in the Humanoid or Model): `ChainRoot` (the first part that turns), `EndEffector` (the part, or an attachment in it, that should get there), `Target` (a part or attachment), `Weight`, `Enabled`. The joints in between turn so that the end reaches the target, on top of the animations: a hand on a weapon, a foot on a step. Motor6D's `Transform` is left as the animations made it, so switching it off puts the pose back. There are no joint limits yet: a chain can bend any way to get there.
 - **KeyframeSequence** > **Keyframe** (`Time`) > **Pose** (named after a part; `CFrame`, `Weight`, `EasingStyle`, `EasingDirection`) and **KeyframeMarker** (`Name`, `Value`): an animation as objects.
 
 Every character gets a LocalScript named **Animate** that plays idle, walk,
@@ -721,6 +737,10 @@ end
 `workspace:GetPartBoundsInBox(cframe, size)` and `workspace:GetPartsInPart(part)`
 return the parts in a box.
 
+Shape casts move a shape along a direction and return what it hits first, like `:Raycast`
+(`Distance` is how far the shape got): `workspace:Spherecast(position, radius, direction, params)`,
+`workspace:Blockcast(cframe, size, direction, params)`, `workspace:Shapecast(part, direction, params)`.
+
 ### Models
 
 `MeshPart.MeshId` is a model file, or one mesh in it (`assets/rocks.gltf#2`).
@@ -741,9 +761,11 @@ Constraints join two parts by an Attachment in each (welds and NoCollision name 
 | `WeldConstraint` | `Part0`, `Part1` |
 | `NoCollisionConstraint` | `Part0`, `Part1`: these two pass through each other |
 
-All have `Enabled`, and all but the last two `Attachment0`, `Attachment1`.
+All have `Enabled`, and all but the last two `Attachment0`, `Attachment1`. While the game runs they say
+where they are (read-only): `HingeConstraint.CurrentAngle` (degrees), `PrismaticConstraint.CurrentPosition`,
+`SpringConstraint.CurrentLength`, and `CurrentDistance` on ropes and rods.
 
-**VehicleSeat** is a Seat that drives: `MaxSpeed`, `Torque`, `SteerAngle`, and read-only `ThrottleFloat`, `SteerFloat`. Whoever sits on it drives the HingeConstraints in its Model: W and S turn the Motor ones so the wheels roll towards the seat's front, A and D turn the Servo ones. See **Go Kart** in the Toolbox.
+**VehicleSeat** is a Seat that drives: `MaxSpeed`, `Torque`, `SteerAngle`, and read-only `ThrottleFloat`, `SteerFloat` (and `Throttle`, `Steer`: the same as -1, 0 or 1). Whoever sits on it drives the HingeConstraints in its Model: W and S turn the Motor ones so the wheels roll towards the seat's front, A and D turn the Servo ones. See **Go Kart** in the Toolbox.
 
 ## Pathfinding and non-player characters
 
@@ -761,6 +783,20 @@ if path.Status == Enum.PathStatus.Success then
     end
 end
 ```
+
+**Costs**, as in Roblox, make some ground dearer or cheaper to walk: a price per stud for a material's
+name, or for the `Label` of a **PathfindingModifier** in a part (`math.huge`: never there). A labelled space
+sets the price inside it, so a crossing over a road can be cheap while the road is dear; standing on a
+labelled part counts too, however thin. A modifier with `PassThrough` makes its part a door paths go through.
+
+```lua
+local path = PathfindingService:CreatePath({ Costs = { Asphalt = 5, Crossing = 1, Grass = 2, Danger = math.huge } })
+```
+
+Characters can be made from scripts: `Players:CreateHumanoidModelFromDescription(description, Enum.HumanoidRigType.R15)`
+returns a Model with a Humanoid, not yet in the world. A **HumanoidDescription** sets `HeadColor` (head and hands),
+`TorsoColor` (the shirt), `LeftLegColor` / `RightLegColor` (the trousers) and `HeightScale`. Parent it to the
+Workspace and it can walk at once. See the townspeople in the **Brookfield** example.
 
 Nothing has to be baked: paths are searched from the world as it is. `path:CheckOcclusionAsync(start)` gives the first waypoint now blocked, or -1. `Status` is `Success`, `NoPath`, `FailStartNotEmpty` or `FailFinishNotEmpty`. `Blocked` and `Unblocked` exist but do not fire: check again yourself.
 
@@ -952,7 +988,8 @@ Clicks on GUI elements are reported to `InputBegan` with `processedByGui = true`
 **Sound**: `SoundId` (an audio file: .wav, .mp3, .ogg, .flac), `Volume`,
 `PlaybackSpeed`, `Looped`, `Playing` (set in the editor: plays when the game
 starts), `RollOffMaxDistance`; read-only `IsPlaying`, `TimePosition`,
-`TimeLength`. Methods `:Play()`, `:Stop()`, `:Pause()`, `:Resume()`; event `Ended`.
+`TimeLength`, `IsPaused`. Methods `:Play()`, `:Stop()`, `:Pause()`, `:Resume()`; events `Ended`,
+`Played`, `Stopped`, `Paused` and `Resumed` (each passes the SoundId).
 
 A Sound inside a part is positional: it gets quieter with distance and comes from
 the part's direction. Anywhere else (SoundService, a GUI) it plays flat.
@@ -1141,7 +1178,7 @@ local anything = n :: any
 - Online, everyone needs the game's files. Places are not downloaded on joining, and there are no servers to find: you join an address.
 
 - **Luau's syntax, Lua 5.4's VM.** Types are not checked, and `getfenv` / `setfenv` do not exist.
-- **One player.** The client/server split works like Roblox (Scripts, LocalScripts, remotes, replication), but there is always exactly one player and both sides run in the same program, so remotes are never lost and arrive one frame later.
+- **Playing alone, both sides run in one program**, so remotes are never lost and arrive one frame later. Online (one machine hosts, others join by address), they go over the network as in Roblox.
 - `Instance.new("Script")` is not supported (code lives in files): clone a Script instead.
 - Reading or writing a member that does not exist is an error.
 - Only the classes listed above exist (no constraints, ...). MeshParts collide as their bounding box.
@@ -1265,6 +1302,57 @@ for _, s in saves:List() do print(s.Name, s.SavedAt) end
 `UserInputService.MouseIcon` or `Mouse.Icon` choose the mouse icon: `Hand`, `Grab`, `Grabbing`, `Move`, `Rotate`, `Crosshair`, `IBeam`, `ResizeNS`, `ResizeEW`, `ResizeNWSE`, `ResizeNESW`, `Wait`, `NotAllowed`, or a PNG in the project up to 128 x 128. An empty string goes back to the normal behaviour. `UserInputService.MouseIconEnabled` hides it, and `ClickDetector.CursorIcon` sets the icon over that detector.
 
 `WindowService` (LocalScripts, in built games) has `Title`, `Size`, `Fullscreen`, `CursorVisible`, `FrameRateLimit`, `:GetResolutions()`, `:LoadScene(name)` and `:OpenSceneInNewWindow(name)`.
+
+## Fire, smoke and better particles
+
+Fire, Smoke and Explosion pour into one moving air for the whole world (on graphics cards with OpenGL 4.3):
+their smoke goes wherever the air takes it, round corners, through doors, out of gaps, and stays in a closed room.
+The air's own settings are on **Workspace**: `GlobalWind` (studs a second; it carries smoke in the open) and
+`IndoorSmokeDissipation` (how fast smoke thins under a roof, as a share of in the open; 0 keeps it for ever).
+
+`Fire` and `Smoke` go inside a part or an attachment and are drawn in 3D: you can fly through them, they stop at walls, smoke is lit by the sun and fire lights what is around it. With "Fire and smoke in 3D" off in a game's graphics settings (or on the lowest qualities) they are flat particles instead.
+
+```lua
+local fire = Instance.new("Fire")
+fire.Size = 6               -- studs
+fire.Heat = 12              -- how lively
+fire.Color = Color3.fromRGB(236, 139, 70)
+fire.SecondaryColor = Color3.fromRGB(139, 80, 55)
+fire.Parent = workspace.Campfire
+
+local smoke = Instance.new("Smoke")
+smoke.Opacity = 0.5
+smoke.RiseVelocity = 2
+smoke.Parent = workspace.Chimney
+```
+
+`Sparkles` (`SparkleColor`) are little stars. An `Explosion` goes off as soon as it is in Workspace, on the server: it pushes parts (`BlastPressure`), kills characters within `BlastRadius * DestroyJointRadiusPercent`, digs into terrain unless `ExplosionType` is `NoCraters`, and removes itself. `Hit` fires with each part and its distance.
+
+```lua
+local blast = Instance.new("Explosion")
+blast.Position = Vector3.new(0, 5, 0)
+blast.BlastRadius = 12
+blast.Hit:Connect(function(part, distance) print(part.Name, distance) end)
+blast.Parent = workspace
+```
+
+`ParticleEmitter` has more now:
+
+| Property | What it does |
+|---|---|
+| `FlipbookLayout`, `FlipbookMode`, `FlipbookFramerate`, `FlipbookStartRandom` | The texture is a sheet of frames that play. RIFT's own: `engine:textures/vfx/fire.png`, `smoke.png`, `explosion.png`, all `Grid8x8` |
+| `SoftEdge` | Studs over which it fades where it meets the ground or a wall (RIFT's own). 0: a hard line |
+| `Orientation` `VelocityParallel` with `VelocityStretch` | Sparks as lines, longer the faster they go |
+| `Squash` | Over life: above 0 taller and thinner, below 0 wider |
+| `Shape`, `ShapeStyle`, `ShapeInOut` | Start from a sphere, cylinder or disc filling the part, on it or in it, going out or in |
+| `Bounce` | Bounce off what is under the emitter, 0 to 1 (RIFT's own) |
+| `VelocityInheritance` | Start with some of the part's own movement |
+| `Distortion`, `DistortionMode` | Draw nothing and bend what is behind instead: `Heat` shimmers, `Ring` is a shock wave (RIFT's own) |
+| `LightInfluence` | Above 0, also shaded from the side the sun is on, as if each were a ball |
+
+`Beam` has `Jitter` and `JitterRate` for lightning (with enough `Segments`; try the texture `engine:textures/vfx/lightning1.png`), and `Beam` and `Trail` have `Distortion`.
+
+Other built-in textures in `engine:textures/vfx/`: `glow.png`, `spark.png`, `ring.png`, `star.png`, `lightning2.png`, `energy.png`.
 
 ## Screen effects, graphics, sound groups and the clipboard
 

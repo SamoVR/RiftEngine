@@ -5,6 +5,118 @@ GitHub release page show the section of the version being installed.
 
 RIFT is in **beta**: versions are 0.x until the engine is complete.
 
+## 0.7.6
+
+- **Your account in the editor.** Your name and avatar are in the top right corner. Click it for your level, your roles and your license, to edit your avatar or open your profile and settings in Samo Launcher, and to sign out.
+- **RIFT opens from anywhere again.** It no longer has to be started from Samo Launcher: it finds the launcher by itself and starts it if it is closed. You still need the launcher installed and to be signed in; if you are not, RIFT shows a sign-in screen with a button that takes you there.
+- **Safe mode.** A place that was not made on your computer opens with its scripts switched off. RIFT tells you how many scripts it has, points at anything in them worth reading first, and runs them once you click Trust this place. Your own places never ask.
+- **Publish from the editor.** Right-click one of your models in the Toolbox and choose Publish to the Community. RIFT looks through its scripts first and shows you what it finds; staff still review every upload.
+- **Report and creators.** Community models show who made them, with a link to their profile, and a Report button for anything that should not be there.
+- **Invite a friend to a playtest.** While you host a game, Test > Invite sends a friend your address as a message in Samo Launcher.
+- **Friends see what you are making**: "Editing Brookfield in RIFT" next to your name in the launcher. The account menu has the switch to turn it off.
+- A welcome the first time you sign in, with the tutorial one click away.
+- Fixed: a model from somewhere else could put files that are not pictures, meshes or sounds into your project. It can only add those now.
+- Fixed: a damaged model file could crash the editor when the Toolbox listed or inserted it.
+- RIFT is installed and updated by Samo Launcher only. The separate setup program is no longer published.
+
+## 0.7.5
+
+- **Samo Launcher is now how RIFT starts.** The editor opens from the launcher, signed in, and it keeps RIFT up to date. A license that is withdrawn lets you save, then closes the editor. Games you export do not need the launcher.
+- **Avatars**: your skin, shirt, pants, shoes and body type from the launcher are your character in Play and online, and other players see them. A game with its own StarterCharacter keeps it.
+- **Toolbox**: a Community tab to browse and install models other creators published, and a Packs tab to add installed textures and sounds to a project.
+- Materials installed from the launcher show up in the Materials panel, and templates on the home screen.
+- Fixed: Replace All skipped scripts once a search passed 2,000 matches, and now replaces every match and says how many.
+- A few very large source files were split up, and the old engine in src/legacy is gone.
+
+## 0.7.0
+
+- Fire, smoke and explosions are moving air: they stop at parts, characters and terrain, go through doorways, and what moves through them pushes them aside.
+- Smoke has a Cloud style that swells up and stays; at Transparency 0 nothing shows through. New settings for Fire, Smoke and Explosion; `Emit()` and `Disturb(position, radius, strength)` for scripts.
+- The Effects panel is a workbench: try an effect in its own little world with a wall and a moving ball, then Put in Scene, and keep editing it there.
+- New parts and new baseplates are Plastic; a mistake had made every new Part white Rock. Scenes already saved keep their look.
+- A Materials panel (View menu): 22 ready-made looks and your own, tried out on a ball and a block, put on the selected parts, and saved in the project's materials folder. 20 more models in the Toolbox.
+- GUI editing in the viewport: handles to resize the selected element, buttons to line it up, Scale or pixels at a click, and a preview for phone, tablet, laptop and desktop screens. New `UISizeConstraint`.
+- `LinearVelocity`, `AngularVelocity`, `VectorForce` and `AlignPosition`: things that push parts while the game runs, in world directions.
+- `IKControl`: a hand on a weapon, a foot on a step: a chain of joints reaches for a target, on top of the animations.
+- The script editor's suggestions have a new look, with an icon for each kind of thing. Inserting an object from the right-click menu closes the menu.
+- Smoke fills rooms and stays in them, gets out through gaps and doors, and thins out only in the open. Its `Opacity` is now `Transparency`, as on parts: 0 is solid, 1 is not there. Reflections and shading no longer show through it.
+- Game > Scale Old Scene to Full Size is gone.
+- A held tool hangs from a joint in the hand (`RightGrip`): animations can move it like a limb, with a pose named "Handle". The Animation Editor can put any of the game's tools in the rig's hand to animate with it.
+- Paths have Costs, as in Roblox: a price for a material's name or a `PathfindingModifier`'s Label (`math.huge`: never), and a modifier with `PassThrough` is a door paths go through.
+- A Car in the Toolbox, with springs on every wheel and steering: sit in it, W and S to drive, A and D to steer.
+- Sound effects, as in Roblox: `ReverbSoundEffect`, `EchoSoundEffect`, `EqualizerSoundEffect`, `DistortionSoundEffect` and `TremoloSoundEffect`, in a Sound or its SoundGroup. SoundService.AmbientReverb is a real reverb now, not one echo.
+- Level of detail: `Model.LevelOfDetail` (Automatic leaves out a far model's smallest parts) and `MeshPart.RenderFidelity` (Precise, Automatic, Performance).
+- `UIPageLayout`: pages that slide from one to the next, with `Next`, `Previous`, `JumpTo` and `JumpToIndex`.
+- A + at the end of the Explorer row under the mouse inserts an object into it, as in Roblox Studio. The script editor's right-click menu, what a word is under the mouse, and call hints have the suggestions' look, with their icons.
+- **Brookfield**, a new example: a small town with things to do. Drive the car through the tunnel to the lake, put out a fire in a warehouse full of smoke, knock down targets at the police range, sit in the café, talk to the townspeople, and stay out until the street lights come on. An opening cutscene, a town guide, a day that passes in fifteen minutes, sounds by day and by night. Models and sounds are free CC0 ones (see its CREDITS.txt); `tools/make_town.py` builds it.
+- `HumanoidDescription` and `Players:CreateHumanoidModelFromDescription`: characters made by scripts, with their own colours and height.
+- A model's own picture shows on a MeshPart that has no TextureID (a model with only a colour map came out white), and follows the model's UVs.
+- A PathfindingModifier's Label sets the price inside it, cheaper or dearer than the ground (a crossing on a road), and a thin labelled floor part counts. Searching paths with Costs is several times faster.
+- A character made a moment ago walks at once when told to (`MoveTo` did nothing until the world was next looked over, and `MoveToFinished` never came).
+- Fire, smoke and explosions run on the graphics card: one moving air for the whole world, in bricks that appear wherever the smoke goes, so nothing cuts it off. It rises and drifts as far as it goes, fills a closed room and stays in it, leaves through doors and gaps (never through walls or roofs), spreads under ceilings, and moving parts and characters push it. Needs OpenGL 4.3; older graphics cards keep the previous smoke.
+- Workspace.GlobalWind (as in Roblox) and Workspace.IndoorSmokeDissipation: smoke under a roof thins too, at that share of its speed in the open (0.15 to begin with; 0 keeps it for ever).
+- ScreenGuis start under the top bar (36 pixels, where the health bar is), as in Roblox; `ScreenGui.IgnoreGuiInset` lets one cover it, and `GuiService:GetGuiInset()` says how tall it is. The FPS counter is in the bottom right corner, out of the health bar's way.
+- Meshes keep their full detail much further away (they were simplified as soon as they were not close), and Workspace.DetailDistance sets how far meshes and models keep their detail: 2 is twice as far, 0.5 half, for speed.
+- Fixed: a crash in the graphics driver when a fire or smoke had been put out and its last smoke thinned away.
+- Fixed: a new scene could take over the moving smoke of one closed before it, so smoke looked wrong after switching places or scenes. Transparency on GPU smoke now matches the CPU smoke's curve.
+- GPU smoke: a room fills again after its roof is taken off and put back; Fire Size makes flames bigger (they had got fainter instead); Cloud smoke keeps pouring out of its part, following it, while it is on; smoke in the open thins out faster.
+- Brookfield: houses have driveways, front paths and picket fences.
+- HumanoidRootPart is a 2x2x1 block at the torso, 3 studs above the feet, as in Roblox.
+- More of Roblox's API: `Workspace:Spherecast`, `Blockcast` and `Shapecast`; `Lighting:GetSunDirection` and `GetMoonDirection`; `Sound.Played`, `Stopped`, `Paused`, `Resumed` and `IsPaused`; `AbsolutePosition` and `AbsoluteSize` on GUI; `MouseButton2Click`, `Down` and `Up` on buttons; `ClickDetector.RightMouseClick`, `MouseHoverEnter` and `MouseHoverLeave`; `Terrain:FillRegion`, `ReadVoxels`, `WriteVoxels`, `ReplaceMaterial`, `WorldToCell` and `CellCenterToWorld`; `TextBounds` and `TextFits`; `VehicleSeat.Throttle` and `Steer`; `Trail:Clear()`; and what constraints measure: `CurrentAngle`, `CurrentPosition`, `CurrentLength` and `CurrentDistance`.
+
+
+### Fire and smoke in 3D
+- **`Fire` and `Smoke`** are real volumes you can fly through. They stop at walls, smoke is lit by the sun, and fire lights what is around it, with embers and shimmering air above it. Nothing simulates the air, so smoke does not flow around things. The lower graphics qualities, or "Fire and smoke in 3D" off in a game's settings, make them flat particles.
+- **`Explosion`**: a fireball that cools to smoke, sparks that bounce, a flash and a shock wave in the air. It pushes parts, kills characters in reach, digs into terrain, fires `Hit`, and removes itself.
+- **`Sparkles`**.
+
+### Better particles
+- **Flipbooks**: a texture that is a sheet of frames that play, with RIFT's own fire, smoke and explosion.
+- **Soft particles** fade where they meet the ground or a wall, instead of being cut by a hard line.
+- **Sparks as lines** (`VelocityStretch`), `Squash`, particles that **bounce**, `VelocityInheritance`, and emission from a sphere, cylinder or disc.
+- **Lit particles**: `LightInfluence` also shades each from the side the sun is on.
+- **Air that bends**: `Distortion` on particles, beams and trails, for heat shimmer and shock waves.
+- **Lightning**: `Beam.Jitter`, and textures for lightning, energy, sparks, rings, glow and stars.
+- **The Effects panel** (View > Effects): ready-made effects, and a live picture of the selected one, by day or night.
+
+### The script editor
+- **What a word is**: rest the mouse on it.
+- **How to call things**: typing inside a call shows its arguments, with the one you are on picked out.
+- **What looks wrong, as you type**: names that exist nowhere, services, classes, enum items and methods that are not there, each with what you probably meant, and variables never used. The script still runs. Preferences > Scripts can turn this off.
+
+### More of Roblox's API
+- **Types**: `Ray`, `Region3`, `Rect`, `OverlapParams`, `PhysicalProperties`, `Font`, `DateTime`, `Random`, and more on `Vector2`, `Vector3`, `CFrame`, `Color3`, `BrickColor`.
+- **Libraries**: `bit32`, and what was missing from `math`, `table`, `task` and `utf8`.
+- **On objects**: `GetPartBoundsInRadius`, `FindPartOnRay`, `FindPartsInRegion3`, filters in `GetPartBoundsInBox`, `TweenPosition`, `TweenSize`, `ScaleTo`, `GetPlayerByUserId`, `DistanceFromCharacter`, `ApplyImpulseAtPosition`, `JumpHeight`, `Mass`, `WorldCFrame`, and more.
+- **Services that need Roblox's own servers** (`MarketplaceService`, `BadgeService`, `TeleportService` and others) answer harmlessly and warn once, so that a game keeps running.
+- **Properties that change nothing yet**, like `part.TopSurface` or `humanoid.HipHeight`, can be set without an error.
+- **What works from Roblox**: a new page under Learn and in the docs, written by asking a running game for every name. It also lists what only pretends.
+
+### Fixed
+- Particle pictures were upside down.
+
+## 0.6.7
+
+### Fixed
+- **Looking around no longer reaches the panels.** While the right mouse button held the camera, the hidden pointer kept travelling, and letting go over the Explorer or the Toolbox opened their menus there. In a first-person game a click could land on whatever the pointer was last over, like the Stop button.
+- **Decals show on a part with Transparency 1**, as in Roblox.
+- **A ModuleScript may wait while it loads** (`WaitForChild`, `task.wait`), as in Roblox. Scripts that require it meanwhile wait for it too.
+- **`print` and `warn` go in a game's log file.** A game that prints every frame stops at 32 MB of them; errors always go in.
+- **scene.json is never overwritten behind your back.** If it changed outside RIFT and nothing is unsaved here, it reloads, keeping your view and selection. If you have unsaved changes too, RIFT asks which to keep, including when you save or quit.
+- `Archivable` off now also keeps an object directly under a service out of the saved scene.
+
+### Changed
+- **A cylinder's length now runs along X, as in Roblox.** Old scenes and Toolbox models are turned when opened and look the same. **Old scripts that make or resize cylinders need changing**: `Vector3.new(4, 0.4, 4)` is now `Vector3.new(0.4, 4, 4)`, and a rotation may need to change.
+
+### New
+- **The Camera shows in the Explorer while editing**, as in Roblox Studio. It follows your view, and changing its CFrame or FieldOfView in Properties moves your view. It is not saved.
+- **Script profiler** (View > Performance, while playing): record, then see which functions take the time, how often they are called, and go to their line.
+- **Crash reports**: after a crash, RIFT shows what happened and offers to open a GitHub issue with it, your home folder taken out. Nothing is sent unless you submit that issue yourself. Preferences > Updates can turn the offer off. Built games write the same files next to their log.
+- **Checking a project from the command line**: `RiftPlayer --check` finds syntax errors and missing scripts without running anything; `RiftPlayer <project> --run-for 30 --screenshot shot.png` plays, takes a picture and quits. Exit codes say how it went. See Command line in the guide.
+
+### Documentation
+- The website and the scripting reference no longer say games are single-player.
+
 ## 0.6.6
 
 ### A new Start screen

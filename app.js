@@ -14,20 +14,6 @@
   function escapeHtml(text) {
     return String(text).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   }
-  function megabytes(bytes) {
-    return (bytes / 1048576).toFixed(bytes > 104857600 ? 0 : 1) + " MB";
-  }
-  function formatDate(iso) {
-    try {
-      return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
-    } catch (e) {
-      return iso.slice(0, 10);
-    }
-  }
-  function compact(n) {
-    return n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "k" : String(n);
-  }
-
   // The few Markdown features release notes use: headings, lists, bold, code, links.
   function markdown(text) {
     const inline = (s) => escapeHtml(s)
@@ -69,18 +55,11 @@
   }
 
   // ---- releases
-  function setupAsset(release) {
-    return (release.assets || []).find((a) => /setup.*\.exe$/i.test(a.name));
-  }
-
   function renderDownload(latest) {
-    const setup = setupAsset(latest);
+    // RIFT is installed by Samo Launcher: the buttons lead there, and say which version it will install.
     const version = latest.tag_name.replace(/^v/i, "");
-    for (const link of $$("[data-download-link]")) {
-      link.href = setup ? setup.browser_download_url : latest.html_url;
-    }
-    for (const label of $$("[data-download-label]")) label.textContent = "Download RIFT " + version;
-    const meta = "Windows 10 and 11 · 64-bit · " + (setup ? megabytes(setup.size) + " · " : "") + "free";
+    for (const label of $$("[data-download-label]")) label.textContent = "Get RIFT " + version + " with Samo Launcher";
+    const meta = "Windows 10 and 11 · 64-bit · free";
     for (const el of $$("[data-download-meta]")) el.textContent = meta;
     const pill = $("[data-latest-text]");
     if (pill) pill.textContent = "RIFT " + version + " is out — see what's new";
@@ -98,8 +77,6 @@
     }
     box.innerHTML = "";
     list.forEach((r, index) => {
-      const setup = setupAsset(r);
-      const zip = (r.assets || []).find((a) => /portable\.zip$/i.test(a.name));
       const el = document.createElement("article");
       el.className = "release";
       el.innerHTML =
@@ -108,8 +85,6 @@
         (index === 0 ? '<span class="badge' + (r.prerelease ? " pre" : "") + '">' + (r.prerelease ? "Preview" : "Latest") + "</span>" : r.prerelease ? '<span class="badge pre">Preview</span>' : "") +
         '<span class="release-date">' + formatDate(r.published_at || r.created_at) + "</span>" +
         '<span class="release-assets">' +
-        (setup ? '<a href="' + setup.browser_download_url + '">Setup · ' + megabytes(setup.size) + "</a>" : "") +
-        (zip ? '<a href="' + zip.browser_download_url + '">Portable zip</a>' : "") +
         '<a href="' + r.html_url + '">On GitHub</a>' +
         "</span></div>" +
         '<div class="release-body">' + markdown((r.body || "").split(/\n---\n/)[0]) + "</div>";
